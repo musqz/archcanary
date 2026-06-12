@@ -70,10 +70,12 @@ Additional sample (cryptominer - atomic-lockfile variant):
   ~/.bun/install/cache/ (bun cache — bun variant of the attack)
 
 ## Attacker Accounts
-  AUR:  arojas (malicious maintainer, atomic-lockfile wave)
   AUR:  krisztinavarga (malicious maintainer for alvr)
   AUR:  custodiatovar (malicious maintainer, bun/js-digest wave — 13 packages)
   AUR:  veramagalhaes (malicious maintainer, bun/js-digest wave — 13 packages)
   Git:  PLYSHKA (commit author name used for impersonation)
   NPM:  herbsobering
   GH:   fardewoak (container registry: herbsobering430)
+
+## Impersonated Accounts
+  AUR:  arojas (legitimate Arch Linux maintainer — identity forged by attacker via git commit forgery; see Impersonation Clarification in README)

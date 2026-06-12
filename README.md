@@ -4,8 +4,8 @@ Detection and analysis tools for the **atomic-lockfile** supply-chain attack on 
 
 This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
 
-> **400+ AUR packages compromised** by malicious maintainers who injected `npm install atomic-lockfile` or `bun install js-digest` into PKGBUILD/install files. Two attack waves:
-> 1. **atomic-lockfile** (npm) — accounts `arojas`, `krisztinavarga`
+> **400+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile` or `bun install js-digest` into PKGBUILD/install files. Two attack waves:
+> 1. **atomic-lockfile** (npm) — accounts `krisztinavarga`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
 > 2. **js-digest** (bun) — accounts `custodiatovar`, `veramagalhaes`
 >
 > Both deliver an **infostealer** and **eBPF rootkit** targeting developer credentials, browser data, and CI/CD secrets.
@@ -117,6 +117,14 @@ This analysis aggregates information from the following sources:
 | **IFIN Discourse (Update)** | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | js-digest SHA256, bun variant documentation, keepassx2 example |
 | **Socket.dev** | https://socket.dev/npm/package/js-digest | js-digest metadata, pulled from NPM confirmation |
 
+### Impersonation Clarification
+
+| Source | URL | Content Used |
+|--------|-----|-------------|
+| **mttaggart** (IFIN) | https://infosec.exchange/@mttaggart/116735530761603752 | Initial report raising arojas question; later corrected to note impersonation after dvzrv clarification |
+| **David Runge** (Arch Linux TU) | https://chaos.social/@dvzrv/116736017948300691 | Confirms arojas is legitimate KDE maintainer, attacker reused his identity via git commit forgery; requests corrections |
+| **IFIN Discourse (Updated)** | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Post corrected — now explicitly notes arojas was impersonated |
+
 ### Additional Data
 
 | Source | URL | Content Used |
@@ -135,11 +143,12 @@ This analysis aggregates information from the following sources:
 - **June 11**: Andre Herbst discovers scope by grepping AUR git mirror
 - **June 11**: ioctl.fail publishes technical analysis
 - **June 12**: Community detection scripts published; AUR maintainers cleaning up
+- **June 12**: David Runge clarifies `arojas` was impersonated via git commit forgery, not a malicious maintainer
 
 ### Attack Vector — Wave 1: atomic-lockfile (npm)
 
-1. Attacker account `arojas` took over orphaned AUR packages
-2. Used commit forgery (impersonated previous maintainer name/email)
+1. Attacker used commit forgery to impersonate maintainer `arojas` (see Impersonation Clarification below)
+2. Took over orphaned AUR packages via the forged identity
 3. Injected `npm install atomic-lockfile` into `.install` and `.hook` files
 4. The npm package `atomic-lockfile@1.4.2` contained a `preinstall` hook executing `./src/hooks/deps`
 5. The ELF binary `deps` (SHA256: `6144D4...`) is a Rust-based credential stealer

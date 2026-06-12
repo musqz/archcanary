@@ -15,6 +15,12 @@
 - Log scanning: Kacper-Kondracki pacman.log parser
 - Safety: quantenProjects comm approach
 
+## 2.2.0 (2026-06-12)
+- Correction: `arojas` was impersonated via git commit forgery, not a malicious maintainer
+- `iocs.txt`: `arojas` moved to new "Impersonated Accounts" section
+- New sources: mttaggart Mastodon thread, David Runge clarification
+- Banner + attack vector text corrected in README
+
 ## 2.1.0 (2026-06-12)
 - New attack wave: bun/js-digest variant (second malicious npm package)
 - 29 new compromised packages (custodiatovar + veramagalhaes accounts)
