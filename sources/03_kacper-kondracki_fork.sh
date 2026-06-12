@@ -1,0 +1,663 @@
+#!/usr/bin/env bash
+#
+# A quick-and-easy check for possibly impacted packages
+# of the 20260611 AUR exploitation
+#
+# Forked+updated from, and credit to, the original:
+# https://gist.github.com/Kidev/59bf9f5fb53ab5eee99f19a6a2fc3992
+#
+# <3 cscs <3
+#
+# Kacper Kondracki:
+# I ran the aurvulntest through ai slop to also implement checking pacman logs
+
+INFECTED_PKGS=(
+  123pan-bin
+  1code
+  8192eu-dkms-git
+  actual-ai
+  adblock2privoxy
+  aion-git
+  albion-online-launcher-bin
+  alienfx
+  alvr
+  android-signapk
+  android-signapk-gui
+  android-support-repository
+  annobin
+  ansible-language-server
+  antfs-cli-git
+  anythingllm-appimage
+  anythingllm-cli-bin
+  apk-installer-gui
+  apm_planner-bin
+  apothem
+  apple-music-desktop
+  arch-update-vai
+  archjh
+  archlinux-themes-slim
+  archmage
+  archtex-git
+  arm-linux-gnueabihf-binutils
+  artanis-git
+  astro-editor-appimage
+  autohand-cli
+  autolabel
+  autologin
+  azurlaneautoscript
+  bcachefs-kernel-dkms-git
+  beebeep
+  bitcoin-core-git
+  blinkenlib
+  blueproximity-py3-git
+  booklore
+  brow6el
+  brow6el-git
+  canon-pixma-mg3000-complete-fixed
+  cartridge-cli
+  ccase-bin
+  ccl-git
+  cgminer
+  charcoal
+  cinny-desktop-system-tray
+  clai
+  clang19
+  clash-mi
+  cling-git
+  cmuclmtk
+  cnijfilter-common
+  codenomad-bin
+  codeql-cli-bin
+  cogpit-bin
+  colorhug-client
+  colorz
+  compiler-rt19
+  compizconfig-python
+  coolreader
+  cowdancer
+  cutefish-calculator
+  cutefish-core
+  cutefish-dock
+  cutefish-filemanager
+  cutefish-icons
+  cutefish-launcher
+  cutefish-qt-plugins
+  cutefish-screenlocker
+  cutefish-screenshot
+  cutefish-settings
+  cutefish-statusbar
+  cutefish-wallpapers
+  cvs-feature-bin
+  cynthiune.app
+  dagu-bin
+  datatype99
+  deheader
+  dep
+  dh-python
+  difi
+  difi-bin
+  doctoc
+  dots-hyprland-fork-git
+  dvdrip
+  dyad-bin
+  easy_spice
+  edconv-bin
+  efiboots-git
+  electrum-nmc
+  elmerfem
+  eisl
+  epson-inkjet-printer-escpr2-clos-bin
+  exodus-wallet-bin
+  exoduswallet
+  farmmod-hub
+  fastoggenc
+  fastjet
+  fatx
+  fcitx5-pinyin-sougou-dict-git
+  ffmpeg-bitrate-stats
+  ffmpeg-quality-metrics
+  findpkg-git
+  firefox-extension-adnauseam-bin-amo
+  firmium-desktop-git
+  fishui
+  fishui-git
+  flashfocus
+  flexiblas
+  flynarwhal
+  fmlib
+  forgecode-bin
+  formidable-bin
+  frame
+  ftl
+  frutool
+  futhark-bin
+  gdl
+  gdlmm
+  git-annex-standalone
+  gnome-contacts-git
+  gnome-randr-rust
+  gnutls3.8.9
+  gopher2600
+  gopher2600-bin
+  gosh
+  gpx-viewer
+  graveman
+  green-tunnel-bin
+  greetd-wlgreet-git
+  gtkimageview
+  guile-reader
+  gummy
+  gummy-git
+  hackmatrix-git
+  harmony-wad
+  headphones
+  hearthstone-linux-gui-appimage
+  hearthstone-linux-gui-bin
+  hepmc2
+  hister-git
+  hnswlib-git
+  horst
+  hydownloader-git
+  hydrus-git
+  i3bar-river
+  ianny-bin
+  ibm-sw-tpm2
+  ihaskell-git
+  imageglass
+  inadyn
+  indicator-session
+  infnoise-openssl-git
+  interface99
+  ios-webkit-debug-proxy
+  ipfs-desktop-bin
+  ipsw
+  iron-heart-git
+  jasp-desktop
+  jd-gui
+  k3sup
+  kdb
+  kddockwidgets-git
+  kexi
+  kiss
+  ktea
+  kookbook
+  kproperty
+  kreport
+  latex-digsig
+  lazylpsolverlibs-git
+  ledger-udev-bin
+  lesstif
+  lib32-egl-wayland
+  libafterimage
+  libbobcat
+  libcutefish
+  libffi-static
+  libgdata
+  libjxl-noglycin
+  libquvi
+  libquvi-scripts
+  libretro-hatari-enhanced-git
+  libxdiff
+  libxml-ruby
+  libyami
+  linux-cachyos-deckify-native
+  linux-cachyos-deckify-native-headers
+  linux-cachyos-native
+  linux-cachyos-native-headers
+  linux-cachyos-native-nvidia-open
+  linux-cachyos-rc-native
+  linux-cachyos-rc-native-headers
+  linux-cachyos-rc-native-nvidia-open
+  linux-tool
+  liri-cmake-shared-git
+  lite
+  lll
+  llvm-cbe-git
+  lowfi-bin
+  "ls++"
+  lucidvideo
+  m5rcode
+  magpie-wm
+  mako-center-git
+  manuskript
+  maszyna-git
+  mathsat-5
+  matrixbrandy
+  mcp-probe
+  mcpatcher
+  mermaid-ascii-git
+  mermark-editor
+  mesa-dlss-reflex-git
+  meteo
+  mimic-node-git
+  mingw-w64-geos
+  mingw-w64-libsndfile
+  minimax-bin-hardened
+  minitube
+  misuzu-music-bin
+  mono-addins
+  monochrome
+  monochrome-git
+  moor-git
+  mount-gtk
+  mopen
+  n1-translator
+  naemon
+  naemon-livestatus
+  natapp
+  nebuchadnezzar-git
+  neovim-autopairs-git
+  neovim-nvim-treesitter
+  nerf-pi
+  neuro-karaoke-wrapper-git
+  new-api-privacy-filter
+  new-api-privacy-filter-git
+  nextcloud-app-audioplayer
+  nextcloud-app-facerecognition
+  nextcloud-app-gpoddersync
+  nextcloud-app-integration-google
+  nextcloud-app-repod
+  nextcloud-app-twofactor-gateway
+  nextcloud-git
+  nexus-bin
+  nginx-mod-vts
+  nhentai-git
+  nocodb
+  noctyra-dotfiles-git
+  noctyra-meta-git
+  "notepad---bin"
+  nox-bin
+  nrpe
+  nwchem-bin
+  ob-xd
+  octocode
+  opencode-codebase-index-bin
+  openui5
+  opl-synth
+  optimizevideo-git
+  oracle-bin
+  pacforge
+  paper-desktop-bin
+  paq8o
+  parallel-python
+  pass-cli
+  pelican-git
+  penguin-subtitle-player
+  perl-proc-parallelloop
+  perl-set-object
+  perl-term-extendedcolor
+  phonon-qt5-vlc
+  php-geoip
+  php-legacy-memcache
+  php-memcache
+  php-openswoole-git
+  php-xdiff
+  picom-ftlabs-git
+  pidgin-kwallet
+  pipetoys
+  pipewire-visualizer-git
+  premake-git
+  prisma4postgres-bin
+  profile-sync-daemon-zen
+  pymacs
+  pypiserver
+  pypy-setuptools
+  python-apt
+  python-affine
+  python-argdispatch
+  python-awkward
+  python-axolotl-git
+  python-calmjs
+  python-celery
+  python-cerealizer
+  python-ci-info
+  python-coolname
+  python-cu2qu-git
+  python-dataproperty
+  python-dbapi-compliance
+  python-dictobject
+  python-dj-database-url
+  python-django-modelcluster
+  python-django-rest-knox
+  python-fastmcp-slim
+  python-finnhub-python
+  python-firebase-admin
+  python-fmu_manipulation_toolbox
+  python-future
+  python-g4f
+  python-hist
+  python-histoprint
+  python-hsaudiotag3k
+  python-iminuit
+  python-iso3166
+  python-isr-git
+  python-jsmin
+  python-json2xml
+  python-luckydonald-utils
+  python-milvus-lite-bin
+  python-mmcif
+  python-monotonic
+  python-mplhep
+  python-mplhep_data
+  python-netaudio-git
+  python-netaudio-lib
+  python-newspaper4k
+  python-nipype
+  python-nodejs-wheel
+  python-openai-harmony
+  python-orange
+  python-pdf2docx
+  python-piecash
+  python-pluginmgr
+  python-poetry-plugin-dotenv
+  python-privy-git
+  "python-pushbullet.py"
+  python-pychromecast-git
+  python-pylsp-rope
+  python-pymilvus
+  python-pysocks-git
+  python-rembg
+  python-scikit-hep-testdata
+  python-sklearn-pandas
+  python-sqliteschema
+  python-starlette-compress
+  python-starsessions
+  python-steamcontroller-git
+  python-tabledata
+  python-tarantool
+  python-tradingeconomics
+  python-uhi
+  python-uproot
+  python-vector
+  python-xtarfile
+  python2-appdirs
+  python2-fusepy
+  python2-lazr-uri
+  python2-mutagen
+  python2-notify
+  python2-packaging
+  python2-paver
+  python2-pyparsing
+  python2-simplejson
+  python2-simpleparse
+  python2-stomper
+  python2-twodict-git
+  python2-xlib
+  qhttpengine
+  qlementine
+  qmdnsengine
+  qnapi
+  qobuz-player-bin
+  qtum-core
+  quickswitch-i3
+  r-dbplyr
+  reactphysics3d
+  repoporge
+  retibbs-client-git
+  rhythmbox-git
+  rimworld
+  rog-helper-git
+  ros2-humble-nav2-msgs
+  rtspeccy-git
+  ruah-orch
+  ruby-excon
+  ruby-kramdown-rfc2629
+  ruby-selenium-webdriver
+  runescape-launcher
+  sakura-launcher-gui
+  sandlock
+  screenpipe-bin
+  sdcc-bin
+  seahorse-nautilus
+  shhmsg
+  shhopt
+  slipnet
+  slipnet-bin
+  smenu
+  smenu-git
+  smolrtsp
+  smolrtsp-libevent
+  snry-shell-qs
+  soapyptezuka
+  solara-kernel-headers
+  sonosano
+  soundpaad-bin
+  sshuttlee
+  sshuttlee-bin
+  stompbox-jack-git
+  stripe-cli
+  stylelint-config-recommended
+  subbrute
+  sublist3r-git
+  subprocess
+  subsync
+  svu
+  sway-xkb-switcher
+  tack
+  tarantool
+  tesseract-gui
+  thunar-nextcloud-plugin
+  thunderbird-conversations
+  tinyemu
+  tlpui-git
+  torch7-git
+  touchhle
+  touchosc-bin
+  transcreen
+  tsm
+  ttf-material-design-icons-git
+  tunacode-cli
+  typing-game-cli
+  ukui-notification-daemon
+  vapoursynth-preview-git
+  vbam-git
+  verso-git
+  vidcutter
+  vim-easymotion
+  vim-gitgutter
+  vim-indent-object
+  vim-molokai
+  vim-pythonhelper
+  vim-solidity
+  vim-vital
+  vocalinux-git
+  voquill-gpu
+  wallpaper-generator-next
+  wayland-static
+  we-layerd-git
+  whatsie-git
+  whisper2tr
+  whisper2tr-git
+  windowmaker-git
+  wine-nine
+  wire-desktop
+  word-snatchers-cli
+  workbench
+  workbuddy-bin
+  wrystr-git
+  wsjtx-beta
+  xf86-input-mtrack-git
+  xorg-xfsinfo
+  xplot
+  xpra-html5
+  xray-domain-list-community
+  yarg
+  yt6801-dkms
+  yy
+  zathura-gruvbox-git
+  zerx-lab-dida-bin
+  zerx-lab-zed-nightly-bin
+  zing-8-bin
+  zing-17-bin
+  zing-21-bin
+  zinnia-python
+  zsdx
+)
+
+
+START_DATE=${START_DATE:-2026-06-09}
+END_DATE=${END_DATE:-2026-06-12}
+PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
+
+CURRENT_FOUND=()
+HISTORICAL_FOUND=()
+LOG_WARNINGS=()
+
+date_in_window() {
+  local date_value=$1
+  [[ "$date_value" < "$START_DATE" ]] && return 1
+  [[ "$date_value" > "$END_DATE" ]] && return 1
+  return 0
+}
+
+install_date_in_window() {
+  local raw_date=$1 normalized_date
+
+  # pacman -Qi uses the current locale unless forced. The caller uses LC_ALL=C,
+  # so GNU date can reliably parse strings like "Thu 11 Jun 2026 10:00:00".
+  normalized_date=$(LC_ALL=C date -d "$raw_date" +%F 2>/dev/null) || return 1
+  date_in_window "$normalized_date"
+}
+
+read_pacman_log_file() {
+  local file=$1
+
+  case "$file" in
+    *.gz)
+      if command -v gzip >/dev/null 2>&1; then
+        gzip -cd -- "$file"
+      else
+        LOG_WARNINGS+=("Skipped $file: gzip is not installed")
+      fi
+      ;;
+    *.xz)
+      if command -v xz >/dev/null 2>&1; then
+        xz -cd -- "$file"
+      else
+        LOG_WARNINGS+=("Skipped $file: xz is not installed")
+      fi
+      ;;
+    *.zst)
+      if command -v zstdcat >/dev/null 2>&1; then
+        zstdcat -- "$file"
+      else
+        LOG_WARNINGS+=("Skipped $file: zstdcat is not installed")
+      fi
+      ;;
+    *.bz2)
+      if command -v bzip2 >/dev/null 2>&1; then
+        bzip2 -cd -- "$file"
+      else
+        LOG_WARNINGS+=("Skipped $file: bzip2 is not installed")
+      fi
+      ;;
+    *)
+      cat -- "$file"
+      ;;
+  esac
+}
+
+scan_pacman_logs() {
+  local file
+  local log_files=()
+
+  # Expand the configured glob safely. The default includes pacman.log and common
+  # rotated variants such as pacman.log.1, pacman.log.2.gz, or pacman.log.3.zst.
+  for file in $PACMAN_LOG_GLOB; do
+    [[ -e "$file" ]] && log_files+=("$file")
+  done
+
+  if [[ ${#log_files[@]} -eq 0 ]]; then
+    LOG_WARNINGS+=("No pacman log files matched: $PACMAN_LOG_GLOB")
+    return 0
+  fi
+
+  {
+    printf 'PKG\t%s\n' "${INFECTED_PKGS[@]}"
+    for file in "${log_files[@]}"; do
+      [[ -r "$file" ]] || { LOG_WARNINGS+=("Skipped $file: not readable"); continue; }
+      read_pacman_log_file "$file" | sed $'s/^/LOG\t/'
+    done
+  } | awk -v start="$START_DATE" -v end="$END_DATE" -F '\t' '
+    $1 == "PKG" {
+      infected[$2] = 1
+      next
+    }
+
+    $1 == "LOG" {
+      line = $2
+      date = substr(line, 2, 10)
+      if (date < start || date > end) next
+
+      msg = line
+      sub(/^\[[^]]+\] \[ALPM\] /, "", msg)
+      split(msg, fields, " ")
+      action = fields[1]
+      pkg = fields[2]
+
+      if ((action == "installed" || action == "upgraded" || action == "reinstalled") && infected[pkg]) {
+        key = pkg SUBSEP date SUBSEP action SUBSEP line
+        if (!seen[key]++) {
+          printf "%s\t%s\t%s\t%s\n", pkg, date, action, line
+        }
+      }
+    }
+  ' | sort -u
+}
+
+print_pkg_list() {
+  local -n arr=$1
+  local pkg
+
+  for pkg in "${arr[@]}"; do
+    echo "  - $pkg"
+  done
+}
+
+echo
+echo "Checking for infected AUR packages (${#INFECTED_PKGS[@]} total)..."
+echo "Campaign window: $START_DATE through $END_DATE"
+echo
+
+echo "Checking currently installed foreign packages..."
+while IFS= read -r pkg; do
+  install_date=$(LC_ALL=C pacman -Qi -- "$pkg" 2>/dev/null | awk -F ': ' '/^Install Date/ { print $2; exit }')
+  if [[ -n "$install_date" ]] && install_date_in_window "$install_date"; then
+    CURRENT_FOUND+=("$pkg (Install Date: $install_date)")
+  fi
+done < <(pacman -Qmq "${INFECTED_PKGS[@]}" 2>/dev/null)
+
+if [[ ${#CURRENT_FOUND[@]} -eq 0 ]]; then
+  echo "  Clean: no currently installed known infected package has an install date in the campaign window."
+else
+  echo "  WARNING: ${#CURRENT_FOUND[@]} currently installed possibly infected package(s):"
+  print_pkg_list CURRENT_FOUND
+fi
+
+echo
+echo "Checking historical pacman logs..."
+while IFS=$'\t' read -r pkg date action line; do
+  HISTORICAL_FOUND+=("$pkg ($action on $date) :: $line")
+done < <(scan_pacman_logs)
+
+if [[ ${#HISTORICAL_FOUND[@]} -eq 0 ]]; then
+  echo "  Clean: no known infected package install/upgrade/reinstall events found in pacman logs during the campaign window."
+else
+  echo "  WARNING: ${#HISTORICAL_FOUND[@]} historical pacman log event(s) matched:"
+  print_pkg_list HISTORICAL_FOUND
+fi
+
+if [[ ${#LOG_WARNINGS[@]} -gt 0 ]]; then
+  echo
+  echo "Log scan notes:"
+  print_pkg_list LOG_WARNINGS
+fi
+
+echo
+if [[ ${#CURRENT_FOUND[@]} -eq 0 && ${#HISTORICAL_FOUND[@]} -eq 0 ]]; then
+  echo "Clean: no matches found by current-package or historical-log checks."
+else
+  echo "WARNING: matches were found. Review the package build files/cache and consider incident-response steps."
+fi
+echo
+

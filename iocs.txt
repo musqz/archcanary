@@ -1,0 +1,64 @@
+# Indicators of Compromise (IOCs) - AUR Malware Campaign June 2026
+# Sources: https://ioctl.fail/preliminary-analysis-of-aur-malware/
+#          https://gist.github.com/Kidev/59bf9f5fb53ab5eee99f19a6a2fc3992
+
+## File Hashes
+ELF Payload (deps):
+  SHA256: 6144D433F8A0316869877B5F834C801251BBB936E5F1577C5680878C7443C98B
+  MD5:    42B59FDBE1B72895B2951412222EBF40
+  Size:   3,040,376 bytes
+
+Additional sample (cryptominer):
+  SHA256: 47893d9badc38c54b71321263ce8178c1abb10396e0aadf9793e61ec8829e204
+
+## Malicious NPM Package
+  Name:       atomic-lockfile
+  Version:    1.4.2
+  Lifecycle:  "preinstall": "./src/hooks/deps"
+  Payload:    src/hooks/deps
+  Publisher:  herbsobering (npmjs.com/~herbsobering)
+  Downloads:  134 (at time of detection)
+
+## Network Indicators (C2)
+  Onion:  olrh4mibs62l6kkuvvjyc5lrercqg5tz543r4lsw3o6mh5qb7g7sneid.onion
+  Path:   POST /api/agent HTTP/1.0
+  Ports:  TCP/80, TCP/8080
+
+  Upload: temp.sh POST /upload HTTP/1.1
+  Local:  127.0.0.1 (SOCKS-style loopback transport)
+
+## Staging
+  olrh4mibs62l6kkuvvjyc5lrercqg5tz543r4lsw3o6mh5qb7g7sneid.onion/bin/linux
+  olrh4mibs62l6kkuvvjyc5lrercqg5tz543r4lsw3o6mh5qb7g7sneid.onion/bin/sha256/linux
+
+## Third-Party Endpoints (used for credential validation)
+  api.openai.com
+  discord.com / api/v9/users/@me
+  teams.microsoft.com / authsvc.teams.microsoft.com
+  api.github.com
+  registry.npmjs.org
+  slack.com
+
+## Persistence Indicators
+  /var/lib/<generated_name>               (root install)
+  /etc/systemd/system/<generated>.service (root systemd)
+  ~/.config/systemd/user/<generated>.service (user systemd)
+  Restart=always
+  RestartSec=30
+
+## eBPF Rootkit Indicators
+  /sys/fs/bpf/hidden_pids
+  /sys/fs/bpf/hidden_names
+  /sys/fs/bpf/hidden_inodes
+  CAP_BPF / CAP_SYS_ADMIN required
+
+## Filesystem Artifacts
+  /usr/bin/monero-wallet-gui (potential cryptominer)
+  ~/.npm/_cacache/ (npm cache of atomic-lockfile)
+
+## Attacker Accounts
+  AUR:  arojas (malicious maintainer)
+  AUR:  krisztinavarga (malicious maintainer for alvr)
+  Git:  PLYSHKA (commit author name used for impersonation)
+  NPM:  herbsobering
+  GH:   fardewoak (container registry: herbsobering430)
