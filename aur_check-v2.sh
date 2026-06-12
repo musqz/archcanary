@@ -191,14 +191,13 @@ check_logs() {
         return 1
     fi
 
-    local tmpfile total idx file
-    tmpfile=$(mktemp)
-    CLEANUP_FILES+=("$tmpfile")
-    printf '%s\n' "${INFECTED_PKGS[@]}" > "$tmpfile"
+    # O(1) lookup table instead of grep -xF on tempfile per line
+    declare -A pkg_map
+    for pkg in "${INFECTED_PKGS[@]}"; do pkg_map[$pkg]=1; done
 
-    total=${#log_files[@]}
-    idx=0
-    log_info "Found $total log file(s)"
+    local re_date='^\[([0-9-]+)'
+    local re_alpm='\[ALPM\] ([a-z]+) ([^ ]+)'
+    local total=${#log_files[@]} idx=0 file line date_str action pkg
 
     for file in "${log_files[@]}"; do
         idx=$((idx + 1))
@@ -209,26 +208,22 @@ check_logs() {
         log_info "[$idx/$total] Scanning $(basename "$file")..."
 
         while IFS= read -r line; do
-            local date_str action pkg
-            date_str=$(echo "$line" | sed -n 's/^\[\([0-9-]*\).*/\1/p')
-            [[ -z "$date_str" ]] && continue
+            [[ "$line" =~ $re_date ]] || continue
+            date_str=${BASH_REMATCH[1]}
             date_in_window "$date_str" || continue
 
-            action=$(echo "$line" | sed -n 's/.*\[ALPM\] \([a-z]*\) .*/\1/p')
-            pkg=$(echo "$line" | sed -n 's/.*\[ALPM\] [a-z]* \([^ ]*\).*/\1/p')
-            [[ -z "$action" || -z "$pkg" ]] && continue
+            [[ "$line" =~ $re_alpm ]] || continue
+            action=${BASH_REMATCH[1]}
+            pkg=${BASH_REMATCH[2]}
 
-            if grep -qxF "$pkg" "$tmpfile" 2>/dev/null; then
-                if [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]]; then
-                    echo "LOG_HIT: $pkg ($action on $date_str)"
-                fi
-            fi
+            [[ -v pkg_map[$pkg] ]] || continue
+            [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
+
+            echo "LOG_HIT: $pkg ($action on $date_str)"
         done < <(read_compressed_file "$file") || true
 
         log_info "[$idx/$total] Done with $(basename "$file")"
     done
-
-    rm -f "$tmpfile"
 }
 
 # ---------------------------------------------------------------------------
