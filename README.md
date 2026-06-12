@@ -2,6 +2,8 @@
 
 Detection and analysis tools for the **atomic-lockfile** supply-chain attack on the Arch User Repository (AUR).
 
+This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
+
 > **408+ AUR packages compromised** by a malicious maintainer (`arojas`) who injected `npm install atomic-lockfile` into PKGBUILD/install files. The malicious npm package delivers an **infostealer** and **eBPF rootkit** targeting developer credentials, browser data, and CI/CD secrets.
 
 ## Quick Start
