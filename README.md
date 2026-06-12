@@ -147,3 +147,14 @@ This analysis aggregates information from the following sources:
 ## License
 
 Community tools - no warranty. Use at your own risk.
+
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=lenucksi%2Faur-malware-check&type=date&logscale&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&legend=top-left" />
+ </picture>
+</a>
