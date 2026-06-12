@@ -91,7 +91,7 @@ This analysis aggregates information from the following sources:
 
 | Source | URL | Content Used |
 |--------|-----|-------------|
-| IFIN Discourse | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Attack summary, links to other resources |
+| IFIN Discourse | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Attack summary, links, **bun/js-digest wave update (Jun 12)** |
 | ioctl.fail Analysis | https://ioctl.fail/preliminary-analysis-of-aur-malware/ | Detailed technical analysis, IOCs, eBPF rootkit details, C2 extraction |
 | Arch ML: Main Thread | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/ | Master list of ~408 packages by Andre Herbst, additional reports by Rafal Lichwala, Nicolas Boichat, Damien |
 | Arch ML: ALVR Report | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/2LGBF2AZBPVCCY4VTN6DOVUNNBURFJ2J/ | First report of suspicious commit on alvr package |
@@ -106,6 +106,16 @@ This analysis aggregates information from the following sources:
 | **commonsourcecs (Fork)** | https://cscs.pastes.sh/aurvulntest20260611.sh | Batch `pacman -Qmq` query, install date window (Jun 9-12), expanded package list (~588) |
 | **Kacper-Kondracki (Fork)** | https://gist.github.com/Kacper-Kondracki/88c5b313f79cc1f9c347e7ed61a36d10 | Historical pacman.log scanning with compressed file support, configurable date window via env vars |
 | **quantenProjects (Fork)** | https://gist.github.com/quantenProjects/3f768dce7331618310f016d975bf8547 | Safe non-executable package list, `comm -1 -2` one-liner approach |
+
+### bun/js-digest Wave Reports (June 12)
+
+| Source | URL | Content Used |
+|--------|-----|-------------|
+| **Cedric Girard** (aur-general) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/ | First report of bun/js-digest wave (guiscrcpy, netmon-git) |
+| **ValdikSS** (aur-general) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/ | Identification of custodiatovar account (13 malicious packages) |
+| **Marcin Wieczorek / Thorsten Wißmann** (aur-general) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/ | Report of inadyn-mt, veramagalhaes account (13 packages), commit forgery proof for nodejs-elm |
+| **IFIN Discourse (Update)** | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | js-digest SHA256, bun variant documentation, keepassx2 example |
+| **Socket.dev** | https://socket.dev/npm/package/js-digest | js-digest metadata, pulled from NPM confirmation |
 
 ### Additional Data
 

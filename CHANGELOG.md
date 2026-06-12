@@ -15,6 +15,14 @@
 - Log scanning: Kacper-Kondracki pacman.log parser
 - Safety: quantenProjects comm approach
 
+## 2.1.0 (2026-06-12)
+- New attack wave: bun/js-digest variant (second malicious npm package)
+- 29 new compromised packages (custodiatovar + veramagalhaes accounts)
+- `--check-bun-cache`: scan bun cache for js-digest / atomic-lockfile
+- `check_npm_cache` expanded: detects atomic-lockfile AND js-digest
+- New IOC: js-digest ELF SHA256 7883BD...
+- New attacker accounts custodiatovar, veramagalhaes in iocs.txt
+
 ## 1.1.0 (2026-06-12)
 - Fix: `set -e` bug — non-verbose mode killed script (log_info always returns 0)
 - Auto-logfile: full detail always written to `aur-check-<date>.log`
