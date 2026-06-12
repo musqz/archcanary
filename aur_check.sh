@@ -52,6 +52,7 @@ PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
 CHECK_SYSTEMD=false
 CHECK_EBPF=false
 CHECK_NPM_CACHE=false
+CHECK_BUN_CACHE=false
 VERBOSE=false
 
 # Temp file cleanup on exit/interrupt
@@ -64,7 +65,8 @@ for arg in "$@"; do
         --check-systemd) CHECK_SYSTEMD=true ;;
         --check-ebpf)    CHECK_EBPF=true ;;
         --check-npm-cache) CHECK_NPM_CACHE=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true ;;
+        --check-bun-cache) CHECK_BUN_CACHE=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --log-file=*)            LOG_FILE="${arg#*=}" ;;
         --help|-h)
@@ -72,7 +74,8 @@ for arg in "$@"; do
             echo "Options:"
             echo "  --check-systemd    Scan for unknown systemd services (Restart=always)"
             echo "  --check-ebpf       Check for eBPF rootkit traces (/sys/fs/bpf/hidden_*)"
-            echo "  --check-npm-cache  Check npm cache for atomic-lockfile"
+            echo "  --check-npm-cache  Check npm cache for atomic-lockfile / js-digest"
+            echo "  --check-bun-cache  Check bun cache for js-digest / atomic-lockfile"
             echo "  --full             Enable all checks"
             echo "  --verbose, -v      Verbose output"
             echo "  --log-file=PATH    Write full detail log to PATH (auto: aur-check-<date>.log)"
@@ -287,42 +290,86 @@ check_ebpf() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 5: npm cache for atomic-lockfile
+# Check 5: npm cache for malicious packages
 # ---------------------------------------------------------------------------
 check_npm_cache() {
-    local npm_cache
-    npm_cache=$(npm cache ls 2>/dev/null | grep 'atomic-lockfile' || true)
-    if [[ -n "$npm_cache" ]]; then
-        echo "  WARNING: atomic-lockfile found in npm cache:"
-        # shellcheck disable=SC2001
-        sed 's/^/    /' <<< "$npm_cache"
-        return 2
-    fi
+    local pkgs=('atomic-lockfile' 'js-digest')
+    local found_count=0
 
-    # Also check global node_modules
-    local global_mod
-    global_mod=$(npm root -g 2>/dev/null)/atomic-lockfile
-    if [[ -d "$global_mod" ]]; then
-        echo "  WARNING: atomic-lockfile found in global node_modules"
-        return 2
-    fi
-
-    # Check npm cache folder directly
-    local npm_cache_dir
-    npm_cache_dir=$(npm config get cache 2>/dev/null)
-    if [[ -d "$npm_cache_dir" ]]; then
-        local cached
-        cached=$(find "$npm_cache_dir" -name '*atomic-lockfile*' -type d 2>/dev/null | head -5 || true)
-        if [[ -n "$cached" ]]; then
-            echo "  WARNING: atomic-lockfile in npm cache directory:"
+    for pkg in "${pkgs[@]}"; do
+        local npm_cache
+        npm_cache=$(npm cache ls 2>/dev/null | grep "$pkg" || true)
+        if [[ -n "$npm_cache" ]]; then
+            echo "  WARNING: $pkg found in npm cache:"
             # shellcheck disable=SC2001
-            sed 's/^/    /' <<< "$cached"
-            return 2
+            sed 's/^/    /' <<< "$npm_cache"
+            found_count=2
         fi
+
+        local global_mod
+        global_mod=$(npm root -g 2>/dev/null)/"$pkg"
+        if [[ -d "$global_mod" ]]; then
+            echo "  WARNING: $pkg found in global node_modules"
+            found_count=2
+        fi
+
+        local npm_cache_dir
+        npm_cache_dir=$(npm config get cache 2>/dev/null)
+        if [[ -d "$npm_cache_dir" ]]; then
+            local cached
+            cached=$(find "$npm_cache_dir" -name "*${pkg}*" -type d 2>/dev/null | head -5 || true)
+            if [[ -n "$cached" ]]; then
+                echo "  WARNING: $pkg in npm cache directory:"
+                # shellcheck disable=SC2001
+                sed 's/^/    /' <<< "$cached"
+                found_count=2
+            fi
+        fi
+    done
+
+    if [[ $found_count -eq 0 ]]; then
+        echo "  Clean: no malicious packages in npm cache."
+    fi
+    return $found_count
+}
+
+# ---------------------------------------------------------------------------
+# Check 6: bun cache for malicious packages
+# ---------------------------------------------------------------------------
+check_bun_cache() {
+    local pkgs=('js-digest' 'atomic-lockfile')
+    local found_count=0
+
+    for pkg in "${pkgs[@]}"; do
+        local bun_cache
+        bun_cache=$(bun pm cache ls 2>/dev/null | grep "$pkg" || true)
+        if [[ -n "$bun_cache" ]]; then
+            echo "  WARNING: $pkg found in bun cache:"
+            # shellcheck disable=SC2001
+            sed 's/^/    /' <<< "$bun_cache"
+            found_count=2
+        fi
+    done
+
+    local bun_cache_dir
+    bun_cache_dir=$(bun pm cache 2>/dev/null || echo ~/.bun/install/cache)
+    if [[ -d "$bun_cache_dir" ]]; then
+        for pkg in "${pkgs[@]}"; do
+            local cached
+            cached=$(find "$bun_cache_dir" -name "*${pkg}*" -type d 2>/dev/null | head -5 || true)
+            if [[ -n "$cached" ]]; then
+                echo "  WARNING: $pkg in bun cache directory:"
+                # shellcheck disable=SC2001
+                sed 's/^/    /' <<< "$cached"
+                found_count=2
+            fi
+        done
     fi
 
-    echo "  Clean: no atomic-lockfile traces in npm cache."
-    return 0
+    if [[ $found_count -eq 0 ]]; then
+        echo "  Clean: no malicious packages in bun cache."
+    fi
+    return $found_count
 }
 
 # ---------------------------------------------------------------------------
@@ -332,7 +379,7 @@ EXIT_CODE=0
 
 echo "============================================================"
 echo " AUR Malware Check v${SCRIPT_VERSION}"
-echo " Campaign: atomic-lockfile infostealer + eBPF rootkit"
+echo " Campaign: atomic-lockfile / js-digest infostealer + eBPF rootkit"
 echo " Date window: ${START_DATE} to ${END_DATE}"
 echo " Packages checked: ${#INFECTED_PKGS[@]}"
 echo "============================================================"
@@ -381,6 +428,13 @@ fi
 if $CHECK_NPM_CACHE; then
     echo "--- [5] npm cache check ---"
     check_npm_cache && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_BUN_CACHE; then
+    echo "--- [6] bun cache check ---"
+    check_bun_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi

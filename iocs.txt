@@ -3,21 +3,33 @@
 #          https://gist.github.com/Kidev/59bf9f5fb53ab5eee99f19a6a2fc3992
 
 ## File Hashes
-ELF Payload (deps):
+ELF Payload (deps - atomic-lockfile variant):
   SHA256: 6144D433F8A0316869877B5F834C801251BBB936E5F1577C5680878C7443C98B
   MD5:    42B59FDBE1B72895B2951412222EBF40
   Size:   3,040,376 bytes
 
-Additional sample (cryptominer):
+ELF Payload (js-digest variant):
+  SHA256: 7883BDA1FF15425F2DBE622C45A3AE105DDFA6175009BBF0B0CAD9BF5C79B316
+  Source: IFIN Discourse / socket.dev analysis
+
+Additional sample (cryptominer - atomic-lockfile variant):
   SHA256: 47893d9badc38c54b71321263ce8178c1abb10396e0aadf9793e61ec8829e204
 
-## Malicious NPM Package
+## Malicious NPM Packages
+### atomic-lockfile (npm variant)
   Name:       atomic-lockfile
   Version:    1.4.2
   Lifecycle:  "preinstall": "./src/hooks/deps"
   Payload:    src/hooks/deps
   Publisher:  herbsobering (npmjs.com/~herbsobering)
   Downloads:  134 (at time of detection)
+
+### js-digest (bun variant)
+  Name:       js-digest
+  Installer:  bun install js-digest (injected into PKGBUILD/.install hooks)
+  Payload:    embedded ELF (SHA256 above)
+  Publisher:  herbsobering (same NPM account)
+  Status:     Pulled from NPM (confirmed by Socket.dev)
 
 ## Network Indicators (C2)
   Onion:  olrh4mibs62l6kkuvvjyc5lrercqg5tz543r4lsw3o6mh5qb7g7sneid.onion
@@ -54,11 +66,14 @@ Additional sample (cryptominer):
 
 ## Filesystem Artifacts
   /usr/bin/monero-wallet-gui (potential cryptominer)
-  ~/.npm/_cacache/ (npm cache of atomic-lockfile)
+  ~/.npm/_cacache/ (npm cache of atomic-lockfile / js-digest)
+  ~/.bun/install/cache/ (bun cache — bun variant of the attack)
 
 ## Attacker Accounts
-  AUR:  arojas (malicious maintainer)
+  AUR:  arojas (malicious maintainer, atomic-lockfile wave)
   AUR:  krisztinavarga (malicious maintainer for alvr)
+  AUR:  custodiatovar (malicious maintainer, bun/js-digest wave — 13 packages)
+  AUR:  veramagalhaes (malicious maintainer, bun/js-digest wave — 13 packages)
   Git:  PLYSHKA (commit author name used for impersonation)
   NPM:  herbsobering
   GH:   fardewoak (container registry: herbsobering430)

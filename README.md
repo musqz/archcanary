@@ -4,7 +4,11 @@ Detection and analysis tools for the **atomic-lockfile** supply-chain attack on 
 
 This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
 
-> **408+ AUR packages compromised** by a malicious maintainer (`arojas`) who injected `npm install atomic-lockfile` into PKGBUILD/install files. The malicious npm package delivers an **infostealer** and **eBPF rootkit** targeting developer credentials, browser data, and CI/CD secrets.
+> **400+ AUR packages compromised** by malicious maintainers who injected `npm install atomic-lockfile` or `bun install js-digest` into PKGBUILD/install files. Two attack waves:
+> 1. **atomic-lockfile** (npm) — accounts `arojas`, `krisztinavarga`
+> 2. **js-digest** (bun) — accounts `custodiatovar`, `veramagalhaes`
+>
+> Both deliver an **infostealer** and **eBPF rootkit** targeting developer credentials, browser data, and CI/CD secrets.
 
 ## Quick Start
 
@@ -15,6 +19,9 @@ chmod +x aur_check.sh
 
 # Full scan with all optional checks
 ./aur_check.sh --full
+
+# Check bun cache specifically (for js-digest / atomic-lockfile)
+./aur_check.sh --check-bun-cache
 
 # Safe one-liner (from quantenProjects) - just compare installed vs infected list
 comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR/aur-malware-check/main/package_list.txt | sort)
@@ -36,7 +43,8 @@ A consolidated detection script combining the best features from all community f
 | ~588 known compromised packages | Consolidated from all sources |
 | systemd persistence check | Original addition |
 | eBPF rootkit check | Original addition |
-| npm cache check | Original addition |
+| npm cache check (atomic-lockfile + js-digest) | Original addition |
+| bun cache check (js-digest + atomic-lockfile) | Original addition |
 | Configurable date window via env vars | Kacper-Kondracki fork |
 
 ### Script Versions
@@ -118,13 +126,20 @@ This analysis aggregates information from the following sources:
 - **June 11**: ioctl.fail publishes technical analysis
 - **June 12**: Community detection scripts published; AUR maintainers cleaning up
 
-### Attack Vector
+### Attack Vector — Wave 1: atomic-lockfile (npm)
 
 1. Attacker account `arojas` took over orphaned AUR packages
 2. Used commit forgery (impersonated previous maintainer name/email)
 3. Injected `npm install atomic-lockfile` into `.install` and `.hook` files
 4. The npm package `atomic-lockfile@1.4.2` contained a `preinstall` hook executing `./src/hooks/deps`
 5. The ELF binary `deps` (SHA256: `6144D4...`) is a Rust-based credential stealer
+
+### Attack Vector — Wave 2: js-digest (bun)
+
+1. Additional attacker accounts `custodiatovar` and `veramagalhaes` took over orphaned packages
+2. Injected `bun install js-digest` into PKGBUILD/`.install` files (same NPM publisher `herbsobering`)
+3. The npm package `js-digest` contained an embedded ELF payload (SHA256: `7883BD...`)
+4. Affected packages include guiscrcpy, netmon-git, inadyn-mt, nodejs-elm, keepassx2, and 26+ more
 
 ### Malware Capabilities
 
