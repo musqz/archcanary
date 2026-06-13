@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.3.0"
+SCRIPT_VERSION="2.3.3"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -244,6 +244,7 @@ print_list() {
 check_current() {
     local found=()
     while IFS= read -r pkg; do
+        [[ -v INFECTED_LOOKUP["$pkg"] ]] || continue
         local install_date
         install_date=$(LC_ALL=C pacman -Qi -- "$pkg" 2>/dev/null | awk -F': ' '/^Install Date/ { print $2; exit }')
         if [[ -n "$install_date" ]] && { $ALL_TIME || install_date_in_window "$install_date"; }; then
@@ -461,6 +462,13 @@ check_bun_cache() {
 EXIT_CODE=0
 
 load_packages
+
+# Build exact-match lookup table from INFECTED_PKGS
+# (pacman -Qmq does prefix matching; this prevents false positives)
+declare -A INFECTED_LOOKUP
+for p in "${INFECTED_PKGS[@]}"; do
+    INFECTED_LOOKUP["$p"]=1
+done
 
 echo "============================================================"
 echo " AUR Malware Check v${SCRIPT_VERSION}"
