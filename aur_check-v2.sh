@@ -123,7 +123,7 @@ load_packages() {
         mapfile -t INFECTED_PKGS < <(
             echo "$raw" |
                 sed 's/<[^>]*>//g' |
-                grep -E '^[a-z0-9][a-z0-9_.+\-]*[a-z0-9]$' |
+                grep -E '^[a-z0-9][a-z0-9_.+\-]*[a-z0-9+]$' |
                 sort -u
         )
 
