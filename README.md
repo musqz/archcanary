@@ -29,6 +29,15 @@ comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR
 # Faster alternative (v2) – optimized log scanning (~150x faster for large logs)
 ./aur_check-v2.sh
 
+# Cross-campaign: scan all installed packages regardless of install date
+./aur_check-v2.sh --all-time
+
+# Merge multiple lists (HedgeDoc + historical + custom) and scan
+./custom_list_merge_aur_scan.sh -l ./historical_packages.txt
+
+# Merge custom lists and disable date window for cross-campaign scan
+./custom_list_merge_aur_scan.sh -l ./historical_packages.txt -- --all-time
+
 # Refresh the package list from the official Arch Linux HedgeDoc, then scan
 ./aur_check-v2.sh --refresh --full
 

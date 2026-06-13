@@ -33,6 +33,27 @@
   - substring: short names don't match suffixed variants
   - empty list, comments, specials, CLI flag integration
 
+## 2.3.2 (2026-06-13)
+- New: `--all-time` flag (v2) — disable recency window for cross-campaign detection
+- New: `custom_list_merge_aur_scan.sh` — fetch HedgeDoc + merge custom lists +
+  dedup + run aur_check-v2.sh
+  - `-l/--list=URL|FILE`: additional AUR package lists (repeatable)
+  - `-m/--malicious-npm=URL|FILE`: additional npm lists (repeatable)
+  - `--skip-hedgedoc`: exclude official HedgeDoc list
+  - `-o/--output=FILE`: save merged list
+  - `-v/--verbose`, `--debug`: verbosity control (+ set -x trace for debug)
+  - `--list=`, `--malicious-npm=` value-consumption via `((++i))` (fix: `set -e`
+    kill at `((0++))` on first iteration)
+  - `info()`: `if $VERBOSE; then` instead of `$VERBOSE &&` (fix: non-zero return
+    with `set -e` when not verbose)
+  - `$PASSTHROUGH &&` → `[[ "$PASSTHROUGH" == true ]] &&` (fix: bare `false &&`
+    fragile)
+  - `append_source` loops: `&& counter++` instead of `; counter++` (fix: counts
+    only successful sources)
+  - Warning banner when `-l`/`-m` used: name-based match ≠ IOC verification
+  - `--all-time` removed from hardcoded exec — user passes via `-- --all-time`
+  - Edge cases: --skip-hedgedoc without -l → error; fetch timeout → skip
+
 ## 2.2.0 (2026-06-12)
 - Correction: `arojas` was impersonated via git commit forgery, not a malicious maintainer
 - `iocs.txt`: `arojas` moved to new "Impersonated Accounts" section
