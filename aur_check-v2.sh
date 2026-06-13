@@ -58,6 +58,10 @@ CHECK_BUN_CACHE=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 
+# CLI arg overrides for env-var-backed settings
+PACKAGE_LIST_FILE_OPT=""
+MALICIOUS_NPM_LIST_OPT=""
+
 # Temp file cleanup on exit/interrupt
 CLEANUP_FILES=()
 trap 'rm -f "${CLEANUP_FILES[@]}"' EXIT
@@ -73,6 +77,8 @@ for arg in "$@"; do
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --log-file=*)            LOG_FILE="${arg#*=}" ;;
+        --package-list=*)        PACKAGE_LIST_FILE_OPT="${arg#*=}" ;;
+        --malicious-npm-list=*)  MALICIOUS_NPM_LIST_OPT="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -82,13 +88,27 @@ for arg in "$@"; do
             echo "  --check-bun-cache  Check bun cache for packages listed in malicious_npm_packages.txt"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
-            echo "  --verbose, -v      Verbose output"
-            echo "  --log-file=PATH    Write full detail log to PATH (auto: aur-check-<date>.log)"
-            echo "  --help, -h         Show this help"
+            echo "  --verbose, -v             Verbose output"
+            echo "  --log-file=PATH           Write full detail log to PATH (auto: aur-check-<date>.log)"
+            echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
+            echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
+            echo "  --help, -h                Show this help"
             exit 0
             ;;
     esac
 done
+
+# ---------------------------------------------------------------------------
+# Apply CLI overrides for env-var-backed settings
+# CLI flag > env var > default
+# ---------------------------------------------------------------------------
+if [[ -n "$PACKAGE_LIST_FILE_OPT" ]]; then
+    PACKAGE_LIST_FILE="$PACKAGE_LIST_FILE_OPT"
+fi
+
+if [[ -n "$MALICIOUS_NPM_LIST_OPT" ]]; then
+    MALICIOUS_NPM_LIST="$MALICIOUS_NPM_LIST_OPT"
+fi
 
 # ---------------------------------------------------------------------------
 # Log file: always write full detail, auto-named unless --log-file=PATH
@@ -128,6 +148,11 @@ done < "$MALICIOUS_NPM_LIST"
 # Helper functions
 # ---------------------------------------------------------------------------
 load_packages() {
+    if $REFRESH_PACKAGE_LIST && [[ -n "$PACKAGE_LIST_FILE_OPT" ]]; then
+        echo >&2 "WARNING: --package-list overrides --refresh; using local file."
+        REFRESH_PACKAGE_LIST=false
+    fi
+
     if $REFRESH_PACKAGE_LIST; then
         echo "Fetching infected package list..."
 

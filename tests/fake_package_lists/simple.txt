@@ -1,0 +1,10 @@
+alvr
+guiscrcpy
+netmon-git
+inadyn-mt
+nodejs-elm
+keepassx2
+jd-gui
+premake-git
+firefox-patch-bin
+zenbrowser-patch

@@ -1,0 +1,5 @@
+atomic-lockfile
+js-digest
+lockfile-js
+evil-npm
+malware-pkg

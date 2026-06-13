@@ -23,6 +23,16 @@
 - Campaign banner updated: atomic-lockfile / js-digest / lockfile-js
 - Package list: ~588 → 1619 (live via `--refresh`) / 512 (bundled fallback)
 
+## 2.3.1 (2026-06-13)
+- New: `--package-list=PATH` CLI flag — override infected AUR package list path
+- New: `--malicious-npm-list=PATH` CLI flag — override malicious npm package list path
+- Change: CLI flags override env vars override defaults (`PACKAGE_LIST_FILE`, `MALICIOUS_NPM_LIST`)
+- Change: warn if `--package-list` and `--refresh` conflict, ignore `--refresh`
+- New: `tests/run_matching_tests.sh` — 8-test matching test suite
+  - suffix_ambiguity: `jd-gui` vs `jd-gui-bin` exact matching (regression guard for #2)
+  - substring: short names don't match suffixed variants
+  - empty list, comments, specials, CLI flag integration
+
 ## 2.2.0 (2026-06-12)
 - Correction: `arojas` was impersonated via git commit forgery, not a malicious maintainer
 - `iocs.txt`: `arojas` moved to new "Impersonated Accounts" section

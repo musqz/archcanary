@@ -31,6 +31,11 @@ comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR
 
 # Refresh the package list from the official Arch Linux HedgeDoc, then scan
 ./aur_check-v2.sh --refresh --full
+
+# Use custom package lists (also settable via env vars):
+#   PACKAGE_LIST_FILE=./my_list.txt
+#   MALICIOUS_NPM_LIST=./my_npm.txt
+./aur_check-v2.sh --package-list=my_list.txt --malicious-npm-list=my_npm.txt
 ```
 
 ## Script: `aur_check.sh`
@@ -49,6 +54,8 @@ A consolidated detection script combining the best features from all community f
 | npm cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
 | bun cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
 | `--refresh` flag (live package list) | PR #8 (drbbgh) |
+| `--package-list=PATH` CLI flag | Original addition |
+| `--malicious-npm-list=PATH` CLI flag | Original addition |
 | Configurable date window via env vars | Kacper-Kondracki fork |
 
 ### Script Versions
@@ -87,6 +94,10 @@ aur-malware-check/
 ├── fetches/               # Raw fetched content (for verification)
 ├── SOURCES.md             # Numbered, sectioned source references
 ├── at_risk_accounts.json  # All identified attacker/monitoring accounts with status
+├── tests/
+│   ├── run_matching_tests.sh           # Matching test runner
+│   ├── fake_package_lists/             # Fake infected AUR package lists for tests
+│   └── fake_npm_lists/                 # Fake malicious npm package name lists for tests
 └── subagent-reports/      # Extracted subagent analysis reports
 ```
 

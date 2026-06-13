@@ -1,0 +1,6 @@
+python3.11
+gcc-libs
+cuda-12.8
+ruby3.3+dev
+dot_underscore
+alac-git
