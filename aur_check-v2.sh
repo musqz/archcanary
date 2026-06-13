@@ -78,8 +78,8 @@ for arg in "$@"; do
             echo "Options:"
             echo "  --check-systemd    Scan for unknown systemd services (Restart=always)"
             echo "  --check-ebpf       Check for eBPF rootkit traces (/sys/fs/bpf/hidden_*)"
-            echo "  --check-npm-cache  Check npm cache for atomic-lockfile / js-digest / lockfile-js"
-            echo "  --check-bun-cache  Check bun cache for atomic-lockfile / js-digest / lockfile-js"
+            echo "  --check-npm-cache  Check npm cache for packages listed in malicious_npm_packages.txt"
+            echo "  --check-bun-cache  Check bun cache for packages listed in malicious_npm_packages.txt"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v      Verbose output"
@@ -105,6 +105,24 @@ exec > >(tee "$LOG_FILE") 2>&1
 # ---------------------------------------------------------------------------
 PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$(dirname "$0")/package_list.txt}"
 INFECTED_PKGS=()
+
+# ---------------------------------------------------------------------------
+# Load malicious npm package names from external file
+# Can be overridden via MALICIOUS_NPM_LIST env var
+# ---------------------------------------------------------------------------
+MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$(dirname "$0")/malicious_npm_packages.txt}"
+
+if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
+    echo >&2 "ERROR: Malicious npm package list not found: $MALICIOUS_NPM_LIST"
+    echo >&2 "Set MALICIOUS_NPM_LIST or run from the repo root."
+    exit 1
+fi
+
+MALICIOUS_NPM_PKGS=()
+while IFS= read -r line; do
+    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+    MALICIOUS_NPM_PKGS+=("$line")
+done < "$MALICIOUS_NPM_LIST"
 
 # ---------------------------------------------------------------------------
 # Helper functions
@@ -324,7 +342,7 @@ check_ebpf() {
 # Check 5: npm cache for malicious packages
 # ---------------------------------------------------------------------------
 check_npm_cache() {
-    local pkgs=('atomic-lockfile' 'js-digest' 'lockfile-js')
+    local pkgs=("${MALICIOUS_NPM_PKGS[@]}")
     local found_count=0
 
     for pkg in "${pkgs[@]}"; do
@@ -368,7 +386,7 @@ check_npm_cache() {
 # Check 6: bun cache for malicious packages
 # ---------------------------------------------------------------------------
 check_bun_cache() {
-    local pkgs=('atomic-lockfile' 'js-digest' 'lockfile-js')
+    local pkgs=("${MALICIOUS_NPM_PKGS[@]}")
     local found_count=0
 
     for pkg in "${pkgs[@]}"; do
@@ -412,7 +430,7 @@ load_packages
 
 echo "============================================================"
 echo " AUR Malware Check v${SCRIPT_VERSION}"
-echo " Campaign: atomic-lockfile / js-digest / lockfile-js infostealer + eBPF rootkit"
+echo " Campaign: malicious npm packages (malicious_npm_packages.txt) infostealer + eBPF rootkit"
 echo " Date window: ${START_DATE} to ${END_DATE}"
 echo " Packages checked: ${#INFECTED_PKGS[@]}"
 echo "============================================================"

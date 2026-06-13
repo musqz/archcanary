@@ -75,8 +75,9 @@ aur-malware-check/
 ├── README.md              # This file
 ├── aur_check.sh           # v1: Consolidated detection script (sed+grep log scanner)
 ├── aur_check-v2.sh        # v2: Optimized log scanner (bash regex + O(1) hash lookup)
-├── package_list.txt       # 512 bundled compromised packages (1619 via `--refresh`)
-├── iocs.txt               # Indicators of Compromise
+├── package_list.txt              # bundled compromised packages, same as --refresh one as of 6/17/26. (1619 via `--refresh`)
+├── malicious_npm_packages.txt    # Malicious npm package names for cache checks
+├── iocs.txt                      # Indicators of Compromise
 ├── CHANGELOG.md           # Version history
 ├── sources/               # Original community scripts
 │   ├── 01_kidev_original.sh
