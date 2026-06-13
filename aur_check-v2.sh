@@ -122,7 +122,6 @@ load_packages() {
         # Strips HTML, blank lines, comments, and anything that doesn't match a sane pkgname pattern.
         mapfile -t INFECTED_PKGS < <(
             echo "$raw" |
-                sed 's/<[^>]*>//g' |
                 grep -E '^[a-z0-9][a-z0-9_.+\-]*[a-z0-9+]$' |
                 sort -u
         )
