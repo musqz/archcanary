@@ -15,6 +15,14 @@
 - Log scanning: Kacper-Kondracki pacman.log parser
 - Safety: quantenProjects comm approach
 
+## 2.3.0 (2026-06-13)
+- New: `--refresh` flag — fetch live package list from Arch Linux HedgeDoc (1619 packages)
+- New: `lockfile-js` added to npm+bun cache checks (3rd malicious npm package)
+- PR #8 (drbbgh): package list refresh logic with `/download` endpoint
+- PR #7 (liphiwolf): lockfile-js detection, package list expanded from CSCS paste
+- Campaign banner updated: atomic-lockfile / js-digest / lockfile-js
+- Package list: ~588 → 1619 (live via `--refresh`) / 512 (bundled fallback)
+
 ## 2.2.0 (2026-06-12)
 - Correction: `arojas` was impersonated via git commit forgery, not a malicious maintainer
 - `iocs.txt`: `arojas` moved to new "Impersonated Accounts" section

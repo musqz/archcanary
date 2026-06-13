@@ -4,8 +4,8 @@ Detection and analysis tools for the **atomic-lockfile** supply-chain attack on 
 
 This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
 
-> **400+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile` or `bun install js-digest` into PKGBUILD/install files. Two attack waves:
-> 1. **atomic-lockfile** (npm) — accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
+> **1600+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile`, `bun install js-digest`, or `lockfile-js` into PKGBUILD/install files. Two attack waves:
+> 1. **atomic-lockfile / lockfile-js** (npm) — accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
 > 2. **js-digest** (bun) — accounts `custodiatovar`, `veramagalhaes`
 >
 > Both deliver an **infostealer** and **eBPF rootkit** targeting developer credentials, browser data, and CI/CD secrets.
@@ -28,6 +28,9 @@ comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR
 
 # Faster alternative (v2) – optimized log scanning (~150x faster for large logs)
 ./aur_check-v2.sh
+
+# Refresh the package list from the official Arch Linux HedgeDoc, then scan
+./aur_check-v2.sh --refresh --full
 ```
 
 ## Script: `aur_check.sh`
@@ -40,11 +43,12 @@ A consolidated detection script combining the best features from all community f
 | Date window filtering (Jun 9-12) | commonsourcecs fork |
 | Historical pacman.log scanning | Kacper-Kondracki fork |
 | Compressed log support (.gz/.xz/.zst/.bz2) | Kacper-Kondracki fork |
-| ~588 known compromised packages | Consolidated from all sources |
+| ~1600 known compromised packages (live via `--refresh`) | Consolidated from all sources + HedgeDoc |
 | systemd persistence check | Original addition |
 | eBPF rootkit check | Original addition |
-| npm cache check (atomic-lockfile + js-digest) | Original addition |
-| bun cache check (js-digest + atomic-lockfile) | Original addition |
+| npm cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
+| bun cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
+| `--refresh` flag (live package list) | PR #8 (drbbgh) |
 | Configurable date window via env vars | Kacper-Kondracki fork |
 
 ### Script Versions
@@ -71,7 +75,7 @@ aur-malware-check/
 ├── README.md              # This file
 ├── aur_check.sh           # v1: Consolidated detection script (sed+grep log scanner)
 ├── aur_check-v2.sh        # v2: Optimized log scanner (bash regex + O(1) hash lookup)
-├── package_list.txt       # All ~588 known compromised packages
+├── package_list.txt       # 512 bundled compromised packages (1619 via `--refresh`)
 ├── iocs.txt               # Indicators of Compromise
 ├── CHANGELOG.md           # Version history
 ├── sources/               # Original community scripts
@@ -106,7 +110,7 @@ This analysis aggregates information from the following sources:
 |--------|-----|-------------|
 | **Kidev (Original)** | https://gist.github.com/Kidev/59bf9f5fb53ab5eee99f19a6a2fc3992 | Foundation: initial package list (~446), basic `pacman -Qi` check loop |
 | **BrianCArnold (Fork)** | https://gist.github.com/BrianCArnold/beb514ffc95a9a251b0dc2f767471fca | Efficiency improvement: `pacman -Qm` piped through grep |
-| **commonsourcecs (Fork)** | https://cscs.pastes.sh/aurvulntest20260611.sh | Batch `pacman -Qmq` query, install date window (Jun 9-12), expanded package list (~588) |
+| **commonsourcecs (Fork)** | https://cscs.pastes.sh/aurvulntest20260611.sh | Batch `pacman -Qmq` query, install date window (Jun 9-12), expanded package list (~1620) |
 | **Kacper-Kondracki (Fork)** | https://gist.github.com/Kacper-Kondracki/88c5b313f79cc1f9c347e7ed61a36d10 | Historical pacman.log scanning with compressed file support, configurable date window via env vars |
 | **quantenProjects (Fork)** | https://gist.github.com/quantenProjects/3f768dce7331618310f016d975bf8547 | Safe non-executable package list, `comm -1 -2` one-liner approach |
 
@@ -146,6 +150,14 @@ This analysis aggregates information from the following sources:
 | **David Runge** (Arch Linux TU) | https://chaos.social/@dvzrv/116736017948300691 | Confirms arojas is legitimate KDE maintainer, attacker reused his identity via git commit forgery; requests corrections |
 | **IFIN Discourse (Updated)** | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Post corrected — now explicitly notes arojas was impersonated |
 
+### Community Contributions
+
+| Source | URL | Content Used |
+|--------|-----|-------------|
+| **drbbgh** (PR #8) | https://github.com/lenucksi/aur-malware-check/pull/8 | `--refresh` flag: live package list fetch from Arch Linux HedgeDoc |
+| **liphiwolf** (PR #7) | https://github.com/lenucksi/aur-malware-check/pull/7 | `lockfile-js` detection, expanded package list from CSCS paste |
+| **0xf836** (PR #4) | https://github.com/lenucksi/aur-malware-check/pull/4 | Package list expansion (superseded by PR #8) |
+
 ### Additional Data
 
 | Source | URL | Content Used |
@@ -167,13 +179,15 @@ This analysis aggregates information from the following sources:
 - **June 12**: David Runge clarifies `arojas` was impersonated via git commit forgery, not a malicious maintainer
 - **June 12, 17:33**: Jonathan Grotelüschen posts HedgeDoc with updated affected package list
 - **June 13**: New monitoring accounts identified (ivonahruskova, simongeisler); proposals for commit hash tracking, AUR read-only, and LLM-based scanning discussed
+- **June 13**: PR #8 (drbbgh) merged — `--refresh` flag for live HedgeDoc package list
+- **June 13**: PR #7 (liphiwolf) merged — `lockfile-js` detection, expanded package list
 
-### Attack Vector — Wave 1: atomic-lockfile (npm)
+### Attack Vector — Wave 1: atomic-lockfile / lockfile-js (npm)
 
 1. Attacker used commit forgery to impersonate maintainer `arojas` (see Impersonation Clarification below)
 2. Took over orphaned AUR packages via the forged identity
-3. Injected `npm install atomic-lockfile` into `.install` and `.hook` files
-4. The npm package `atomic-lockfile@1.4.2` contained a `preinstall` hook executing `./src/hooks/deps`
+3. Injected `npm install atomic-lockfile` or `npm install lockfile-js` into `.install` and `.hook` files
+4. The npm packages `atomic-lockfile@1.4.2` / `lockfile-js` contained a `preinstall` hook executing `./src/hooks/deps`
 5. The ELF binary `deps` (SHA256: `6144D4...`) is a Rust-based credential stealer
 
 ### Attack Vector — Wave 2: js-digest (bun)
