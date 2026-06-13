@@ -5,7 +5,7 @@ Detection and analysis tools for the **atomic-lockfile** supply-chain attack on 
 This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
 
 > **400+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile` or `bun install js-digest` into PKGBUILD/install files. Two attack waves:
-> 1. **atomic-lockfile** (npm) — accounts `krisztinavarga`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
+> 1. **atomic-lockfile** (npm) — accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
 > 2. **js-digest** (bun) — accounts `custodiatovar`, `veramagalhaes`
 >
 > Both deliver an **infostealer** and **eBPF rootkit** targeting developer credentials, browser data, and CI/CD secrets.
@@ -80,6 +80,8 @@ aur-malware-check/
 │   ├── 03_kacper-kondracki_fork.sh
 │   └── 04_quantenprojects_list.txt
 ├── fetches/               # Raw fetched content (for verification)
+├── SOURCES.md             # Numbered, sectioned source references
+├── at_risk_accounts.json  # All identified attacker/monitoring accounts with status
 └── subagent-reports/      # Extracted subagent analysis reports
 ```
 
@@ -94,6 +96,7 @@ This analysis aggregates information from the following sources:
 | IFIN Discourse | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Attack summary, links, **bun/js-digest wave update (Jun 12)** |
 | ioctl.fail Analysis | https://ioctl.fail/preliminary-analysis-of-aur-malware/ | Detailed technical analysis, IOCs, eBPF rootkit details, C2 extraction |
 | Arch ML: Main Thread | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/ | Master list of ~408 packages by Andre Herbst, additional reports by Rafal Lichwala, Nicolas Boichat, Damien |
+| Arch ML: HedgeDoc Package List | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/FCH7TT6IOVT7D477JKSVJALBKADAARSW/ | Jonathan Grotelüschen (Arch Staff) posts HedgeDoc link with updated affected package list |
 | Arch ML: ALVR Report | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/2LGBF2AZBPVCCY4VTN6DOVUNNBURFJ2J/ | First report of suspicious commit on alvr package |
 | ALVR AUR Page | https://aur.archlinux.org/packages/alvr | User comments detailing compromise analysis |
 
@@ -116,6 +119,24 @@ This analysis aggregates information from the following sources:
 | **Marcin Wieczorek / Thorsten Wißmann** (aur-general) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/ | Report of inadyn-mt, veramagalhaes account (13 packages), commit forgery proof for nodejs-elm |
 | **IFIN Discourse (Update)** | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | js-digest SHA256, bun variant documentation, keepassx2 example |
 | **Socket.dev** | https://socket.dev/npm/package/js-digest | js-digest metadata, pulled from NPM confirmation |
+
+### Mailing List — Attack Reports & Account Identification
+
+| Source | URL | Content Used |
+|--------|-----|-------------|
+| **Fabio Loli** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/ | Reports **franziskaweber**, **tobiaswesterburg**, **ellenmyklebust** as malicious (npm shenanigans) |
+| **Sasha Moak** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/CIKQJQI3AREXIR6IQVWPBYFJPYLM45EF/ | Additional suspicious packages (android-support-repository, monochrome, blinkenlib, perl-set-object) |
+| **Joom** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/NCLGU23LSLOFXMBGG7HH67EWDZC2TJB3/ | **ivonahruskova** — account created Jun 11, 16 adoptions, under monitoring |
+| **Paul** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/K2ZO3U4WPV7BBT2WAP5P54F23A37RUPH/ | **simongeisler** — 3-day-old account, 16 orphan adoptions, under monitoring |
+
+### Mailing List — Proposals & Community Discussion
+
+| Source | URL | Content Used |
+|--------|-----|-------------|
+| Proposal: Commit Hashes | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/WJ5CH64QMWSFGIJYFSRVEFLSNI7JSKPR/ | Compile per-package affected commit hashes + date ranges |
+| Proposal: AUR Read Only | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/WS2K2XGMLPBFZ3WGOPLF2UP32HZJ6ZSP/ | 16-participant discussion about making AUR read-only |
+| Idea: Prevent Malicious Pkgs | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/7QZREKFQX3P3UOQNUYJOXANPK4PFH733/ | Long-term mitigation ideas |
+| AURSCAN (LLM Scanner) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/E26JEFVSR6YG4GBQUZYDMWYCXD7S7N5V/ | Andreas Reichel: YAY wrapper scanning PKGBUILD with Claude LLM. Local alternatives discussed (Qwen2.5-Coder-7B, Haiku POC) |
 
 ### Impersonation Clarification
 
@@ -144,6 +165,8 @@ This analysis aggregates information from the following sources:
 - **June 11**: ioctl.fail publishes technical analysis
 - **June 12**: Community detection scripts published; AUR maintainers cleaning up
 - **June 12**: David Runge clarifies `arojas` was impersonated via git commit forgery, not a malicious maintainer
+- **June 12, 17:33**: Jonathan Grotelüschen posts HedgeDoc with updated affected package list
+- **June 13**: New monitoring accounts identified (ivonahruskova, simongeisler); proposals for commit hash tracking, AUR read-only, and LLM-based scanning discussed
 
 ### Attack Vector — Wave 1: atomic-lockfile (npm)
 
@@ -182,10 +205,9 @@ This analysis aggregates information from the following sources:
 
 Community tools - no warranty. Use at your own risk.
 
-
 ## Star History
 
-<a href="https://www.star-history.com/?repos=lenucksi%2Faur-malware-check&type=date&logscale&legend=top-left">
+<a href="https://www.star-history.com/?repos=lenucksi%2Faur-malware-check&type=date&legend=top-left">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&theme=dark&legend=top-left" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&legend=top-left" />
