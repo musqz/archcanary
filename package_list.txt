@@ -1,11 +1,3 @@
-# AUR packages compromised in June 2026 supply-chain attack
-# Consolidated list from:
-#   - Mailing list (Andre Herbst grep of aur.git for atomic-lockfile)
-#   - Additional reports by Rafal Lichwala, Cristian Pereira, Nicolas Boichat, Damien
-#   - IRC list at gr.ht/aur_pkg_list.txt
-#   - commonsourcecs fork additions
-#   - additions from https://cscs.pastes.sh/aurvulntest20260611.sh
-# Total: ~1620 packages
 123pan-bin
 1code
 8188eu-dkms
@@ -157,7 +149,7 @@ cartridge-cli
 castawesome
 castersoundboard-git
 cattle
-cavestory±hb
+cavestory+-hb
 cb2bib
 ccase-bin
 cccc
@@ -169,7 +161,7 @@ centerim5-git
 cerbere-git
 cerebro
 cgminer
-"c+±gtk-utils-gtk2"
+c++-gtk-utils-gtk2
 cgvg
 charcoal
 chexquest3-wad
@@ -780,7 +772,7 @@ lorem-ipsum-generator
 love09
 lowfi-bin
 lrexlib-pcre5.1
-"ls++"
+ls++
 lsx
 lttng-modules
 lua51-sql-sqlite
@@ -928,8 +920,7 @@ nodejs-jsdoc
 nodejs-webpack
 non-daw-git
 nordnm
-"notepad---bin"
-"notepad—bin"
+notepad---bin
 notify-desktop-git
 notion-app-enhanced
 nox-bin
@@ -1166,7 +1157,7 @@ python-piecash
 python-pluginmgr
 python-poetry-plugin-dotenv
 python-privy-git
-"python-pushbullet.py"
+python-pushbullet.py
 python-pychromecast-git
 python-pydns
 python-pylsp-rope
@@ -1522,7 +1513,6 @@ vim-vital
 vinetto
 violetland-git
 virtscreen
-vlc-arc-dark
 vlc-arc-dark-git
 vms-empire
 vnote
