@@ -74,8 +74,8 @@ for arg in "$@"; do
             echo "Options:"
             echo "  --check-systemd    Scan for unknown systemd services (Restart=always)"
             echo "  --check-ebpf       Check for eBPF rootkit traces (/sys/fs/bpf/hidden_*)"
-            echo "  --check-npm-cache  Check npm cache for atomic-lockfile / js-digest"
-            echo "  --check-bun-cache  Check bun cache for js-digest / atomic-lockfile"
+            echo "  --check-npm-cache  Check npm cache for atomic-lockfile / js-digest / lockfile-js"
+            echo "  --check-bun-cache  Check bun cache for atomic-lockfile / js-digest / lockfile-js"
             echo "  --full             Enable all checks"
             echo "  --verbose, -v      Verbose output"
             echo "  --log-file=PATH    Write full detail log to PATH (auto: aur-check-<date>.log)"
@@ -288,7 +288,7 @@ check_ebpf() {
 # Check 5: npm cache for malicious packages
 # ---------------------------------------------------------------------------
 check_npm_cache() {
-    local pkgs=('atomic-lockfile' 'js-digest')
+    local pkgs=('atomic-lockfile' 'js-digest' 'lockfile-js')
     local found_count=0
 
     for pkg in "${pkgs[@]}"; do
@@ -332,7 +332,7 @@ check_npm_cache() {
 # Check 6: bun cache for malicious packages
 # ---------------------------------------------------------------------------
 check_bun_cache() {
-    local pkgs=('js-digest' 'atomic-lockfile')
+    local pkgs=('atomic-lockfile' 'js-digest' 'lockfile-js')
     local found_count=0
 
     for pkg in "${pkgs[@]}"; do
@@ -374,7 +374,7 @@ EXIT_CODE=0
 
 echo "============================================================"
 echo " AUR Malware Check v${SCRIPT_VERSION}"
-echo " Campaign: atomic-lockfile / js-digest infostealer + eBPF rootkit"
+echo " Campaign: atomic-lockfile / js-digest / lockfile-js infostealer + eBPF rootkit"
 echo " Date window: ${START_DATE} to ${END_DATE}"
 echo " Packages checked: ${#INFECTED_PKGS[@]}"
 echo "============================================================"
