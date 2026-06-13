@@ -49,7 +49,7 @@ START_DATE=${START_DATE:-2026-06-09}
 END_DATE=${END_DATE:-2026-06-12}
 PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
 # Pulls the live package list from the official Arch Linux HedgeDoc note.
-LIST_URL="https://md.archlinux.org/s/SxbqukK6IA"
+LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
 
 CHECK_SYSTEMD=false
 CHECK_EBPF=false
