@@ -48,11 +48,14 @@ SCRIPT_VERSION="2.2.0"
 START_DATE=${START_DATE:-2026-06-09}
 END_DATE=${END_DATE:-2026-06-12}
 PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
+# Pulls the live package list from the official Arch Linux HedgeDoc note.
+LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
 
 CHECK_SYSTEMD=false
 CHECK_EBPF=false
 CHECK_NPM_CACHE=false
 CHECK_BUN_CACHE=false
+REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 
 # Temp file cleanup on exit/interrupt
@@ -67,6 +70,7 @@ for arg in "$@"; do
         --check-npm-cache) CHECK_NPM_CACHE=true ;;
         --check-bun-cache) CHECK_BUN_CACHE=true ;;
         --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true ;;
+        --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --log-file=*)            LOG_FILE="${arg#*=}" ;;
         --help|-h)
@@ -77,6 +81,7 @@ for arg in "$@"; do
             echo "  --check-npm-cache  Check npm cache for atomic-lockfile / js-digest"
             echo "  --check-bun-cache  Check bun cache for js-digest / atomic-lockfile"
             echo "  --full             Enable all checks"
+            echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v      Verbose output"
             echo "  --log-file=PATH    Write full detail log to PATH (auto: aur-check-<date>.log)"
             echo "  --help, -h         Show this help"
@@ -99,22 +104,53 @@ exec > >(tee "$LOG_FILE") 2>&1
 # Can be overridden via PACKAGE_LIST_FILE env var
 # ---------------------------------------------------------------------------
 PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$(dirname "$0")/package_list.txt}"
-
-if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
-    echo >&2 "ERROR: Package list not found: $PACKAGE_LIST_FILE"
-    echo >&2 "Set PACKAGE_LIST_FILE or run from the repo root."
-    exit 1
-fi
-
 INFECTED_PKGS=()
-while IFS= read -r line; do
-    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-    INFECTED_PKGS+=("$line")
-done < "$PACKAGE_LIST_FILE"
 
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+load_packages() {
+    if $REFRESH_PACKAGE_LIST; then
+        echo "Fetching infected package list..."
+
+        raw=$(curl -fsSL "$LIST_URL") || {
+            echo >&2 "ERROR: failed to fetch $LIST_URL"
+            exit 1
+        }
+
+        # Extract lines that look like package names only (lowercase, digits, dots, plus, underscore, hyphen)
+        # Strips HTML, blank lines, comments, and anything that doesn't match a sane pkgname pattern.
+        mapfile -t INFECTED_PKGS < <(
+            echo "$raw" |
+                grep -E '^[a-z0-9][a-z0-9_.+\-]*[a-z0-9+]$' |
+                sort -u
+        )
+
+        count=${#INFECTED_PKGS[@]}
+        if [[ $count -eq 0 ]]; then
+            echo >&2 "ERROR: parsed 0 packages, something went wrong with the fetch/parse."
+            exit 1
+        fi
+
+        # Update compromised packages list
+        echo "Updating $PACKAGE_LIST_FILE..."
+        printf "%s\n" "${INFECTED_PKGS[@]}" >"$PACKAGE_LIST_FILE"
+    fi
+
+    if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
+        echo >&2 "ERROR: Package list not found: $PACKAGE_LIST_FILE"
+        echo >&2 "Set PACKAGE_LIST_FILE or run from the repo root or use --refresh option."
+        exit 1
+    fi
+
+    INFECTED_PKGS=()
+
+    while IFS= read -r line; do
+        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+        INFECTED_PKGS+=("$line")
+    done <"$PACKAGE_LIST_FILE"
+}
+
 log_info() {
     if $VERBOSE; then
         echo "[INFO] $*"
@@ -371,6 +407,8 @@ check_bun_cache() {
 # Main
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
+
+load_packages
 
 echo "============================================================"
 echo " AUR Malware Check v${SCRIPT_VERSION}"
