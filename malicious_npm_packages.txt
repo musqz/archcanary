@@ -1,0 +1,6 @@
+# Malicious npm packages used in the June 2026 AUR supply-chain attack
+# One package name per line, lines starting with # are ignored
+# Referenced via MALICIOUS_NPM_LIST env var (default: ./malicious_npm_packages.txt)
+atomic-lockfile
+js-digest
+lockfile-js

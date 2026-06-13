@@ -31,6 +31,13 @@ Additional sample (cryptominer - atomic-lockfile variant):
   Publisher:  herbsobering (same NPM account)
   Status:     Pulled from NPM (confirmed by Socket.dev)
 
+### lockfile-js (npm variant)
+  Name:       lockfile-js
+  Installer:  npm install lockfile-js (injected into PKGBUILD/.install hooks)
+  Payload:    embedded ELF (same SHA256 as atomic-lockfile variant)
+  Publisher:  herbsobering (same NPM account)
+  Source:     Sonatype blog post
+
 ## Network Indicators (C2)
   Onion:  olrh4mibs62l6kkuvvjyc5lrercqg5tz543r4lsw3o6mh5qb7g7sneid.onion
   Path:   POST /api/agent HTTP/1.0
@@ -66,7 +73,7 @@ Additional sample (cryptominer - atomic-lockfile variant):
 
 ## Filesystem Artifacts
   /usr/bin/monero-wallet-gui (potential cryptominer)
-  ~/.npm/_cacache/ (npm cache of atomic-lockfile / js-digest)
+  ~/.npm/_cacache/ (npm cache of malicious npm packages — see malicious_npm_packages.txt)
   ~/.bun/install/cache/ (bun cache — bun variant of the attack)
 
 ## Attacker Accounts

@@ -1,0 +1,95 @@
+{
+  "accounts": {
+    "krisztinavarga": {
+      "first_reported": "2026-06-11T00:00:00+00:00",
+      "source": "https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577",
+      "reported_by": "IFIN Discourse / ioctl.fail",
+      "status": "confirmed",
+      "packages": [
+        "atomic-lockfile npm publisher — Wave 1"
+      ],
+      "notes": "Wave 1 attacker. npm package atomic-lockfile. Multiple AUR packages compromised."
+    },
+    "arojas": {
+      "first_reported": "2026-06-12T00:00:00+00:00",
+      "source": "https://chaos.social/@dvzrv/116736017948300691",
+      "reported_by": "David Runge (dvzrv)",
+      "status": "commitforgery",
+      "packages": [
+        "Impersonated — legitimate KDE maintainer"
+      ],
+      "notes": "Identity reused via git commit forgery. NOT a malicious maintainer. Confirmed by David Runge (Arch Linux TU)."
+    },
+    "custodiatovar": {
+      "first_reported": "2026-06-12T00:00:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/",
+      "reported_by": "ValdikSS / Cedric Girard",
+      "status": "confirmed",
+      "packages": [
+        "13+ malicious packages (js-digest wave)"
+      ],
+      "notes": "Wave 2 attacker account. Identified via bun/js-digest wave analysis."
+    },
+    "veramagalhaes": {
+      "first_reported": "2026-06-12T00:00:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/",
+      "reported_by": "Marcin Wieczorek / Thorsten Wißmann",
+      "status": "confirmed",
+      "packages": [
+        "13 packages including inadyn-mt, nodejs-elm"
+      ],
+      "notes": "Wave 2 attacker account. Commit forgery proof presented for nodejs-elm."
+    },
+    "franziskaweber": {
+      "first_reported": "2026-06-11T17:31:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/",
+      "reported_by": "Fabio Loli",
+      "status": "confirmed",
+      "packages": [
+        "Multiple AUR packages (npm shenanigans)"
+      ],
+      "notes": "Fabio Loli checked update notifications, confirmed malicious packages under this account."
+    },
+    "tobiaswesterburg": {
+      "first_reported": "2026-06-11T17:31:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/",
+      "reported_by": "Fabio Loli",
+      "status": "confirmed",
+      "packages": [
+        "Multiple AUR packages (npm shenanigans)"
+      ],
+      "notes": "Fabio Loli checked update notifications, confirmed malicious packages under this account."
+    },
+    "ellenmyklebust": {
+      "first_reported": "2026-06-11T17:31:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/",
+      "reported_by": "Fabio Loli",
+      "status": "confirmed",
+      "packages": [
+        "Multiple AUR packages (npm shenanigans)"
+      ],
+      "notes": "Fabio Loli checked update notifications, confirmed malicious packages under this account."
+    },
+    "ivonahruskova": {
+      "first_reported": "2026-06-13T01:25:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/NCLGU23LSLOFXMBGG7HH67EWDZC2TJB3/",
+      "reported_by": "Joom",
+      "status": "monitoring",
+      "packages": [
+        "vbam-git",
+        "mingw-w64-geos"
+      ],
+      "notes": "Account created June 11. 16 adoptions total. No malicious commits found yet — under observation."
+    },
+    "simongeisler": {
+      "first_reported": "2026-06-12T18:48:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/K2ZO3U4WPV7BBT2WAP5P54F23A37RUPH/",
+      "reported_by": "Paul (aur at hpminc.com)",
+      "status": "monitoring",
+      "packages": [
+        "16 adopted orphaned packages (details unknown)"
+      ],
+      "notes": "Account 3 days old, adopted 16 orphaned packages. No malicious commits found yet — under observation."
+    }
+  }
+}
