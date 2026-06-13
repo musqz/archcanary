@@ -4,3 +4,4 @@
 atomic-lockfile
 js-digest
 lockfile-js
+nextfile-js
