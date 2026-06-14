@@ -1,3 +1,6 @@
 # Working data - not committed
 fetches/
 subagent-reports/
+
+# Auto-generated run logs (default --log-file output)
+aur-check-*.log

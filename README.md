@@ -8,8 +8,10 @@
 |-------|-------------|
 | XDG config dir | Package lists live in `~/.config/aur-malware-check/` instead of alongside the script |
 | Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
-| `notify-send` alert | Fires a critical desktop notification on exit code 2, useful when running via systemd |
-| Package list refresh | Updated to 1936 entries |
+| Desktop alert | Fires a critical notification on exit code 2; with `notify-send.sh` it adds a **Show Menu** button (falls back to plain `notify-send`). `--no-notify` suppresses it |
+| `aur_malware_menu.sh` | fzf-driven TUI to run individual checks or view the last log; opened from the notification |
+| `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages (catches quote-split commands) |
+| Updated lists | `nextfile-js` added to malicious npm list; package list refreshed to 1936 entries |
 
 See [docs/systemd.md](docs/systemd.md) for running as a systemd user service with timer and desktop notifications.
 

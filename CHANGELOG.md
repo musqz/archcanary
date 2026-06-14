@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.0 (2026-06-14) — personal fork
+- New: XDG config dir — package lists live in `~/.config/aur-malware-check/` (respects `$XDG_CONFIG_HOME`); created automatically on first run
+- New: auto-seed config dir from bundled txt files when running from a new install location
+- New: `--check-pkgbuild` (included in `--full`) — obfuscation-aware scan of AUR helper caches (`~/.cache/yay`, `~/.cache/paru`, etc.) for `bun add` / `npm install` of malicious packages; catches quote-split commands like `'b''u''n' 'a'"d""d"`
+- New: `nextfile-js` added to malicious npm package list (reported upstream issue #11 / PR #12)
+- New: `aur_malware_menu.sh` — fzf TUI menu to run individual checks or view the last log; loops back to menu after each action
+- New: `--no-notify` flag — suppresses desktop notification when called as subprocess (e.g. from the menu)
+- Improved: notification prefers `notify-send.sh` (AUR) over plain `notify-send`; adds a **Show Menu** button that opens `aur_malware_menu.sh` in a terminal when clicked
+- Package list refreshed to 1936 entries
+
 ## 2.3.3 (2026-06-13)
 - Fix: prefix-matching bug in `check_current()` (Issue #2, confirmed via opencode/opencode-bin)
 - New: `INFECTED_LOOKUP` associative array filters `pacman -Qmq` results to exact matches only

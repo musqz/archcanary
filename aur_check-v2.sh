@@ -102,6 +102,7 @@ for arg in "$@"; do
             echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
             echo "  --all-time                Disable recency window — flag any installed infected"
             echo "                            package regardless of install date (for cross-campaign checks)"
+            echo "  --no-notify               Suppress the desktop notification on detection"
             echo "  --help, -h                Show this help"
             exit 0
             ;;
