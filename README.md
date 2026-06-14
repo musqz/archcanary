@@ -2,6 +2,19 @@
 
 > **Personal fork** of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) — includes local patches not submitted upstream.
 
+### Fork changes
+
+| Patch | Description |
+|-------|-------------|
+| XDG config dir | Package lists live in `~/.config/aur-malware-check/` instead of alongside the script |
+| Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
+| `notify-send` alert | Fires a critical desktop notification on exit code 2, useful when running via systemd |
+| Package list refresh | Updated to 1936 entries |
+
+See [docs/systemd.md](docs/systemd.md) for running as a systemd user service with timer and desktop notifications.
+
+---
+
 Detection and analysis tools for the **atomic-lockfile** supply-chain attack on the Arch User Repository (AUR).
 
 This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
