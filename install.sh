@@ -7,12 +7,12 @@ set -euo pipefail
 
 REPO_DIR="$(dirname "$(realpath "$0")")"
 
-# Determine install dir: prefer ~/.local/bin if in PATH, else ~/bin
+# Determine install dir: prefer ~/bin if in PATH, else ~/.local/bin
 DEFAULT_BIN=""
-if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
-    DEFAULT_BIN="$HOME/.local/bin"
-elif [[ ":$PATH:" == *":$HOME/bin:"* ]]; then
+if [[ ":$PATH:" == *":$HOME/bin:"* ]]; then
     DEFAULT_BIN="$HOME/bin"
+elif [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
+    DEFAULT_BIN="$HOME/.local/bin"
 else
     DEFAULT_BIN="$HOME/.local/bin"
 fi
