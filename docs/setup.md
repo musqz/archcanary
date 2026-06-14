@@ -12,7 +12,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 | `notify-send.sh` | [vlevit/notify-send.sh](https://github.com/vlevit/notify-send.sh) — [AUR: notify-send.sh](https://aur.archlinux.org/packages/notify-send.sh) | Drop-in replacement for `notify-send` with action button support — enables the **Show Menu** button on the alert |
 | `fzf` | [junegunn/fzf](https://github.com/junegunn/fzf) — official repos | Menu picker used by `aur_malware_menu.sh` |
 | `libnotify` | official repos | Fallback notification backend when `notify-send.sh` is not installed |
-| `terminator` | official repos | Terminal emulator — opened by the **Show Menu** notification button |
+| terminal emulator | your preferred terminal | Opened by the **Show Menu** button — auto-detected via `$TERMINAL`, or falls back to `kitty` → `alacritty` → `xterm` → `gnome-terminal` → `xfce4-terminal` |
 
 ## How the pieces connect
 
@@ -63,8 +63,8 @@ aurscan (manual — before installing any AUR package)
 ## Dependencies
 
 ```bash
-# Official repos
-sudo pacman -S fzf libnotify terminator
+# Official repos (terminator is personal preference — any terminal works)
+sudo pacman -S fzf libnotify
 
 # AUR
 yay -S notify-send.sh aurscan
@@ -81,7 +81,7 @@ See [systemd.md](systemd.md) for the full service and timer contents.
 git clone https://github.com/musqz/aur-malware-check.git ~/Github/aur-malware-check
 
 # 2. Install dependencies
-sudo pacman -S fzf libnotify terminator
+sudo pacman -S fzf libnotify
 yay -S notify-send.sh aurscan
 
 # 3. Copy scripts to ~/.local/bin
