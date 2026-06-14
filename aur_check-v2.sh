@@ -544,4 +544,10 @@ case $EXIT_CODE in
 esac
 echo "============================================================"
 
+if [[ $EXIT_CODE -eq 2 ]] && command -v notify-send &>/dev/null; then
+    notify-send -u critical -i dialog-warning \
+        "AUR: malicious package detected" \
+        "Indicators found. Check: journalctl --user -u aur-malware-check"
+fi
+
 exit "$EXIT_CODE"
