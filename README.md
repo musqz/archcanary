@@ -14,7 +14,7 @@
 | Updated lists | `nextfile-js` added to malicious npm list; package list refreshed to 1936 entries |
 
 See [docs/systemd.md](docs/systemd.md) for running as a systemd user service with timer and desktop notifications.
-See [docs/setup.md](docs/setup.md) for the full personal setup — all components, how they connect, and reinstall steps.
+See [docs/my-setup.md](docs/my-setup.md) for the full personal setup — all components, how they connect, and reinstall steps.
 
 ---
 
