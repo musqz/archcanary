@@ -59,6 +59,7 @@ CHECK_PKGBUILD=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
+NO_NOTIFY=false
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -84,6 +85,7 @@ for arg in "$@"; do
         --package-list=*)        PACKAGE_LIST_FILE_OPT="${arg#*=}" ;;
         --malicious-npm-list=*)  MALICIOUS_NPM_LIST_OPT="${arg#*=}" ;;
         --all-time)              ALL_TIME=true ;;
+        --no-notify)             NO_NOTIFY=true ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -612,10 +614,39 @@ case $EXIT_CODE in
 esac
 echo "============================================================"
 
-if [[ $EXIT_CODE -eq 2 ]] && command -v notify-send &>/dev/null; then
-    notify-send -u critical -i dialog-warning \
-        "AUR: malicious package detected" \
-        "Indicators found. Check: journalctl --user -u aur-malware-check"
+if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
+    _script_dir="$(dirname "$(realpath "$0")")"
+    _menu_script="$_script_dir/aur_malware_menu.sh"
+
+    # Detect terminal: prefer $TERMINAL, then common ones
+    _term=""
+    for _t in "${TERMINAL:-}" terminator kitty alacritty xterm gnome-terminal xfce4-terminal mate-terminal; do
+        [[ -n "$_t" ]] && command -v "$_t" &>/dev/null && { _term="$_t"; break; }
+    done
+
+    # Build terminal launch command for menu
+    _menu_cmd=""
+    if [[ -n "$_term" && -x "$_menu_script" ]]; then
+        case "$_term" in
+            terminator)  _menu_cmd="terminator -x bash -c '$_menu_script'" ;;
+            kitty)       _menu_cmd="kitty '$_menu_script'" ;;
+            gnome-terminal) _menu_cmd="gnome-terminal -- bash -c '$_menu_script'" ;;
+            xterm)       _menu_cmd="xterm -e '$_menu_script'" ;;
+            *)           _menu_cmd="$_term -e bash -c '$_menu_script'" ;;
+        esac
+    fi
+
+    if command -v notify-send.sh &>/dev/null; then
+        _notify_args=(-u critical -i dialog-warning)
+        [[ -n "$_menu_cmd" ]] && _notify_args+=(--action="Show Menu:$_menu_cmd")
+        notify-send.sh "${_notify_args[@]}" \
+            "AUR: malicious package detected" \
+            "Indicators found."
+    elif command -v notify-send &>/dev/null; then
+        notify-send -u critical -i dialog-warning \
+            "AUR: malicious package detected" \
+            "Indicators found. Check: journalctl --user -u aur-malware-check"
+    fi
 fi
 
 exit "$EXIT_CODE"
