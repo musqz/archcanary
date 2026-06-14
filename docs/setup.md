@@ -84,21 +84,18 @@ git clone https://github.com/musqz/aur-malware-check.git ~/Github/aur-malware-ch
 sudo pacman -S fzf libnotify
 yay -S notify-send.sh aurscan
 
-# 3. Copy scripts to ~/.local/bin
-cp ~/Github/aur-malware-check/aur_check-v2.sh ~/.local/bin/aur-malware-check.sh
-cp ~/Github/aur-malware-check/aur_malware_menu.sh ~/.local/bin/
-chmod +x ~/.local/bin/aur-malware-check.sh ~/.local/bin/aur_malware_menu.sh
+# 3. Run install script (auto-detects ~/.local/bin or ~/bin from PATH)
+bash ~/Github/aur-malware-check/install.sh
 
-# 4. Seed config dir (auto-done on first run, or manually)
-mkdir -p ~/.config/aur-malware-check
-cp ~/Github/aur-malware-check/malicious_npm_packages.txt ~/.config/aur-malware-check/
+# To use ~/bin explicitly:
+# bash ~/Github/aur-malware-check/install.sh ~/bin
 
-# 5. Install systemd units (see systemd.md for file contents)
+# 4. Install systemd units (see systemd.md for file contents)
 mkdir -p ~/.config/systemd/user
 # create service and timer files as documented in systemd.md
 systemctl --user daemon-reload
 systemctl --user enable --now aur-malware-check.timer
 
-# 6. Run a first scan with package list refresh
+# 5. Run a first scan with package list refresh
 aur-malware-check.sh --refresh --full --all-time
 ```
