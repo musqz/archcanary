@@ -137,9 +137,14 @@ INFECTED_PKGS=()
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
-    echo >&2 "ERROR: Malicious npm package list not found: $MALICIOUS_NPM_LIST"
-    echo >&2 "Set MALICIOUS_NPM_LIST or copy it to $AUR_CONFIG_DIR/"
-    exit 1
+    _bundled="$(dirname "$(realpath "$0")")/malicious_npm_packages.txt"
+    if [[ -f "$_bundled" ]]; then
+        cp "$_bundled" "$MALICIOUS_NPM_LIST"
+    else
+        echo >&2 "ERROR: Malicious npm package list not found: $MALICIOUS_NPM_LIST"
+        echo >&2 "Copy malicious_npm_packages.txt from the repo to $AUR_CONFIG_DIR/"
+        exit 1
+    fi
 fi
 
 MALICIOUS_NPM_PKGS=()
@@ -185,9 +190,14 @@ load_packages() {
     fi
 
     if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
-        echo >&2 "ERROR: Package list not found: $PACKAGE_LIST_FILE"
-        echo >&2 "Set PACKAGE_LIST_FILE, copy it to $AUR_CONFIG_DIR/, or run with --refresh."
-        exit 1
+        _bundled="$(dirname "$(realpath "$0")")/package_list.txt"
+        if [[ -f "$_bundled" ]]; then
+            cp "$_bundled" "$PACKAGE_LIST_FILE"
+        else
+            echo >&2 "ERROR: Package list not found: $PACKAGE_LIST_FILE"
+            echo >&2 "Copy package_list.txt from the repo to $AUR_CONFIG_DIR/, or run with --refresh."
+            exit 1
+        fi
     fi
 
     INFECTED_PKGS=()
