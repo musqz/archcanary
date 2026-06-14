@@ -55,6 +55,7 @@ CHECK_SYSTEMD=false
 CHECK_EBPF=false
 CHECK_NPM_CACHE=false
 CHECK_BUN_CACHE=false
+CHECK_PKGBUILD=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
@@ -74,7 +75,8 @@ for arg in "$@"; do
         --check-ebpf)    CHECK_EBPF=true ;;
         --check-npm-cache) CHECK_NPM_CACHE=true ;;
         --check-bun-cache) CHECK_BUN_CACHE=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true ;;
+        --check-pkgbuild)  CHECK_PKGBUILD=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -89,6 +91,7 @@ for arg in "$@"; do
             echo "  --check-ebpf       Check for eBPF rootkit traces (/sys/fs/bpf/hidden_*)"
             echo "  --check-npm-cache  Check npm cache for packages listed in malicious_npm_packages.txt"
             echo "  --check-bun-cache  Check bun cache for packages listed in malicious_npm_packages.txt"
+            echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
@@ -466,6 +469,55 @@ check_bun_cache() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 7: PKGBUILD / install file scan for obfuscated malicious commands
+# Strips single and double quotes from each line before matching, catching
+# obfuscation like 'b''u''n' 'a'"d""d" 'j''s'"-""d""i""g""e""s""t"
+# ---------------------------------------------------------------------------
+check_pkgbuild_caches() {
+    local cache_dirs=(
+        "$HOME/.cache/yay"
+        "$HOME/.cache/paru"
+        "$HOME/.cache/aurutils"
+        "$HOME/.cache/pikaur"
+        "$HOME/.cache/trizen"
+    )
+    local found_count=0
+    local scanned=0
+
+    while IFS= read -r file; do
+        (( scanned++ )) || true
+        local lineno=0
+        while IFS= read -r line; do
+            (( lineno++ )) || true
+            local stripped="${line//\'/}"
+            stripped="${stripped//\"/}"
+            if [[ "$stripped" =~ (bun[[:space:]]+add|npm[[:space:]]+install) ]]; then
+                for pkg in "${MALICIOUS_NPM_PKGS[@]}"; do
+                    if [[ "$stripped" == *"$pkg"* ]]; then
+                        echo "  WARNING: malicious command in $file:$lineno"
+                        echo "    $line"
+                        found_count=2
+                        break
+                    fi
+                done
+            fi
+        done < "$file"
+    done < <(
+        for dir in "${cache_dirs[@]}"; do
+            [[ -d "$dir" ]] || continue
+            find "$dir" \( -name "PKGBUILD" -o -name "*.install" \) -type f 2>/dev/null
+        done
+    )
+
+    if [[ $scanned -eq 0 ]]; then
+        echo "  Skipped: no AUR helper cache directories found."
+    elif [[ $found_count -eq 0 ]]; then
+        echo "  Clean: no malicious commands found in $scanned PKGBUILD/install file(s)."
+    fi
+    return $found_count
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
@@ -541,6 +593,13 @@ fi
 if $CHECK_BUN_CACHE; then
     echo "--- [6] bun cache check ---"
     check_bun_cache && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_PKGBUILD; then
+    echo "--- [7] PKGBUILD/install file scan (obfuscation-aware) ---"
+    check_pkgbuild_caches && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi
