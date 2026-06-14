@@ -97,12 +97,6 @@ bash ~/Github/aur-malware-check/install.sh
 # To use ~/bin explicitly:
 # bash ~/Github/aur-malware-check/install.sh ~/bin
 
-# 4. Install systemd units (see systemd.md for file contents)
-mkdir -p ~/.config/systemd/user
-# create service and timer files as documented in systemd.md
-systemctl --user daemon-reload
-systemctl --user enable --now aur-malware-check.timer
-
-# 5. Run a first scan with package list refresh
+# 4. Run a first scan with package list refresh
 aur-malware-check.sh --refresh --full --all-time
 ```
