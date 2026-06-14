@@ -14,19 +14,20 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/aur-malware-check.sh --full
+ExecStart=%h/.local/bin/aur-malware-check.sh --refresh --full --all-time
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=aur-malware-check
 ```
 
 **`~/.config/systemd/user/aur-malware-check.timer`**
 ```ini
 [Unit]
-Description=Run AUR malware check daily
+Description=Run AUR malware check weekly and on boot
 
 [Timer]
-OnBootSec=5min
-OnUnitActiveSec=24h
+OnCalendar=weekly
+Persistent=true
 
 [Install]
 WantedBy=timers.target
@@ -63,10 +64,4 @@ No configuration needed — the notification fires automatically on a positive r
 
 ## Refreshing the package list
 
-Add `--refresh` to keep the package list current:
-
-```ini
-ExecStart=%h/.local/bin/aur-malware-check.sh --refresh --full
-```
-
-This fetches the latest list from the Arch Linux HedgeDoc and writes it to `~/.config/aur-malware-check/package_list.txt` before scanning.
+`--refresh` is included in the service above. It fetches the latest compromised package list from the Arch Linux HedgeDoc and writes it to `~/.config/aur-malware-check/package_list.txt` before each scan.
