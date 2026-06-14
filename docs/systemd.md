@@ -14,7 +14,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/bin/aur-malware-check.sh --full
+ExecStart=%h/.local/bin/aur-malware-check.sh --full
 StandardOutput=journal
 StandardError=journal
 ```
@@ -66,7 +66,7 @@ No configuration needed — the notification fires automatically on a positive r
 Add `--refresh` to keep the package list current:
 
 ```ini
-ExecStart=%h/bin/aur-malware-check.sh --refresh --full
+ExecStart=%h/.local/bin/aur-malware-check.sh --refresh --full
 ```
 
 This fetches the latest list from the Arch Linux HedgeDoc and writes it to `~/.config/aur-malware-check/package_list.txt` before scanning.
