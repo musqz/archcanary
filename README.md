@@ -9,7 +9,7 @@
 | XDG config dir | Package lists live in `~/.config/aur-malware-check/` instead of alongside the script |
 | Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
 | Desktop alert | Fires a critical notification on exit code 2; with `notify-send.sh` it adds a **Show Menu** button (falls back to plain `notify-send`). `--no-notify` suppresses it |
-| `aur_malware_menu.sh` | fzf-driven TUI to run individual checks or view the last log; opened from the notification |
+| `aur_malware_menu.sh` | fzf-driven TUI menu to run individual checks or view the last log; opens from the **Show Menu** notification button or directly from the terminal |
 | `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages (catches quote-split commands) |
 | Updated lists | `nextfile-js` added to malicious npm list; package list refreshed to 1936 entries |
 
@@ -45,6 +45,9 @@ comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR
 
 # Faster alternative (v2) – optimized log scanning (~150x faster for large logs)
 ./aur_check-v2.sh
+
+# Interactive fzf menu — run individual checks or view last log
+./aur_malware_menu.sh
 
 # Cross-campaign: scan all installed packages regardless of install date
 ./aur_check-v2.sh --all-time
