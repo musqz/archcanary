@@ -125,21 +125,20 @@ fi
 exec > >(tee "$LOG_FILE") 2>&1
 
 # ---------------------------------------------------------------------------
-# Load package list from external file (single source of truth)
-# Can be overridden via PACKAGE_LIST_FILE env var
+# Config dir: XDG_CONFIG_HOME/aur-malware-check (default ~/.config/aur-malware-check)
+# Can be overridden via PACKAGE_LIST_FILE / MALICIOUS_NPM_LIST env vars
 # ---------------------------------------------------------------------------
-PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$(dirname "$0")/package_list.txt}"
+AUR_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/aur-malware-check"
+mkdir -p "$AUR_CONFIG_DIR"
+
+PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$AUR_CONFIG_DIR/package_list.txt}"
 INFECTED_PKGS=()
 
-# ---------------------------------------------------------------------------
-# Load malicious npm package names from external file
-# Can be overridden via MALICIOUS_NPM_LIST env var
-# ---------------------------------------------------------------------------
-MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$(dirname "$0")/malicious_npm_packages.txt}"
+MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
     echo >&2 "ERROR: Malicious npm package list not found: $MALICIOUS_NPM_LIST"
-    echo >&2 "Set MALICIOUS_NPM_LIST or run from the repo root."
+    echo >&2 "Set MALICIOUS_NPM_LIST or copy it to $AUR_CONFIG_DIR/"
     exit 1
 fi
 
@@ -187,7 +186,7 @@ load_packages() {
 
     if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
         echo >&2 "ERROR: Package list not found: $PACKAGE_LIST_FILE"
-        echo >&2 "Set PACKAGE_LIST_FILE or run from the repo root or use --refresh option."
+        echo >&2 "Set PACKAGE_LIST_FILE, copy it to $AUR_CONFIG_DIR/, or run with --refresh."
         exit 1
     fi
 
