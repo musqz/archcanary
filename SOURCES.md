@@ -195,7 +195,54 @@ All threads on https://lists.archlinux.org/archives/list/aur-general@lists.archl
 
 ---
 
-## 6. Example Malicious Commit
+---
+
+## 6. Earlier Malware Campaigns
+
+### 6.1 CHAOS RAT AUR Incident
+
+- **URL:** https://linuxsecurity.com/features/chaos-rat-in-aur
+- **Date:** 2025-07-22
+- **Author:** Linux Security
+- **Content:** Documents malicious AUR packages distributing the CHAOS RAT remote access trojan through modified PKGBUILDs.
+- **Relevant for:** Historical AUR malware campaign and package attribution.
+
+**Confirmed malicious packages:**
+
+- `librewolf-fix-bin`
+- `firefox-patch-bin`
+- `zen-browser-patched-bin`
+
+---
+
+### 6.2 Public Reporting of the Incident
+
+- **URL:** https://itsfoss.com/news/arch-linux-chaos-rat/
+- **Date:** 2025-08-04
+- **Author:** Sourav Rudra (It's FOSS)
+- **Content:** Summarizes the AUR incident involving malicious packages distributing CHAOS RAT and documents package removal by Arch maintainers.
+- **Relevant for:** Independent reporting and timeline confirmation.
+
+---
+
+### 6.3 Community Discussion and Additional Packages
+
+- **URL:** https://discuss.privacyguides.net/t/security-firefox-patch-bin-librewolf-fix-bin-and-zen-browser-patched-bin-aur-packages-contain-malware/29232
+- **Date:** 2025-07
+- **Author:** Privacy Guides Community
+- **Content:** Community discussion documenting additional packages associated with the incident.
+- **Relevant for:** Community-reported package attribution.
+
+**Community-reported packages:**
+
+- `vesktop-bin-patched`
+- `minecraft-cracked`
+- `ttf-ms-fonts-all`
+- `ttf-all-ms-fonts`
+
+---
+
+## 7. Example Malicious Commit
 
 - **URL:** https://aur.archlinux.org/cgit/aur.git/commit/?h=premake-git&id=232b22dd0aaedfa9fde1800710e0d52e4f4b542d
 - **Date:** 2026-06-09
