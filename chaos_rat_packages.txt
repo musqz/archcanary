@@ -1,0 +1,7 @@
+librewolf-fix-bin
+firefox-patch-bin
+zen-browser-patched-bin
+vesktop-bin-patched
+minecraft-cracked
+ttf-ms-fonts-all
+ttf-all-ms-fonts
