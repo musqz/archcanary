@@ -8,7 +8,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 |-----------|-----------------|---------|
 | `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence, eBPF rootkit, npm/bun cache, PKGBUILD obfuscation |
 | `aur_malware_menu.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | fzf TUI menu — run individual checks or view last log from the notification |
-| `aurscan` | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) — [AUR: aurscan](https://aur.archlinux.org/packages/aurscan) | LLM-based pre-install PKGBUILD scanner using Claude — proactive check before installing an AUR package |
+| `aurscan` | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) (GitHub only) | LLM-based pre-install PKGBUILD scanner using Claude — proactive check before installing an AUR package |
 | `notify-send.sh` | [vlevit/notify-send.sh](https://github.com/vlevit/notify-send.sh) — [AUR: notify-send.sh](https://aur.archlinux.org/packages/notify-send.sh) | Drop-in replacement for `notify-send` with action button support — enables the **Show Menu** button on the alert |
 | `fzf` | [junegunn/fzf](https://github.com/junegunn/fzf) — official repos | Menu picker used by `aur_malware_menu.sh` |
 | `libnotify` | official repos | Fallback notification backend when `notify-send.sh` is not installed |
@@ -67,7 +67,10 @@ aurscan (manual — before installing any AUR package)
 sudo pacman -S fzf libnotify
 
 # AUR
-yay -S notify-send.sh aurscan
+yay -S notify-send.sh
+
+# aurscan — GitHub only, no AUR package
+# clone from https://github.com/manticore-projects/aurscan and follow its README
 ```
 
 ## Systemd unit files
@@ -82,7 +85,11 @@ git clone https://github.com/musqz/aur-malware-check.git ~/Github/aur-malware-ch
 
 # 2. Install dependencies
 sudo pacman -S fzf libnotify
-yay -S notify-send.sh aurscan
+yay -S notify-send.sh
+
+# aurscan — GitHub only, no AUR package
+git clone https://github.com/manticore-projects/aurscan.git
+# see its README for install instructions
 
 # 3. Run install script (auto-detects ~/.local/bin or ~/bin from PATH)
 bash ~/Github/aur-malware-check/install.sh
