@@ -32,20 +32,16 @@ This is a collection of all the scattered resources, especially the ones in the 
 
 ```bash
 # Check if you have any infected packages
-chmod +x aur_check.sh
-./aur_check.sh
-
-# Full scan with all optional checks
-./aur_check.sh --full
+./aur_check-v2.sh
 
 # Check bun cache specifically (for js-digest / atomic-lockfile)
-./aur_check.sh --check-bun-cache
+./aur_check-v2.sh --check-bun-cache
 
 # Safe one-liner (from quantenProjects) - just compare installed vs infected list
 comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR/aur-malware-check/main/package_list.txt | sort)
 
-# Faster alternative (v2) – optimized log scanning (~150x faster for large logs)
-./aur_check-v2.sh
+# Full scan with all optional checks
+./aur_check-v2.sh --full
 
 # Interactive fzf menu — run individual checks or view last log
 ./aur_malware_menu.sh
@@ -66,6 +62,10 @@ comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR
 #   PACKAGE_LIST_FILE=./my_list.txt
 #   MALICIOUS_NPM_LIST=./my_npm.txt
 ./aur_check-v2.sh --package-list=my_list.txt --malicious-npm-list=my_npm.txt
+
+
+# Legacy scan (only use if v2 is broken)
+./archive/aur_check.sh
 ```
 
 ## Script: `aur_check.sh`
