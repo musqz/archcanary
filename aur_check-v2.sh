@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.5.0"
+SCRIPT_VERSION="2.5.1"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -305,9 +305,9 @@ check_logs() {
     declare -A pkg_map
     for pkg in "${INFECTED_PKGS[@]}"; do pkg_map[$pkg]=1; done
 
-    local re_date='^\[([0-9-]+)'
+    local re_date='^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:+-]+)\]'
     local re_alpm='\[ALPM\] ([a-z]+) ([^ ]+)'
-    local total=${#log_files[@]} idx=0 file line date_str action pkg
+    local total=${#log_files[@]} idx=0 file line datetime_str date_str action pkg
 
     for file in "${log_files[@]}"; do
         idx=$((idx + 1))
@@ -319,7 +319,8 @@ check_logs() {
 
         while IFS= read -r line; do
             [[ "$line" =~ $re_date ]] || continue
-            date_str=${BASH_REMATCH[1]}
+            datetime_str=${BASH_REMATCH[1]}
+            date_str="${datetime_str:0:10}"
             $ALL_TIME || date_in_window "$date_str" || continue
 
             [[ "$line" =~ $re_alpm ]] || continue
@@ -329,7 +330,7 @@ check_logs() {
             [[ -v pkg_map[$pkg] ]] || continue
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
 
-            echo "LOG_HIT: $pkg ($action on $date_str)"
+            echo "LOG_HIT: $pkg ($action on $datetime_str)"
         done < <(read_compressed_file "$file") || true
 
         log_info "[$idx/$total] Done with $(basename "$file")"
@@ -615,8 +616,11 @@ if [[ -f /var/log/pacman.log ]]; then
     CLEANUP_FILES+=("$LOGS_TMP")
     check_logs 2>&1 | tee "$LOGS_TMP" || true
     if grep -q 'LOG_HIT' "$LOGS_TMP" 2>/dev/null; then
-        echo "  WARNING: historical log matches:"
+        echo "  WARNING: historical log matches (name-match against official compromised list):"
         grep 'LOG_HIT' "$LOGS_TMP" | sed 's/LOG_HIT: /  - /'
+        echo "  NOTE: if the PKGBUILD looks clean now, the malicious commit may have been"
+        echo "  reverted — check AUR git history around the install date/time above."
+        echo "  Either way, treat the install-time window as a potential exposure."
         [[ 2 -gt $EXIT_CODE ]] && EXIT_CODE=2
     else
         echo "  Clean: no historical log matches found."
