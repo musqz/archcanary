@@ -47,6 +47,11 @@ SCRIPT_VERSION="2.8.5"
 # ---------------------------------------------------------------------------
 START_DATE=${START_DATE:-2026-06-09}
 END_DATE=${END_DATE:-2026-06-12}
+# CHAOS RAT campaign (July 2025, separate incident). Packages were uploaded
+# ~2025-07-16 18:00 UTC and DELETED ~2025-07-18 18:00 UTC (~46h exposure).
+# Names no longer exist on AUR; installs outside this window are not malicious.
+CHAOS_START_DATE=${CHAOS_START_DATE:-2025-07-16}
+CHAOS_END_DATE=${CHAOS_END_DATE:-2025-07-19}
 PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
 # Pulls the live package list from the official Arch Linux HedgeDoc note.
 LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
@@ -55,6 +60,8 @@ CHECK_SYSTEMD=false
 CHECK_EBPF=false
 CHECK_NPM_CACHE=false
 CHECK_BUN_CACHE=false
+CHECK_YARN_CACHE=false
+CHECK_PNPM_CACHE=false
 CHECK_PKGBUILD=false
 CHECK_BPFTOOL=false
 CHECK_LDSO=false
@@ -68,6 +75,7 @@ NO_NOTIFY=false
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
 MALICIOUS_NPM_LIST_OPT=""
+CHAOS_RAT_LIST_OPT=""
 
 # Temp file cleanup on exit/interrupt
 CLEANUP_FILES=()
@@ -78,20 +86,23 @@ for arg in "$@"; do
     case "$arg" in
         --check-systemd) CHECK_SYSTEMD=true ;;
         --check-ebpf)    CHECK_EBPF=true ;;
-        --check-npm-cache) CHECK_NPM_CACHE=true ;;
-        --check-bun-cache) CHECK_BUN_CACHE=true ;;
-        --check-pkgbuild)  CHECK_PKGBUILD=true ;;
-        --check-bpftool)   CHECK_BPFTOOL=true ;;
-        --check-ldso)      CHECK_LDSO=true ;;
-        --check-autostart) CHECK_AUTOSTART=true ;;
-        --check-kmod)      CHECK_KMOD=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true ;;
+        --check-npm-cache)  CHECK_NPM_CACHE=true ;;
+        --check-bun-cache)  CHECK_BUN_CACHE=true ;;
+        --check-yarn-cache) CHECK_YARN_CACHE=true ;;
+        --check-pnpm-cache) CHECK_PNPM_CACHE=true ;;
+        --check-pkgbuild)   CHECK_PKGBUILD=true ;;
+        --check-bpftool)    CHECK_BPFTOOL=true ;;
+        --check-ldso)       CHECK_LDSO=true ;;
+        --check-autostart)  CHECK_AUTOSTART=true ;;
+        --check-kmod)       CHECK_KMOD=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
         --log-file=*)            LOG_FILE="${arg#*=}" ;;
         --package-list=*)        PACKAGE_LIST_FILE_OPT="${arg#*=}" ;;
         --malicious-npm-list=*)  MALICIOUS_NPM_LIST_OPT="${arg#*=}" ;;
+        --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
         --all-time)              ALL_TIME=true ;;
         --no-notify)             NO_NOTIFY=true ;;
         --help|-h)
@@ -101,6 +112,8 @@ for arg in "$@"; do
             echo "  --check-ebpf       Check for eBPF rootkit traces (/sys/fs/bpf/hidden_*)"
             echo "  --check-npm-cache  Check npm cache for packages listed in malicious_npm_packages.txt"
             echo "  --check-bun-cache  Check bun cache for packages listed in malicious_npm_packages.txt"
+            echo "  --check-yarn-cache Check yarn cache (v1 + Berry, incl. fnm per-version globals)"
+            echo "  --check-pnpm-cache Check pnpm store/cache (global installs + metadata + dlx)"
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links (needs root); flags stealth hook types"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
@@ -112,6 +125,7 @@ for arg in "$@"; do
             echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/aur-malware-check/aur-check-<date>.log)"
             echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
             echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
+            echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)"
             echo "  --all-time                Disable recency window — flag any installed infected"
             echo "                            package regardless of install date (for cross-campaign checks)"
             echo "  --no-notify               Suppress the desktop notification on detection"
@@ -131,6 +145,10 @@ fi
 
 if [[ -n "$MALICIOUS_NPM_LIST_OPT" ]]; then
     MALICIOUS_NPM_LIST="$MALICIOUS_NPM_LIST_OPT"
+fi
+
+if [[ -n "$CHAOS_RAT_LIST_OPT" ]]; then
+    CHAOS_RAT_LIST="$CHAOS_RAT_LIST_OPT"
 fi
 
 # ---------------------------------------------------------------------------
@@ -155,6 +173,9 @@ mkdir -p "$AUR_CONFIG_DIR"
 
 PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$AUR_CONFIG_DIR/package_list.txt}"
 INFECTED_PKGS=()
+
+CHAOS_RAT_LIST="${CHAOS_RAT_LIST:-$(dirname "$(realpath "$0")")/chaos_rat_packages.txt}"
+CHAOS_RAT_PKGS=()
 
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
@@ -241,6 +262,15 @@ load_packages() {
         [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
         INFECTED_PKGS+=("$line")
     done <"$PACKAGE_LIST_FILE"
+
+    # CHAOS RAT list (optional — absence is not fatal)
+    CHAOS_RAT_PKGS=()
+    if [[ -f "$CHAOS_RAT_LIST" ]]; then
+        while IFS= read -r line; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            CHAOS_RAT_PKGS+=("$line")
+        done <"$CHAOS_RAT_LIST"
+    fi
 }
 
 log_info() {
@@ -253,16 +283,16 @@ log_info() {
 log_warn()  { echo >&2 "[WARN] $*"; }
 
 date_in_window() {
-    local date_val=$1
-    [[ "$date_val" < "$START_DATE" ]] && return 1
-    [[ "$date_val" > "$END_DATE" ]] && return 1
+    local date_val=$1 start=${2:-$START_DATE} end=${3:-$END_DATE}
+    [[ "$date_val" < "$start" ]] && return 1
+    [[ "$date_val" > "$end" ]] && return 1
     return 0
 }
 
 install_date_in_window() {
     local raw_date=$1 normalized
     normalized=$(LC_ALL=C date -d "$raw_date" +%F 2>/dev/null) || return 1
-    date_in_window "$normalized"
+    date_in_window "$normalized" "${2:-$START_DATE}" "${3:-$END_DATE}"
 }
 
 read_compressed_file() {
@@ -291,7 +321,12 @@ check_current() {
         [[ -v INFECTED_LOOKUP["$pkg"] ]] || continue
         local install_date
         install_date=$(LC_ALL=C pacman -Qi -- "$pkg" 2>/dev/null | awk -F': ' '/^Install Date/ { print $2; exit }')
-        if [[ -n "$install_date" ]] && { $ALL_TIME || install_date_in_window "$install_date"; }; then
+        [[ -n "$install_date" ]] || continue
+        if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then
+            if $ALL_TIME || install_date_in_window "$install_date" "$CHAOS_START_DATE" "$CHAOS_END_DATE"; then
+                found+=("$pkg (installed: $install_date) [CHAOS RAT campaign, 2025-07]")
+            fi
+        elif $ALL_TIME || install_date_in_window "$install_date"; then
             found+=("$pkg (installed: $install_date)")
         fi
     done < <(pacman -Qmq "${INFECTED_PKGS[@]}" 2>/dev/null)
@@ -347,7 +382,6 @@ check_logs() {
             [[ "$line" =~ $re_date ]] || continue
             datetime_str=${BASH_REMATCH[1]}
             date_str="${datetime_str:0:10}"
-            $ALL_TIME || date_in_window "$date_str" || continue
 
             [[ "$line" =~ $re_alpm ]] || continue
             action=${BASH_REMATCH[1]}
@@ -356,7 +390,13 @@ check_logs() {
             [[ -v pkg_map[$pkg] ]] || continue
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
 
-            echo "LOG_HIT: $pkg ($action on $datetime_str)"
+            if [[ -v CHAOS_LOOKUP[$pkg] ]]; then
+                $ALL_TIME || date_in_window "$date_str" "$CHAOS_START_DATE" "$CHAOS_END_DATE" || continue
+                echo "LOG_HIT: $pkg ($action on $datetime_str) [CHAOS RAT campaign, 2025-07]"
+            else
+                $ALL_TIME || date_in_window "$date_str" || continue
+                echo "LOG_HIT: $pkg ($action on $datetime_str)"
+            fi
         done < <(read_compressed_file "$file") || true
 
         log_info "[$idx/$total] Done with $(basename "$file")"
@@ -687,6 +727,151 @@ check_pkgbuild_caches() {
 }
 
 # ---------------------------------------------------------------------------
+# Helper: scan every fnm-managed Node version's global node_modules.
+# fnm installs a separate Node per version; `npm root -g` only sees the active
+# one. Honors $FNM_DIR, falling back to ~/.local/share/fnm then ~/.fnm.
+# ---------------------------------------------------------------------------
+scan_fnm_globals() {
+    local pkgs=("${MALICIOUS_NPM_PKGS[@]}")
+    local found=0
+    local fnm_dir="${FNM_DIR:-$HOME/.local/share/fnm}"
+    [[ -d "$HOME/.fnm/node-versions" ]] && fnm_dir="$HOME/.fnm"
+    [[ -d "$fnm_dir/node-versions" ]] || return 0
+    for ver_dir in "$fnm_dir"/node-versions/*; do
+        local ver_modules="$ver_dir/installation/lib/node_modules"
+        [[ -d "$ver_modules" ]] || continue
+        for pkg in "${pkgs[@]}"; do
+            if [[ -d "$ver_modules/$pkg" ]]; then
+                echo "  WARNING: $pkg found in fnm Node global node_modules ($ver_modules)"
+                found=2
+            fi
+        done
+    done
+    return $found
+}
+
+# ---------------------------------------------------------------------------
+# Check: yarn cache for malicious packages (Classic v1 + Berry v2+, incl. fnm)
+# ---------------------------------------------------------------------------
+check_yarn_cache() {
+    local pkgs=("${MALICIOUS_NPM_PKGS[@]}")
+    local found_count=0 fnm_ret
+
+    local -a cache_dirs=()
+    if command -v yarn >/dev/null 2>&1; then
+        local yarn_cache_dir
+        yarn_cache_dir=$(yarn cache dir 2>/dev/null || true)
+        [[ -n "$yarn_cache_dir" && -d "$yarn_cache_dir" ]] && cache_dirs+=("$yarn_cache_dir")
+    fi
+    [[ -d "${XDG_CACHE_HOME:-$HOME/.cache}/yarn" ]] && cache_dirs+=("${XDG_CACHE_HOME:-$HOME/.cache}/yarn")
+    [[ -d "$HOME/.yarn/berry/cache" ]] && cache_dirs+=("$HOME/.yarn/berry/cache")
+
+    for dir in "${cache_dirs[@]}"; do
+        for pkg in "${pkgs[@]}"; do
+            local cached
+            cached=$(find "$dir" -name "*${pkg}*" 2>/dev/null | head -5 || true)
+            if [[ -n "$cached" ]]; then
+                echo "  WARNING: $pkg in yarn cache ($dir):"
+                sed 's/^/    /' <<< "$cached"
+                found_count=2
+            fi
+        done
+    done
+
+    if command -v yarn >/dev/null 2>&1; then
+        local yarn_global_dir
+        yarn_global_dir=$(yarn global dir 2>/dev/null || true)
+        if [[ -n "$yarn_global_dir" && -d "$yarn_global_dir/node_modules" ]]; then
+            for pkg in "${pkgs[@]}"; do
+                if [[ -d "$yarn_global_dir/node_modules/$pkg" ]]; then
+                    echo "  WARNING: $pkg found in yarn global ($yarn_global_dir/node_modules)"
+                    found_count=2
+                fi
+            done
+        fi
+    fi
+
+    scan_fnm_globals && fnm_ret=$? || fnm_ret=$?
+    [[ $fnm_ret -gt $found_count ]] && found_count=$fnm_ret
+
+    [[ $found_count -eq 0 ]] && echo "  Clean: no malicious packages in yarn cache."
+    return $found_count
+}
+
+# ---------------------------------------------------------------------------
+# Check: pnpm store/cache for malicious packages
+# Content-addressable store is hash-named — cannot match by name, skipped.
+# Scans: global installs, metadata cache, dlx cache.
+# ---------------------------------------------------------------------------
+check_pnpm_cache() {
+    local pkgs=("${MALICIOUS_NPM_PKGS[@]}")
+    local found_count=0
+
+    local pnpm_home
+    if [[ -n "${PNPM_HOME:-}" ]]; then
+        pnpm_home="$PNPM_HOME"
+    elif [[ -n "${XDG_DATA_HOME:-}" ]]; then
+        pnpm_home="$XDG_DATA_HOME/pnpm"
+    else
+        pnpm_home="$HOME/.local/share/pnpm"
+    fi
+    local pnpm_cache="${XDG_CACHE_HOME:-$HOME/.cache}/pnpm"
+
+    if command -v pnpm >/dev/null 2>&1; then
+        local pnpm_global_root
+        pnpm_global_root=$(pnpm root -g 2>/dev/null || true)
+        if [[ -n "$pnpm_global_root" && -d "$pnpm_global_root" ]]; then
+            for pkg in "${pkgs[@]}"; do
+                if [[ -d "$pnpm_global_root/$pkg" ]]; then
+                    echo "  WARNING: $pkg found in pnpm global ($pnpm_global_root)"
+                    found_count=2
+                fi
+            done
+        fi
+    fi
+
+    if [[ -d "$pnpm_home/global" ]]; then
+        for pkg in "${pkgs[@]}"; do
+            local gmod
+            gmod=$(find "$pnpm_home/global" -maxdepth 5 -type d -name "$pkg" -path "*/node_modules/*" 2>/dev/null | head -5 || true)
+            if [[ -n "$gmod" ]]; then
+                echo "  WARNING: $pkg in pnpm global installs:"
+                sed 's/^/    /' <<< "$gmod"
+                found_count=2
+            fi
+        done
+    fi
+
+    for meta_root in "$pnpm_cache"/metadata*/; do
+        [[ -d "$meta_root" ]] || continue
+        for reg_dir in "$meta_root"*/; do
+            [[ -d "$reg_dir" ]] || continue
+            for pkg in "${pkgs[@]}"; do
+                if [[ -f "$reg_dir$pkg.json" ]]; then
+                    echo "  WARNING: $pkg resolved in pnpm metadata cache: $reg_dir$pkg.json"
+                    found_count=2
+                fi
+            done
+        done
+    done
+
+    if [[ -d "$pnpm_cache/dlx" ]]; then
+        for pkg in "${pkgs[@]}"; do
+            local dlx
+            dlx=$(find "$pnpm_cache/dlx" -type d -name "$pkg" -path "*/node_modules/*" 2>/dev/null | head -5 || true)
+            if [[ -n "$dlx" ]]; then
+                echo "  WARNING: $pkg in pnpm dlx cache:"
+                sed 's/^/    /' <<< "$dlx"
+                found_count=2
+            fi
+        done
+    fi
+
+    [[ $found_count -eq 0 ]] && echo "  Clean: no malicious packages in pnpm store/cache."
+    return $found_count
+}
+
+# ---------------------------------------------------------------------------
 # Check 9: ld.so.preload shared library injection
 # A non-empty /etc/ld.so.preload causes the dynamic linker to load the listed
 # .so into every process at startup — the classic root-level rootkit hook.
@@ -926,6 +1111,14 @@ EXIT_CODE=0
 
 load_packages
 
+# Build CHAOS_LOOKUP before merging into INFECTED_PKGS so checks can apply
+# the CHAOS RAT date window separately from the main campaign window.
+declare -A CHAOS_LOOKUP
+for p in "${CHAOS_RAT_PKGS[@]}"; do
+    CHAOS_LOOKUP["$p"]=1
+    INFECTED_PKGS+=("$p")
+done
+
 # Build exact-match lookup table from INFECTED_PKGS
 # (pacman -Qmq does prefix matching; this prevents false positives)
 declare -A INFECTED_LOOKUP
@@ -942,6 +1135,13 @@ else
     echo " Date window: ${START_DATE} to ${END_DATE}"
 fi
 echo " Packages checked: ${#INFECTED_PKGS[@]}"
+if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
+    if $ALL_TIME; then
+        echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, 2025 campaign — all-time)"
+    else
+        echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, window ${CHAOS_START_DATE} to ${CHAOS_END_DATE})"
+    fi
+fi
 echo "============================================================"
 echo
 
@@ -998,6 +1198,20 @@ fi
 if $CHECK_BUN_CACHE; then
     echo "--- [6] bun cache check ---"
     check_bun_cache && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_YARN_CACHE; then
+    echo "--- [6b] yarn cache check ---"
+    check_yarn_cache && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_PNPM_CACHE; then
+    echo "--- [6c] pnpm cache check ---"
+    check_pnpm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi
