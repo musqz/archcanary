@@ -342,6 +342,57 @@ test_check_systemd_hardened() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 11: check_autostart — suspicious .desktop and shell RC detection
+# ---------------------------------------------------------------------------
+test_check_autostart() {
+    local fake_home="$SCRIPT_DIR/fake_home"
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --check-autostart --no-notify
+    )
+    local out rc=0
+
+    # Sub-test A: fixture home with evil.desktop + malicious .bashrc → WARNING
+    rc=0
+    out=$(AUTOSTART_HOME="$fake_home" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING"* ]]; then
+        pass "check_autostart: evil.desktop + malicious .bashrc → WARNING (exit 2)"
+    else
+        fail "check_autostart: expected WARNING+exit2, got rc=$rc"
+    fi
+
+    # Sub-test B: evil.desktop is flagged, clean.desktop is not
+    if [[ "$out" == *"evil.desktop"* && "$out" != *"clean.desktop"* ]]; then
+        pass "check_autostart: evil.desktop flagged, clean.desktop not flagged"
+    else
+        fail "check_autostart: desktop filtering wrong — out: $out"
+    fi
+
+    # Sub-test C: .bashrc curl|bash pattern detected
+    if [[ "$out" == *".bashrc"* ]]; then
+        pass "check_autostart: curl|bash in .bashrc detected"
+    else
+        fail "check_autostart: .bashrc pattern not detected — out: $out"
+    fi
+
+    # Sub-test D: clean home dir → clean
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.config/autostart"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: empty home → clean"
+    else
+        fail "check_autostart: empty home → expected clean, got: $out"
+    fi
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -377,6 +428,9 @@ test_check_ldso
 
 $VERBOSE && msg "--- Test 10: check_systemd hardened ---"
 test_check_systemd_hardened
+
+$VERBOSE && msg "--- Test 11: check_autostart ---"
+test_check_autostart
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

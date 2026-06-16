@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.7.0 (2026-06-16) — personal fork
+- New: `--check-autostart` (included in `--full`) — detects low-privilege persistence requiring no root: suspicious XDG autostart `.desktop` files (`Exec=` outside `/usr/` or `/opt/`), user systemd services whose `ExecStart=` binary is untracked by pacman, and shell RC files (`.bashrc`, `.zshrc`, `.bash_profile`, `.profile`) containing download-and-execute or `eval`+subshell patterns
+- Home dir injectable via `AUTOSTART_HOME` for testing
+
 ## 2.6.1 (2026-06-16) — personal fork
 - Fix: `check_systemd` no longer requires the exact `Restart=always` + `RestartSec=30` pair from the 2024 campaign — now flags any of `always|on-failure|on-abnormal|on-abort` in `.service` files
 - New: also scans drop-in override dirs (`*.service.d/*.conf`) — attackers use these to re-enable restart on existing units without modifying the unit file itself

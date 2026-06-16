@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.6.1"
+SCRIPT_VERSION="2.7.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -58,6 +58,7 @@ CHECK_BUN_CACHE=false
 CHECK_PKGBUILD=false
 CHECK_BPFTOOL=false
 CHECK_LDSO=false
+CHECK_AUTOSTART=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
@@ -81,7 +82,8 @@ for arg in "$@"; do
         --check-pkgbuild)  CHECK_PKGBUILD=true ;;
         --check-bpftool)   CHECK_BPFTOOL=true ;;
         --check-ldso)      CHECK_LDSO=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true ;;
+        --check-autostart) CHECK_AUTOSTART=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -100,6 +102,7 @@ for arg in "$@"; do
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links (needs root); flags stealth hook types"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
+            echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
@@ -633,6 +636,71 @@ check_ldso() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 10: XDG autostart + shell RC persistence
+# Detects low-privilege persistence requiring no root:
+#   1. ~/.config/autostart/*.desktop — Exec= outside /usr/ or /opt/
+#   2. ~/.config/systemd/user/*.service — ExecStart= binary not owned by pacman
+#   3. Shell RCs — lines matching download-and-execute or eval+subshell patterns
+# Home dir injectable via AUTOSTART_HOME for testing.
+# ---------------------------------------------------------------------------
+check_autostart() {
+    local home_dir="${AUTOSTART_HOME:-$HOME}"
+    local found=0
+
+    # XDG autostart .desktop files
+    local desktop_dir="$home_dir/.config/autostart"
+    if [[ -d "$desktop_dir" ]]; then
+        while IFS= read -r desktop; do
+            while IFS= read -r line; do
+                [[ "$line" =~ ^Exec= ]] || continue
+                local exec_val="${line#Exec=}"
+                # Strip leading whitespace and any field codes (%u, %f, etc.)
+                exec_val=$(echo "$exec_val" | sed 's/[[:space:]]*%[a-zA-Z]//g' | awk '{print $1}')
+                if [[ "$exec_val" != /usr/* && "$exec_val" != /opt/* && -n "$exec_val" ]]; then
+                    echo "  WARNING: suspicious autostart entry: $desktop"
+                    echo "    Exec=$exec_val (not under /usr or /opt)"
+                    found=2
+                fi
+            done < "$desktop"
+        done < <(find "$desktop_dir" -name '*.desktop' -type f 2>/dev/null)
+    fi
+
+    # User systemd services whose ExecStart= binary is unowned by pacman
+    local user_svc_dir="$home_dir/.config/systemd/user"
+    if [[ -d "$user_svc_dir" ]]; then
+        while IFS= read -r svc; do
+            local exec_bin
+            exec_bin=$(grep -oP '^ExecStart=\K\S+' "$svc" 2>/dev/null | head -1) || continue
+            [[ -z "$exec_bin" ]] && continue
+            if ! pacman -Qo "$exec_bin" &>/dev/null 2>&1; then
+                echo "  WARNING: user service with unowned ExecStart binary: $svc"
+                echo "    ExecStart=$exec_bin (not tracked by pacman)"
+                found=2
+            fi
+        done < <(find "$user_svc_dir" -name '*.service' -type f 2>/dev/null)
+    fi
+
+    # Shell RC files — look for download-and-execute or eval+subshell patterns
+    local re_dangerous='(curl|wget)[[:space:]].*\|[[:space:]]*(bash|sh|python)|base64[[:space:]]+(--decode|-d)|eval[[:space:]]+\$\(|eval[[:space:]]+`'
+    local rc_files=("$home_dir/.bashrc" "$home_dir/.zshrc" "$home_dir/.bash_profile" "$home_dir/.profile")
+    for rc in "${rc_files[@]}"; do
+        [[ -f "$rc" ]] || continue
+        local lineno=0
+        while IFS= read -r line; do
+            (( lineno++ )) || true
+            if [[ "$line" =~ $re_dangerous ]]; then
+                echo "  WARNING: suspicious pattern in $rc:$lineno"
+                echo "    $line"
+                found=2
+            fi
+        done < "$rc"
+    done
+
+    [[ $found -eq 0 ]] && echo "  Clean: no suspicious autostart or shell RC entries found."
+    return $found
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
@@ -732,6 +800,13 @@ fi
 if $CHECK_LDSO; then
     echo "--- [9] ld.so.preload injection check ---"
     check_ldso && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_AUTOSTART; then
+    echo "--- [10] XDG autostart + shell RC persistence check ---"
+    check_autostart && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi
