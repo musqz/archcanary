@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -280,9 +281,14 @@ def main(argv: list[str] | None = None) -> int:
                     logger.error('Parsed 0 packages, something went wrong with the fetch/parse.')
                     return 1
                 try:
-                    with open(pkg_list_path, 'w') as f:
-                        for p in sorted(pkgs):
-                            f.write(f'{p}\n')
+                    raw = '\n'.join(sorted(set(pkgs)))
+                    r = subprocess.run(
+                        ['sort', '-u', '-o', str(pkg_list_path)],
+                        input=raw, text=True, timeout=15,
+                    )
+                    if r.returncode != 0:
+                        logger.error('sort failed with exit code %d', r.returncode)
+                        return 1
                     logger.info('Updated %s with %d packages', pkg_list_path, len(pkgs))
                 except OSError as e:
                     logger.error('Cannot write package list: %s', e)

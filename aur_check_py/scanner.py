@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import locale
 import logging
+import os
 import re
 import subprocess
 from collections.abc import Generator
@@ -175,6 +176,7 @@ class AurScanner:
                 qi = subprocess.run(
                     ['pacman', '-Qi', '--', pkg],
                     capture_output=True, text=True, timeout=30,
+                    env=os.environ | {'LC_ALL': 'C'},
                 )
             except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
                 continue
@@ -184,7 +186,7 @@ class AurScanner:
                     raw = line.split(':', 1)[1].strip()
                     install_date = parse_pacman_date(raw)
                     break
-            if install_date is None or self._in_window(install_date):
+            if install_date is not None and self._in_window(install_date):
                 matches.append(PackageMatch(pkg, install_date))
         return matches
 
