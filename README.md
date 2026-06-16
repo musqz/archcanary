@@ -4,6 +4,11 @@ Detection and analysis tools for the **atomic-lockfile** supply-chain attack on 
 
 This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
 
+> [!TIP]
+> **Questions, support, or general discussion?** Head over to
+> [Discussions](https://github.com/lenucksi/aur-malware-check/discussions/).
+> Issues are reserved for bug reports and feature requests only.
+
 > **1600+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile`, `bun install js-digest`, or `lockfile-js` into PKGBUILD/install files. Two attack waves:
 > 1. **atomic-lockfile / lockfile-js** (npm) — accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
 > 2. **js-digest** (bun) — accounts `custodiatovar`, `veramagalhaes`
