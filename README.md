@@ -20,7 +20,7 @@ This is a collection of all the scattered resources, especially the ones in the 
 ./aur_check-v2.sh --check-bun-cache
 
 # Safe one-liner (from quantenProjects) - just compare installed vs infected list
-comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR/aur-malware-check/main/package_list.txt | sort)
+comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/lenucksi/aur-malware-check/master/package_list.txt | sort)
 
 # Full scan with all optional checks
 ./aur_check-v2.sh --full
