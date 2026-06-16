@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.8.3 (2026-06-16) — personal fork
+- Fix: `check_systemd` now also skips services whose `ExecStart=` binary lives under a standard system prefix (`/usr/`, `/opt/`, `/bin/`, `/sbin/`, `/usr/local/`) and actually exists on disk — handles proprietary installers (piavpn, forgejo) that write a `.service` file without registering it with pacman. Malware still gets caught because it points to binaries in `/tmp/`, `$HOME/`, `/dev/shm/`, etc.
+
 ## 2.8.2 (2026-06-16) — personal fork
 - Fix: run logs now default to `~/.cache/aur-malware-check/` (`$XDG_CACHE_HOME`) instead of the current working directory — prevents log accumulation in the repo or install source dir
 

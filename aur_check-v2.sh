@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.8.2"
+SCRIPT_VERSION="2.8.3"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -372,10 +372,23 @@ check_systemd() {
         [[ "$dir" == */systemd/user || "$dir" == */systemd/user/* ]] && is_user_dir=true
 
         # .service files and their drop-in overrides (*.service.d/*.conf)
-        # Skip files owned by a pacman package — those are legitimate system daemons.
+        # Skip if pacman owns the file (AUR/repo-installed daemon).
+        # Skip if the ExecStart binary is in a standard system prefix and exists
+        # (proprietary installers — piavpn, forgejo binary releases — register
+        # the service file outside pacman but always put their binary in /opt/ or
+        # /usr/local/; malware typically points to /tmp/, /dev/shm/, $HOME, etc.)
         while IFS= read -r svc; do
             pacman -Qo "$svc" &>/dev/null 2>&1 && continue
             if grep -qE "$re_restart" "$svc" 2>/dev/null; then
+                local exec_start
+                exec_start=$(grep -oP '^ExecStart=[-+@!:]*\K[^[:space:]]+' "$svc" 2>/dev/null | head -1)
+                if [[ -n "$exec_start" && "$exec_start" == /* ]]; then
+                    if [[ "$exec_start" == /usr/* || "$exec_start" == /opt/* || \
+                          "$exec_start" == /bin/* || "$exec_start" == /sbin/* || \
+                          "$exec_start" == /usr/local/* ]] && [[ -f "$exec_start" ]]; then
+                        continue
+                    fi
+                fi
                 local match
                 match=$(grep -oE "$re_restart" "$svc" | head -1)
                 found+=("$svc ($match)")
