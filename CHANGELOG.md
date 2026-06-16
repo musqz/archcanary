@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.1 (2026-06-16) — personal fork
+- Fix: `check_systemd` no longer flags pacman-owned `.service` / drop-in `.conf` files — legitimate system daemons from packages carry `Restart=on-failure` by design. Timer check is now skipped for user-space dirs (`~/.config/systemd/user/`) since `OnBootSec + Persistent=true` is standard for user timers (cron replacements, update schedulers).
+- Fix: `check_autostart` desktop check now uses `command -v` to resolve bare names before flagging, and accepts all standard system prefixes (`/bin/`, `/sbin/`, `/usr/local/`) in addition to `/usr/` and `/opt/`.
+- Fix: `check_autostart` user service check expands systemd `%h` to `$HOME` before querying `pacman -Qo`; skips `~/.local/bin/` and `~/bin/` (XDG user bin dirs, not tracked by pacman).
+- Fix: `check_autostart` shell RC eval pattern now requires the subshell to open with a network/execution tool (`curl`, `wget`, `python`, `bash`, `sh`) — bare `eval $(dircolors ...)` and similar are no longer flagged.
+
 ## 2.8.0 (2026-06-16) — personal fork
 - New: `--check-kmod` (included in `--full`) — audits loaded kernel modules against the full set of `.ko` files owned by pacman packages; flags any module with no traceable owner. Also checks `dkms status` for DKMS modules whose source package is not in `pacman -Q`. Requires root for reliable module attribution; skips gracefully otherwise. `LSMOD_CMD` / `DKMS_CMD` env vars injectable for testing.
 

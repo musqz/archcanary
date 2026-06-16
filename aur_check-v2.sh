@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.8.0"
+SCRIPT_VERSION="2.8.1"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -362,8 +362,15 @@ check_systemd() {
     for dir in "${dirs[@]}"; do
         [[ -d "$dir" ]] || continue
 
+        # User systemd dirs (path ends with systemd/user or systemd/user/...):
+        # skip timer check — OnBootSec+Persistent is standard for user timers.
+        local is_user_dir=false
+        [[ "$dir" == */systemd/user || "$dir" == */systemd/user/* ]] && is_user_dir=true
+
         # .service files and their drop-in overrides (*.service.d/*.conf)
+        # Skip files owned by a pacman package — those are legitimate system daemons.
         while IFS= read -r svc; do
+            pacman -Qo "$svc" &>/dev/null 2>&1 && continue
             if grep -qE "$re_restart" "$svc" 2>/dev/null; then
                 local match
                 match=$(grep -oE "$re_restart" "$svc" | head -1)
@@ -371,8 +378,10 @@ check_systemd() {
             fi
         done < <(find "$dir" \( -name '*.service' -o -name '*.conf' \) -type f 2>/dev/null)
 
-        # .timer units with boot persistence
+        # .timer units with boot persistence — system dirs only, pacman-owned skipped
+        $is_user_dir && continue
         while IFS= read -r timer; do
+            pacman -Qo "$timer" &>/dev/null 2>&1 && continue
             if grep -q 'OnBootSec=' "$timer" 2>/dev/null && grep -q 'Persistent=true' "$timer" 2>/dev/null; then
                 found+=("$timer (timer: OnBootSec + Persistent=true)")
             fi
@@ -679,30 +688,57 @@ check_autostart() {
     local found=0
 
     # XDG autostart .desktop files
+    # Flag absolute paths outside standard system prefixes; for bare names, resolve
+    # via command -v and apply the same prefix check.
     local desktop_dir="$home_dir/.config/autostart"
     if [[ -d "$desktop_dir" ]]; then
         while IFS= read -r desktop; do
             while IFS= read -r line; do
                 [[ "$line" =~ ^Exec= ]] || continue
                 local exec_val="${line#Exec=}"
-                # Strip leading whitespace and any field codes (%u, %f, etc.)
-                exec_val=$(echo "$exec_val" | sed 's/[[:space:]]*%[a-zA-Z]//g' | awk '{print $1}')
-                if [[ "$exec_val" != /usr/* && "$exec_val" != /opt/* && -n "$exec_val" ]]; then
+                exec_val=$(printf '%s' "$exec_val" | sed 's/[[:space:]]*%[a-zA-Z]//g' | awk '{print $1}')
+                [[ -z "$exec_val" ]] && continue
+
+                local suspicious=false
+                if [[ "$exec_val" == /* ]]; then
+                    if [[ "$exec_val" != /usr/* && "$exec_val" != /opt/* && \
+                          "$exec_val" != /bin/* && "$exec_val" != /sbin/* && \
+                          "$exec_val" != /usr/local/* ]]; then
+                        suspicious=true
+                    fi
+                else
+                    local resolved
+                    resolved=$(command -v "$exec_val" 2>/dev/null) || true
+                    if [[ -z "$resolved" ]]; then
+                        suspicious=true
+                    elif [[ "$resolved" != /usr/* && "$resolved" != /opt/* && \
+                            "$resolved" != /bin/* && "$resolved" != /sbin/* && \
+                            "$resolved" != /usr/local/* ]]; then
+                        suspicious=true
+                    fi
+                fi
+
+                if $suspicious; then
                     echo "  WARNING: suspicious autostart entry: $desktop"
-                    echo "    Exec=$exec_val (not under /usr or /opt)"
+                    echo "    Exec=$exec_val (outside standard system path)"
                     found=2
                 fi
             done < "$desktop"
         done < <(find "$desktop_dir" -name '*.desktop' -type f 2>/dev/null)
     fi
 
-    # User systemd services whose ExecStart= binary is unowned by pacman
+    # User systemd services whose ExecStart= binary is unowned by pacman.
+    # Expand %h (systemd home-dir specifier) before querying pacman.
+    # Skip XDG user bin dirs — these are never tracked by pacman.
     local user_svc_dir="$home_dir/.config/systemd/user"
     if [[ -d "$user_svc_dir" ]]; then
         while IFS= read -r svc; do
             local exec_bin
             exec_bin=$(grep -oP '^ExecStart=\K\S+' "$svc" 2>/dev/null | head -1) || continue
             [[ -z "$exec_bin" ]] && continue
+            exec_bin="${exec_bin//%h/$home_dir}"
+            [[ "$exec_bin" == "$home_dir/.local/bin/"* ]] && continue
+            [[ "$exec_bin" == "$home_dir/bin/"* ]] && continue
             if ! pacman -Qo "$exec_bin" &>/dev/null 2>&1; then
                 echo "  WARNING: user service with unowned ExecStart binary: $svc"
                 echo "    ExecStart=$exec_bin (not tracked by pacman)"
@@ -711,15 +747,20 @@ check_autostart() {
         done < <(find "$user_svc_dir" -name '*.service' -type f 2>/dev/null)
     fi
 
-    # Shell RC files — look for download-and-execute or eval+subshell patterns
-    local re_dangerous='(curl|wget)[[:space:]].*\|[[:space:]]*(bash|sh|python)|base64[[:space:]]+(--decode|-d)|eval[[:space:]]+\$\(|eval[[:space:]]+`'
+    # Shell RC files — download-and-execute or eval+subshell with dangerous tools.
+    # eval alone (e.g. eval $(dircolors)) is not flagged — the subshell must begin
+    # with a known network/execution tool.
+    local re_pipe_exec='(curl|wget)[[:space:]].*\|[[:space:]]*(bash|sh[[:space:]]|sh$|python)'
+    local re_base64='base64[[:space:]]+(--decode|-d)'
+    local re_eval_net='eval[[:space:]]+[\$`]\(?(curl|wget|python[0-9.]?|bash|sh)[[:space:]]'
     local rc_files=("$home_dir/.bashrc" "$home_dir/.zshrc" "$home_dir/.bash_profile" "$home_dir/.profile")
     for rc in "${rc_files[@]}"; do
         [[ -f "$rc" ]] || continue
         local lineno=0
         while IFS= read -r line; do
             (( lineno++ )) || true
-            if [[ "$line" =~ $re_dangerous ]]; then
+            if [[ "$line" =~ $re_pipe_exec ]] || [[ "$line" =~ $re_base64 ]] || \
+               [[ "$line" =~ $re_eval_net ]]; then
                 echo "  WARNING: suspicious pattern in $rc:$lineno"
                 echo "    $line"
                 found=2
