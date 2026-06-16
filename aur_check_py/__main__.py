@@ -24,7 +24,7 @@ from aur_check_py.scanner import (
     PackageMatch,
 )
 
-SCRIPT_VERSION = '2.3.3'
+SCRIPT_VERSION = '3.0'
 
 logger = logging.getLogger('aur_check')
 

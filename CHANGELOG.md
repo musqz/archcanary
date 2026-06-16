@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0 (2026-06-16)
+- New: `aur_check_py/` — Python 3.14+ port of `aur_check-v2.sh`, stdlib only
+- All 6 checks preserved, `--merge` mode, compressed log support (gzip/xz/bz2/zstd)
+- 75 unit tests, `unittest` + `unittest.mock`, laufen ohne Arch-System
+- `developing.md` — coding conventions, `README.md` — use-case map
+- Bash scripts remain at 2.3.x for legacy use
+
 ## 2.3.3 (2026-06-13)
 - Fix: prefix-matching bug in `check_current()` (Issue #2, confirmed via opencode/opencode-bin)
 - New: `INFECTED_LOOKUP` associative array filters `pacman -Qmq` results to exact matches only

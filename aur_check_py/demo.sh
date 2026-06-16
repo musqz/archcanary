@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Demo: alle aur_check_py CLI-Fälle aus dem README
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")"/..
 
 P="python -m aur_check_py"
 SEP="========================================"

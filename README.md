@@ -9,6 +9,10 @@ This is a collection of all the scattered resources, especially the ones in the 
 > [Discussions](https://github.com/lenucksi/aur-malware-check/discussions/).
 > Issues are reserved for bug reports and feature requests only.
 
+> [!TIP]
+> **Python 3.14+ version available?** See `aur_check_py/` — stdlib-only, typed,
+> testable, should be functionally identical, please test and report back.
+
 > **1600+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile`, `bun install js-digest`, or `lockfile-js` into PKGBUILD/install files. Two attack waves:
 > 1. **atomic-lockfile / lockfile-js** (npm) — accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
 > 2. **js-digest** (bun) — accounts `custodiatovar`, `veramagalhaes`
