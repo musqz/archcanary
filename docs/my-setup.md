@@ -63,9 +63,11 @@ Run from a desktop shortcut or app launcher — grouped menu with a per-session 
 
 ### The fzf menu (`aur_malware_menu.sh`)
 
-Opened by the **Show Menu** notification button (or directly from a terminal) — pick a single check to run, or view the last scan log:
+Terminal/SSH fallback — pick a single check to run, or view the last scan log:
 
 ![aur_malware_menu.sh fzf TUI — pick a check or view the last log](../images/fzf.png)
+
+> **Limitations vs the GUI:** no root checks (no polkit in a terminal context), no per-session status column, no infected follow-up dialog. Use the GUI for day-to-day work; use this over SSH or when there is no display.
 
 ## When each tool runs
 
