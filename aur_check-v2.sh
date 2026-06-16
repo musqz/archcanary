@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.6.0"
+SCRIPT_VERSION="2.6.1"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -342,27 +342,43 @@ check_logs() {
 
 # ---------------------------------------------------------------------------
 # Check 3: systemd persistence artifacts
-# (Original addition: look for services with Restart=always + RestartSec=30)
+# Widened from the original Restart=always + RestartSec=30 pair to cover:
+#   - any broad Restart= policy in .service files and drop-in overrides
+#   - .timer units with OnBootSec= + Persistent=true (timer-based persistence)
+# Scan dirs are overridable via SYSTEMD_SCAN_DIRS (colon-separated) for testing.
 # ---------------------------------------------------------------------------
 check_systemd() {
     local found=()
-    local dirs=("/etc/systemd/system" "$HOME/.config/systemd/user")
+    local re_restart='^Restart=(always|on-failure|on-abnormal|on-abort)'
+
+    IFS=: read -ra dirs <<< "${SYSTEMD_SCAN_DIRS:-/etc/systemd/system:$HOME/.config/systemd/user}"
 
     for dir in "${dirs[@]}"; do
         [[ -d "$dir" ]] || continue
+
+        # .service files and their drop-in overrides (*.service.d/*.conf)
         while IFS= read -r svc; do
-            if grep -q 'Restart=always' "$svc" 2>/dev/null && grep -q 'RestartSec=30' "$svc" 2>/dev/null; then
-                found+=("$svc")
+            if grep -qE "$re_restart" "$svc" 2>/dev/null; then
+                local match
+                match=$(grep -oE "$re_restart" "$svc" | head -1)
+                found+=("$svc ($match)")
             fi
-        done < <(find "$dir" -name '*.service' -type f 2>/dev/null)
+        done < <(find "$dir" \( -name '*.service' -o -name '*.conf' \) -type f 2>/dev/null)
+
+        # .timer units with boot persistence
+        while IFS= read -r timer; do
+            if grep -q 'OnBootSec=' "$timer" 2>/dev/null && grep -q 'Persistent=true' "$timer" 2>/dev/null; then
+                found+=("$timer (timer: OnBootSec + Persistent=true)")
+            fi
+        done < <(find "$dir" -name '*.timer' -type f 2>/dev/null)
     done
 
     if [[ ${#found[@]} -gt 0 ]]; then
-        echo "  WARNING: ${#found[@]} service(s) with Restart=always + RestartSec=30:"
+        echo "  WARNING: ${#found[@]} suspicious systemd unit(s) found:"
         print_list found
         return 2
     fi
-    echo "  Clean: no suspicious systemd services found."
+    echo "  Clean: no suspicious systemd units found."
     return 0
 }
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=Fake persistence timer
+
+[Timer]
+OnBootSec=30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

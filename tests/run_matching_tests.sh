@@ -299,6 +299,49 @@ test_check_ldso() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 10: check_systemd hardened — drop-ins, timers, wider Restart= match
+# ---------------------------------------------------------------------------
+test_check_systemd_hardened() {
+    local fixture_dir="$SCRIPT_DIR/systemd"
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --check-systemd --no-notify
+    )
+
+    local out rc=0
+
+    # Sub-test A: drop-in override with Restart=on-failure → WARNING
+    out=$(SYSTEMD_SCAN_DIRS="$fixture_dir" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING"* && "$out" == *"on-failure"* ]]; then
+        pass "check_systemd: drop-in Restart=on-failure → WARNING (exit 2)"
+    else
+        fail "check_systemd: drop-in Restart=on-failure → expected WARNING+exit2, got rc=$rc"
+    fi
+
+    # Sub-test B: timer with OnBootSec + Persistent=true → WARNING
+    if [[ "$out" == *"timer"* || "$out" == *"Persistent"* ]]; then
+        pass "check_systemd: OnBootSec+Persistent timer → WARNING"
+    else
+        fail "check_systemd: timer not detected — got: $out"
+    fi
+
+    # Sub-test C: empty dir → clean
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    rc=0
+    out=$(SYSTEMD_SCAN_DIRS="$tmpdir" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_systemd: empty scan dir → clean"
+    else
+        fail "check_systemd: empty dir → expected clean, got: $out"
+    fi
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -331,6 +374,9 @@ test_actual_list_integrity
 
 $VERBOSE && msg "--- Test 9: check_ldso ---"
 test_check_ldso
+
+$VERBOSE && msg "--- Test 10: check_systemd hardened ---"
+test_check_systemd_hardened
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
