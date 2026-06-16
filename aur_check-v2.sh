@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.5.1"
+SCRIPT_VERSION="2.6.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -57,6 +57,7 @@ CHECK_NPM_CACHE=false
 CHECK_BUN_CACHE=false
 CHECK_PKGBUILD=false
 CHECK_BPFTOOL=false
+CHECK_LDSO=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
@@ -79,7 +80,8 @@ for arg in "$@"; do
         --check-bun-cache) CHECK_BUN_CACHE=true ;;
         --check-pkgbuild)  CHECK_PKGBUILD=true ;;
         --check-bpftool)   CHECK_BPFTOOL=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true ;;
+        --check-ldso)      CHECK_LDSO=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -97,6 +99,7 @@ for arg in "$@"; do
             echo "  --check-bun-cache  Check bun cache for packages listed in malicious_npm_packages.txt"
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links (needs root); flags stealth hook types"
+            echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
@@ -577,6 +580,43 @@ check_pkgbuild_caches() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 9: ld.so.preload shared library injection
+# A non-empty /etc/ld.so.preload causes the dynamic linker to load the listed
+# .so into every process at startup — the classic root-level rootkit hook.
+# Any content here is a hard indicator; legitimate packages do not use it.
+# Also flags /etc/ld.so.conf.d/*.conf files modified within the campaign window.
+# Paths are overridable via env vars for testing without root.
+# ---------------------------------------------------------------------------
+check_ldso() {
+    local preload_file="${LDSO_PRELOAD_FILE:-/etc/ld.so.preload}"
+    local conf_dir="${LDSO_CONF_DIR:-/etc/ld.so.conf.d}"
+    local found=0
+
+    if [[ -s "$preload_file" ]]; then
+        echo "  WARNING: $preload_file exists and is non-empty — shared library injection:"
+        sed 's/^/    /' "$preload_file"
+        echo "  Every process on this system loads the above library at startup."
+        echo "  Remove the file (or its contents) if you did not add it intentionally."
+        found=2
+    else
+        echo "  Clean: $preload_file not present or empty."
+    fi
+
+    while IFS= read -r conf; do
+        local mtime mdate
+        mtime=$(stat -c %Y "$conf" 2>/dev/null) || continue
+        mdate=$(date -d "@$mtime" +%F 2>/dev/null) || continue
+        if date_in_window "$mdate"; then
+            echo "  WARNING: ld.so.conf.d entry modified in campaign window: $conf (mtime $mdate)"
+            found=2
+        fi
+    done < <(find "$conf_dir" -name '*.conf' -type f 2>/dev/null)
+
+    [[ $found -eq 0 ]] || return $found
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
@@ -669,6 +709,13 @@ fi
 if $CHECK_BPFTOOL; then
     echo "--- [8] Loaded eBPF programs/links (bpftool) ---"
     check_bpftool && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_LDSO; then
+    echo "--- [9] ld.so.preload injection check ---"
+    check_ldso && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi

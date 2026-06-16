@@ -257,6 +257,48 @@ test_actual_list_integrity() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 9: check_ldso — detects non-empty /etc/ld.so.preload
+# ---------------------------------------------------------------------------
+test_check_ldso() {
+    local tmpdir preload_file conf_dir
+    tmpdir=$(mktemp -d)
+    preload_file="$tmpdir/ld.so.preload"
+    conf_dir="$tmpdir/ld.so.conf.d"
+    mkdir -p "$conf_dir"
+
+    local out rc=0
+
+    # Sub-test A: absent/empty preload, empty conf.d → clean
+    rc=0
+    out=$(LDSO_PRELOAD_FILE="$preload_file" LDSO_CONF_DIR="$conf_dir" \
+        "$REPO_DIR/aur_check-v2.sh" \
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" \
+        --check-ldso --no-notify 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_ldso: absent preload → clean"
+    else
+        fail "check_ldso: absent preload → expected clean, got: $out"
+    fi
+
+    # Sub-test B: non-empty preload → WARNING (exit 2)
+    echo "/tmp/evil.so" > "$preload_file"
+    rc=0
+    out=$(LDSO_PRELOAD_FILE="$preload_file" LDSO_CONF_DIR="$conf_dir" \
+        "$REPO_DIR/aur_check-v2.sh" \
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" \
+        --check-ldso --no-notify 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING"* && "$out" == *"evil.so"* ]]; then
+        pass "check_ldso: non-empty preload → WARNING (exit 2) with library listed"
+    else
+        fail "check_ldso: non-empty preload → expected WARNING+exit2, got rc=$rc"
+    fi
+
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -286,6 +328,9 @@ test_npm_cli_flag
 
 $VERBOSE && msg "--- Test 8: actual_list_integrity ---"
 test_actual_list_integrity
+
+$VERBOSE && msg "--- Test 9: check_ldso ---"
+test_check_ldso
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
