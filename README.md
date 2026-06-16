@@ -2,8 +2,6 @@
 
 > **WARNING: Ultra personal fork for Manjaro Openbox (Mabox).** Tuned for this specific setup — false-positive thresholds, paths, and defaults reflect a Mabox system. For a general-purpose Arch/AUR scanner use [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) instead.
 
-> Personal fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) — includes local patches not submitted upstream.
-
 ### Fork changes
 
 | Patch | Description |
