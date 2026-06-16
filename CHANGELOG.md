@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.8.4 (2026-06-16) — personal fork
+- Fix: `check_kmod` module name matching — `lsmod` returns names with underscores (`snd_seq_dummy`) but pacman `.ko` filenames use hyphens (`snd-seq-dummy.ko.zst`); normalize both to underscores before comparison, eliminating 80+ false positives from standard kernel modules
+- Fix: `check_autostart` when run as root (`sudo`) now uses the invoking user's home dir (`$SUDO_USER`) instead of `/root` — `/root/.config/autostart/` holds live-session relics whose bare command names are unresolvable in root's PATH
+- Docs: eBPF `lsm` warning now mentions AppArmor/SELinux as a legitimate source (Manjaro enables AppArmor by default)
+
 ## 2.8.3 (2026-06-16) — personal fork
 - Fix: `check_systemd` now also skips services whose `ExecStart=` binary lives under a standard system prefix (`/usr/`, `/opt/`, `/bin/`, `/sbin/`, `/usr/local/`) and actually exists on disk — handles proprietary installers (piavpn, forgejo) that write a `.service` file without registering it with pacman. Malware still gets caught because it points to binaries in `/tmp/`, `$HOME/`, `/dev/shm/`, etc.
 

@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.8.3"
+SCRIPT_VERSION="2.8.4"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -456,7 +456,7 @@ check_ebpf() {
 # stealth-associated hook types are present — kprobe/kretprobe/tracepoint/
 # raw_tracepoint/perf_event/tracing(fentry,fexit,lsm)/lsm — the hooks an eBPF
 # rootkit uses to hide PIDs, files and itself. Legitimate if you run
-# bpftrace/bcc/sysprof/Falco; confirm the source before dismissing.
+# AppArmor/SELinux, bpftrace/bcc/sysprof/Falco; confirm the source before dismissing.
 # ---------------------------------------------------------------------------
 check_bpftool() {
     if ! command -v bpftool &>/dev/null; then
@@ -488,7 +488,7 @@ check_bpftool() {
         echo "  WARNING: stealth-associated program types present: $stealth"
         echo "  These hook types are used by eBPF rootkits to hide PIDs/files/processes."
         echo "  Review: sudo bpftool prog show ; sudo bpftool link show"
-        echo "  (Legitimate if you run bpftrace/bcc/sysprof/Falco — confirm the source.)"
+        echo "  (Legitimate if you run AppArmor/SELinux, bpftrace/bcc/sysprof/Falco — confirm the source.)"
         return 1
     fi
     echo "  Clean: only non-stealth program types (cgroup/net) loaded."
@@ -701,7 +701,17 @@ check_ldso() {
 # Home dir injectable via AUTOSTART_HOME for testing.
 # ---------------------------------------------------------------------------
 check_autostart() {
-    local home_dir="${AUTOSTART_HOME:-$HOME}"
+    # When running as root without an explicit override, use the invoking user's
+    # home — root's ~/.config/autostart/ is for live-session relics and bare
+    # command names there can't be resolved by root's PATH.
+    local home_dir
+    if [[ -n "${AUTOSTART_HOME:-}" ]]; then
+        home_dir="$AUTOSTART_HOME"
+    elif [[ $EUID -eq 0 && -n "${SUDO_USER:-}" ]]; then
+        home_dir=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    else
+        home_dir="$HOME"
+    fi
     local found=0
 
     # XDG autostart .desktop files
@@ -808,9 +818,12 @@ check_kmod() {
         return 0
     fi
 
-    # Build set of all .ko paths owned by pacman
+    # Build set of all .ko paths owned by pacman.
+    # Normalize to underscores: lsmod uses underscores, .ko filenames use hyphens.
     local pacman_mods
-    pacman_mods=$(pacman -Ql 2>/dev/null | awk '{print $2}' | grep '\.ko' | sed 's/\.ko.*//' | xargs -I{} basename {} 2>/dev/null | sort -u)
+    pacman_mods=$(pacman -Ql 2>/dev/null | awk '{print $2}' | grep '\.ko' | \
+        sed 's/\.ko.*//' | xargs -I{} basename {} 2>/dev/null | \
+        tr '-' '_' | sort -u)
 
     local lsmod_out
     if ! lsmod_out=$($lsmod_cmd 2>/dev/null); then
@@ -824,7 +837,9 @@ check_kmod() {
         local mod
         mod=$(awk '{print $1}' <<< "$line")
         [[ "$mod" == "Module" || -z "$mod" ]] && continue
-        if ! grep -qxF "$mod" <<< "$pacman_mods" 2>/dev/null; then
+        # Normalize to underscores before lookup (matches the pacman_mods normalization above)
+        local mod_norm="${mod//-/_}"
+        if ! grep -qxF "$mod_norm" <<< "$pacman_mods" 2>/dev/null; then
             unknown+=("$mod")
         fi
     done <<< "$lsmod_out"
