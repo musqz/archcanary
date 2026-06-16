@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0 (2026-06-16)
+- New: `aur_check_py/` — Python 3.14+ port of `aur_check-v2.sh`, stdlib only
+- All 6 checks preserved, `--merge` mode, compressed log support (gzip/xz/bz2/zstd)
+- 75 unit tests, `unittest` + `unittest.mock`, laufen ohne Arch-System
+- `developing.md` — coding conventions, `README.md` — use-case map
+- Bash scripts remain at 2.3.x for legacy use
+
 ## 2.8.5 (2026-06-16) — personal fork
 - New: `DKMS_ALLOWLIST` env var (colon-separated module names) — DKMS modules installed outside pacman by proprietary hardware drivers (e.g. `tuxedo-drivers`) can be acknowledged without suppressing genuine unknown-module warnings. Allowlisted entries print INFO instead of WARNING and do not set exit 2.
 
