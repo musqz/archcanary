@@ -158,6 +158,19 @@ INFECTED_PKGS=()
 
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
+# Merge dkms_allowlist.conf into DKMS_ALLOWLIST (colon-separated, env var takes precedence)
+DKMS_ALLOWLIST="${DKMS_ALLOWLIST:-}"
+_dkms_cfg="$AUR_CONFIG_DIR/dkms_allowlist.conf"
+if [[ -f "$_dkms_cfg" ]]; then
+    while IFS= read -r _dl || [[ -n "$_dl" ]]; do
+        _dl="${_dl%%#*}"           # strip inline comments
+        _dl="${_dl//[[:space:]]/}" # strip whitespace
+        [[ -z "$_dl" ]] && continue
+        DKMS_ALLOWLIST="${DKMS_ALLOWLIST:+${DKMS_ALLOWLIST}:}${_dl}"
+    done < "$_dkms_cfg"
+fi
+unset _dkms_cfg _dl
+
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
     _bundled="$(dirname "$(realpath "$0")")/malicious_npm_packages.txt"
     if [[ -f "$_bundled" ]]; then
