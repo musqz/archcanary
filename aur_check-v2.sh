@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.8.4"
+SCRIPT_VERSION="2.8.5"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -854,6 +854,10 @@ check_kmod() {
     fi
 
     # DKMS check (optional — skip if dkms not installed)
+    # DKMS_ALLOWLIST: colon-separated list of DKMS module names that are known-good
+    # but not installed via pacman (e.g. proprietary hardware drivers).
+    # Example: DKMS_ALLOWLIST=tuxedo-drivers:v4l2loopback
+    IFS=: read -ra _dkms_allow <<< "${DKMS_ALLOWLIST:-}"
     if command -v "$dkms_cmd" &>/dev/null || [[ -n "${DKMS_CMD:-}" ]]; then
         local dkms_out
         dkms_out=$($dkms_cmd status 2>/dev/null) || dkms_out=""
@@ -862,15 +866,24 @@ check_kmod() {
                 [[ -z "$entry" ]] && continue
                 local pkg_name
                 # dkms status format: "name/version, kernel, arch: status"
-                # extract just the name before the first /
                 pkg_name=$(awk -F'[/,]' '{print $1}' <<< "$entry" | xargs)
-                if ! pacman -Qi "$pkg_name" &>/dev/null 2>&1; then
+                # Skip if pacman-tracked
+                pacman -Qi "$pkg_name" &>/dev/null 2>&1 && continue
+                # Skip if in user-supplied allowlist
+                local allowed=false
+                for _a in "${_dkms_allow[@]}"; do
+                    [[ "$_a" == "$pkg_name" ]] && allowed=true && break
+                done
+                if $allowed; then
+                    echo "  INFO: DKMS module allowlisted (not pacman-tracked): $entry"
+                else
                     echo "  WARNING: DKMS module from untracked source: $entry"
                     found=2
                 fi
             done <<< "$dkms_out"
         fi
     fi
+    unset _dkms_allow
 
     return $found
 }
