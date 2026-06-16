@@ -9,7 +9,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 | `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
 | `aur_malware_gui.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window |
 | `aur_malware_menu.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | fzf TUI menu — run individual checks or view last log from the notification |
-| `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Trust scan — checks AUR package maintainer reputation and flags suspicious accounts |
+| `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Pre-install trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes) |
 | `aurscan` | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM-based pre-install PKGBUILD scanner using Claude — proactive check before installing an AUR package |
 | `notify-send.sh` | [vlevit/notify-send.sh](https://github.com/vlevit/notify-send.sh) — [AUR: notify-send.sh](https://aur.archlinux.org/packages/notify-send.sh) | Drop-in replacement for `notify-send` with action button support — enables the **Show Menu** button on the alert |
 | `yad` | official repos | GTK dialog toolkit used by `aur_malware_gui.sh` |
@@ -48,12 +48,28 @@ aur_malware_gui.sh (on-demand — desktop shortcut or app launcher)
             └── root checks (eBPF, bpftool, kmod) → pkexec → polkit auth → root-helper
                     └── streams output live, updates status on close
 
-traur (manual — trust check on a specific package)
-    └── checks AUR maintainer reputation before installing
+traur scan <pkg>  (manual — before installing)
+    └── 279 signals, 5 weighted categories
+            ├── Pkgbuild (0.45)   — static analysis: shells, download-exec, obfuscation, exfil, miners
+            ├── Behavioral (0.25) — maintainer: new account, batch creation, orphan takeover, typosquat
+            ├── Metadata (0.15)   — AUR page: votes, popularity, orphaned, flagged, missing URL
+            ├── Temporal (0.15)   — git history: single commit, major rewrite, domain change, checksum drop
+            └── Safety analysis   — char-by-char construction, high-entropy heredocs, indirect exec
+                    └── trust score + per-signal breakdown
 
 aurscan (manual — before installing any AUR package)
     └── scans PKGBUILD with Claude LLM before yay installs it
 ```
+
+### Scanner comparison
+
+| Tool | When | Method | Catches |
+|------|------|--------|---------|
+| `traur` | Before install | 279 heuristic signals | Unknown suspicious packages |
+| `aurscan` | Before install | LLM reads PKGBUILD | Novel / obfuscated patterns |
+| `aur_check-v2.sh` | After install (automated) | IOC list matching | Known-compromised packages |
+
+All three are complementary — none replaces the others.
 
 ### The yad GUI (`aur_malware_gui.sh`)
 
