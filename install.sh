@@ -9,6 +9,13 @@ set -euo pipefail
 #   --system  also install the pkexec root helper + polkit policy (requires sudo)
 # ---------------------------------------------------------------------------
 
+if [[ $EUID -eq 0 ]]; then
+    echo "ERROR: do not run install.sh as root or with sudo." >&2
+    echo "Run it as your regular user — it calls sudo internally for system components." >&2
+    echo "  ./install.sh [--system]" >&2
+    exit 1
+fi
+
 REPO_DIR="$(dirname "$(realpath "$0")")"
 
 # Determine install dir: prefer the XDG ~/.local/bin, fall back to ~/bin

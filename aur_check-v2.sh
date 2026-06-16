@@ -498,10 +498,28 @@ check_bpftool() {
 
     echo "  Loaded eBPF programs: $total"
     if [[ -n "$stealth" ]]; then
-        echo "  WARNING: stealth-associated program types present: $stealth"
+        # LSM eBPF programs are loaded by systemd (RestrictFileSystems= sandboxing),
+        # AppArmor, and SELinux as normal security enforcement — not rootkit activity.
+        # Downgrade to INFO if lsm is the only flagged type and all loaders are known-safe.
+        local non_lsm_stealth
+        non_lsm_stealth=$(tr ',' '\n' <<<"$stealth" | grep -v '^lsm$' | paste -sd, -)
+
+        if [[ -z "$non_lsm_stealth" ]]; then
+            # Check for unknown loaders in pids lines (boot-loaded programs have no pids line — that's fine)
+            local unknown_loaders
+            unknown_loaders=$(grep -E '^\s+pids ' <<<"$progs" \
+                | grep -Ev 'systemd\([0-9]+\)|apparmor_parser\([0-9]+\)|selinuxd\([0-9]+\)' || true)
+            if [[ -z "$unknown_loaders" ]]; then
+                echo "  INFO: lsm eBPF programs present — expected (systemd sandboxing / AppArmor / SELinux)."
+                return 0
+            fi
+        fi
+
+        local warn_types="${non_lsm_stealth:-$stealth}"
+        echo "  WARNING: stealth-associated program types present: $warn_types"
         echo "  These hook types are used by eBPF rootkits to hide PIDs/files/processes."
         echo "  Review: sudo bpftool prog show ; sudo bpftool link show"
-        echo "  (Legitimate if you run AppArmor/SELinux, bpftrace/bcc/sysprof/Falco — confirm the source.)"
+        echo "  (Legitimate if you run bpftrace/bcc/sysprof/Falco — confirm the source.)"
         return 1
     fi
     echo "  Clean: only non-stealth program types (cgroup/net) loaded."
