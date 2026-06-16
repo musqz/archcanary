@@ -39,6 +39,12 @@ aurscan (manual — before installing any AUR package)
     └── scans PKGBUILD with Claude LLM before yay installs it
 ```
 
+### The fzf menu (`aur_malware_menu.sh`)
+
+Opened by the **Show Menu** notification button (or directly from a terminal) — pick a single check to run, or view the last scan log:
+
+![aur_malware_menu.sh fzf TUI — pick a check or view the last log](../images/fzf.png)
+
 ## When each tool runs
 
 | Tool | When | Trigger |
