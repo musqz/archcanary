@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.8.1"
+SCRIPT_VERSION="2.8.2"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -109,7 +109,7 @@ for arg in "$@"; do
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
-            echo "  --log-file=PATH           Write full detail log to PATH (auto: aur-check-<date>.log)"
+            echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/aur-malware-check/aur-check-<date>.log)"
             echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
             echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
             echo "  --all-time                Disable recency window — flag any installed infected"
@@ -135,8 +135,12 @@ fi
 
 # ---------------------------------------------------------------------------
 # Log file: always write full detail, auto-named unless --log-file=PATH
+# Default location: XDG_CACHE_HOME/aur-malware-check/ (~/.cache/aur-malware-check/)
 # ---------------------------------------------------------------------------
-: "${LOG_FILE:=aur-check-$(date +%Y%m%d-%H%M%S).log}"
+_AUR_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/aur-malware-check"
+mkdir -p "$_AUR_CACHE_DIR"
+: "${LOG_FILE:=$_AUR_CACHE_DIR/aur-check-$(date +%Y%m%d-%H%M%S).log}"
+unset _AUR_CACHE_DIR
 # Verify log file writable before redirecting
 : > "$LOG_FILE" 2>/dev/null || { echo >&2 "ERROR: Cannot write log file: $LOG_FILE"; exit 1; }
 # Redirect all output through tee: terminal + log file
