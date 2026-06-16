@@ -48,14 +48,21 @@ aur_malware_gui.sh (on-demand — desktop shortcut or app launcher)
             └── root checks (eBPF, bpftool, kmod) → pkexec → polkit auth → root-helper
                     └── streams output live, updates status on close
 
-traur scan <pkg>  (manual — before installing)
-    └── 279 signals, 5 weighted categories
-            ├── Pkgbuild (0.45)   — static analysis: shells, download-exec, obfuscation, exfil, miners
-            ├── Behavioral (0.25) — maintainer: new account, batch creation, orphan takeover, typosquat
-            ├── Metadata (0.15)   — AUR page: votes, popularity, orphaned, flagged, missing URL
-            ├── Temporal (0.15)   — git history: single commit, major rewrite, domain change, checksum drop
-            └── Safety analysis   — char-by-char construction, high-entropy heredocs, indirect exec
-                    └── trust score + per-signal breakdown
+traur — two use cases:
+    ├── GUI "Trust scan (traur)"  → traur scan  (no args)
+    │       └── bulk audit of ALL installed AUR packages
+    │               └── useful as a periodic sweep alongside aur_check-v2.sh
+    │
+    └── terminal: traur scan <pkg>  (before installing a specific package)
+            └── 279 signals, 5 weighted categories
+                    ├── Pkgbuild (0.45)   — static analysis: shells, download-exec, obfuscation, exfil, miners
+                    ├── Behavioral (0.25) — maintainer: new account, batch creation, orphan takeover, typosquat
+                    ├── Metadata (0.15)   — AUR page: votes, popularity, orphaned, flagged, missing URL
+                    ├── Temporal (0.15)   — git history: single commit, major rewrite, domain change, checksum drop
+                    └── Safety analysis   — char-by-char construction, high-entropy heredocs, indirect exec
+                            └── trust score + per-signal breakdown
+    note: pre-install scan of a specific package requires the terminal —
+          the GUI has no package name input
 
 aurscan (manual — before installing any AUR package)
     └── scans PKGBUILD with Claude LLM before yay installs it
@@ -63,13 +70,14 @@ aurscan (manual — before installing any AUR package)
 
 ### Scanner comparison
 
-| Tool | When | Method | Catches |
-|------|------|--------|---------|
-| `traur` | Before install | 279 heuristic signals | Unknown suspicious packages |
-| `aurscan` | Before install | LLM reads PKGBUILD | Novel / obfuscated patterns |
+| Tool | When | How | Catches |
+|------|------|-----|---------|
+| `traur scan <pkg>` | Before install (terminal) | 279 heuristic signals | Unknown suspicious packages |
+| `traur scan` (GUI) | On demand — periodic audit | Same signals, all installed AUR pkgs | Suspicious packages already on system |
+| `aurscan` | Before install (terminal) | LLM reads PKGBUILD | Novel / obfuscated patterns |
 | `aur_check-v2.sh` | After install (automated) | IOC list matching | Known-compromised packages |
 
-All three are complementary — none replaces the others.
+All are complementary — none replaces the others.
 
 ### The yad GUI (`aur_malware_gui.sh`)
 
