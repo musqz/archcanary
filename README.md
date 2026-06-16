@@ -8,9 +8,9 @@
 |-------|-------------|
 | XDG config dir | Package lists live in `~/.config/aur-malware-check/` instead of alongside the script |
 | Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
-| Desktop alert | Fires a critical notification on exit code 2; with `notify-send.sh` it adds a **Show Menu** button (falls back to plain `notify-send`). `--no-notify` suppresses it |
+| Desktop alert | Fires a critical notification on exit code 2; with `notify-send.sh` it adds an **Open Scanner** button that opens `aur_malware_gui.sh` directly (falls back to plain `notify-send`). `--no-notify` suppresses it |
 | `aur_malware_gui.sh` | yad GUI with grouped checks, per-session status column (✅/⚠/❌/?), and polkit auth for root-requiring checks (eBPF, bpftool, kmod). Live streaming output window. Install root helper with `./install.sh --system` |
-| `aur_malware_menu.sh` | fzf-driven TUI menu to run individual checks or view the last log; opens from the **Show Menu** notification button or directly from the terminal |
+| `aur_malware_menu.sh` | fzf-driven TUI menu to run individual checks or view the last log; for terminal / SSH use |
 | `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages — catches quote-split, base64-decode-to-shell, `eval+$(...)`, `printf` hex/octal, and variable-split command reassembly |
 | `--check-yarn-cache` / `--check-pnpm-cache` | Extends npm/bun cache scanning to yarn and pnpm; includes fnm per-version Node installs |
 | `--check-bpftool` | Enumerates **all** loaded eBPF programs via `bpftool` — complements `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps) by catching unpinned or differently-named programs; warns on stealth hook types (kprobe/tracing/lsm/tracepoint); suppresses LSM false positives from systemd/AppArmor |

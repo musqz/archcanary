@@ -39,10 +39,8 @@ systemd timer (weekly + on boot)
             └── [11] kernel module / DKMS audit (needs root)
                     │
                     └── exit code 2 (infected)?
-                            └── notify-send.sh → critical alert + [Show Menu] button
-                                    └── terminator opens aur_malware_menu.sh
-                                            └── fzf menu: pick a check or view log
-                                                    └── returns to menu after each run
+                            └── notify-send.sh → critical alert + [Open Scanner] button
+                                    └── aur_malware_gui.sh opens directly (no terminal needed)
 
 aur_malware_gui.sh (on-demand — desktop shortcut or app launcher)
     └── yad list menu with per-session status column
@@ -75,7 +73,7 @@ Opened by the **Show Menu** notification button (or directly from a terminal) �
 |------|------|---------|
 | `aur_check-v2.sh` | Weekly + on boot (catches missed runs) | systemd timer with `Persistent=true` |
 | `aur_malware_gui.sh` | On demand | Desktop shortcut / app launcher |
-| `aur_malware_menu.sh` | On demand | **Show Menu** notification button or directly from terminal |
+| `aur_malware_menu.sh` | On demand | Directly from terminal (SSH / no display) |
 | `traur` | Before each AUR install | Manual — check maintainer reputation |
 | `aurscan` | Before each AUR install | Manual — run before `yay -S <pkg>` |
 

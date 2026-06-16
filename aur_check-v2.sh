@@ -1261,29 +1261,14 @@ echo "============================================================"
 
 if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
     _script_dir="$(dirname "$(realpath "$0")")"
-    _menu_script="$_script_dir/aur_malware_menu.sh"
-
-    # Detect terminal: prefer $TERMINAL, then common ones
-    _term=""
-    for _t in "${TERMINAL:-}" terminator kitty alacritty xterm gnome-terminal xfce4-terminal mate-terminal; do
-        [[ -n "$_t" ]] && command -v "$_t" &>/dev/null && { _term="$_t"; break; }
+    _gui_script=""
+    for _c in "$_script_dir/aur_malware_gui.sh" "$(command -v aur_malware_gui.sh 2>/dev/null || true)"; do
+        [[ -n "${_c:-}" && -x "$_c" ]] && { _gui_script="$_c"; break; }
     done
-
-    # Build terminal launch command for menu
-    _menu_cmd=""
-    if [[ -n "$_term" && -x "$_menu_script" ]]; then
-        case "$_term" in
-            terminator)  _menu_cmd="terminator -x bash -c '$_menu_script'" ;;
-            kitty)       _menu_cmd="kitty '$_menu_script'" ;;
-            gnome-terminal) _menu_cmd="gnome-terminal -- bash -c '$_menu_script'" ;;
-            xterm)       _menu_cmd="xterm -e '$_menu_script'" ;;
-            *)           _menu_cmd="$_term -e bash -c '$_menu_script'" ;;
-        esac
-    fi
 
     if command -v notify-send.sh &>/dev/null; then
         _notify_args=(-u critical -i dialog-warning)
-        [[ -n "$_menu_cmd" ]] && _notify_args+=(--action="Show Menu:$_menu_cmd")
+        [[ -n "$_gui_script" ]] && _notify_args+=(--action="Open Scanner:$_gui_script")
         notify-send.sh "${_notify_args[@]}" \
             "AUR: malicious package detected" \
             "Indicators found."
