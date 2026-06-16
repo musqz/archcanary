@@ -9,14 +9,17 @@
 | XDG config dir | Package lists live in `~/.config/aur-malware-check/` instead of alongside the script |
 | Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
 | Desktop alert | Fires a critical notification on exit code 2; with `notify-send.sh` it adds a **Show Menu** button (falls back to plain `notify-send`). `--no-notify` suppresses it |
+| `aur_malware_gui.sh` | yad GUI with grouped checks, per-session status column (✅/⚠/❌/?), and polkit auth for root-requiring checks (eBPF, bpftool, kmod). Live streaming output window. Install root helper with `./install.sh --system` |
 | `aur_malware_menu.sh` | fzf-driven TUI menu to run individual checks or view the last log; opens from the **Show Menu** notification button or directly from the terminal |
 | `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages — catches quote-split, base64-decode-to-shell, `eval+$(...)`, `printf` hex/octal, and variable-split command reassembly |
-| `--check-bpftool` | Enumerates **all** loaded eBPF programs via `bpftool` — complements `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps) by catching unpinned or differently-named programs; warns on stealth hook types (kprobe/tracing/lsm/tracepoint) used by eBPF rootkits |
+| `--check-yarn-cache` / `--check-pnpm-cache` | Extends npm/bun cache scanning to yarn and pnpm; includes fnm per-version Node installs |
+| `--check-bpftool` | Enumerates **all** loaded eBPF programs via `bpftool` — complements `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps) by catching unpinned or differently-named programs; warns on stealth hook types (kprobe/tracing/lsm/tracepoint); suppresses LSM false positives from systemd/AppArmor |
 | Hardened systemd check | `--check-systemd` now covers drop-in override dirs (`*.service.d/*.conf`), wider `Restart=` policy match (`always\|on-failure\|on-abnormal\|on-abort`), and `.timer` units with `OnBootSec=` + `Persistent=true` |
 | `--check-ldso` | Detects shared library injection via `/etc/ld.so.preload` — any non-empty content causes the dynamic linker to load the listed `.so` into every process; also flags `/etc/ld.so.conf.d/` entries modified within the campaign window |
 | `--check-autostart` | Scans `~/.config/autostart/*.desktop` for suspicious `Exec=` paths, user systemd services with unowned binaries, and shell RCs (`.bashrc`/`.zshrc`/`.profile`) for download-and-execute or `eval+subshell` patterns |
-| `--check-kmod` | Audits loaded kernel modules against pacman-owned `.ko` files; flags unowned modules and DKMS builds from untracked source packages (needs root) |
-| Updated lists | `nextfile-js` added to malicious npm list; package list refreshed to 1936 entries |
+| `--check-kmod` | Audits loaded kernel modules against pacman-owned `.ko` files; flags unowned modules and DKMS builds from untracked source packages (needs root). `DKMS_ALLOWLIST` env var to acknowledge known-good proprietary modules |
+| CHAOS RAT detection | Separate date window (2025-07-16..19) for the July 2025 CHAOS RAT campaign packages — does not interfere with the June 2026 campaign date window |
+| Updated lists | `nextfile-js`, `rakudo-star` added; package list refreshed to 1936+ entries |
 
 See [docs/systemd.md](docs/systemd.md) for running as a systemd user service with timer and desktop notifications.
 See [docs/my-setup.md](docs/my-setup.md) for the full personal setup — all components, how they connect, and reinstall steps.
