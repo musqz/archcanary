@@ -248,3 +248,16 @@ All threads on https://lists.archlinux.org/archives/list/aur-general@lists.archl
 - **Date:** 2026-06-09
 - **Content:** Concrete example of a malicious PKGBUILD commit showing the injected npm install payload.
 - **Relevant for:** Attack vector illustration.
+
+---
+
+## 8. Russian Spam Campaign (Separate from JS Supply-Chain)
+
+### 8.1 Initial Report
+- **URL:** https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/2YQSHTC27MOKDDKHZTH2BJGTEN2CYC7W/
+- **Date:** 2026-06-14, 18:03 UTC
+- **Author:** Sid Karunaratne
+- **Content:** 73+ AUR packages with PKGBUILD modifications injecting Russian spam echo statements into ~/.bashrc, ~/.zshrc at install time. Full package list extracted in `malicious_russian_spam_packages.txt`.
+- **Detection method:** `git grep --files-with-matches 'NoServices'` across all AUR remote refs.
+- **Status:** Reported to Arch DevOps, cleanup in progress.
+- **Relevant for:** Independent threat vector requiring separate detection patterns (shell config injection ≠ JS package manager detection).

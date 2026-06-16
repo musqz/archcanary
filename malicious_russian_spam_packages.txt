@@ -1,0 +1,83 @@
+# Russian Spam Campaign — AUR packages injecting spam into shell configs
+# Source: Sid Karunaratne, AUR REPORT THREAD, 2026-06-14
+# https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/2YQSHTC27MOKDDKHZTH2BJGTEN2CYC7W/
+#
+# These AUR packages had PKGBUILD modifications that inject Russian spam
+# echo statements into ~/.bashrc, ~/.zshrc, etc. at install time.
+# This is a SEPARATE campaign from the JS supply-chain attack (atomic-lockfile
+# / lockfile-js / nextfile-js / js-digest).
+#
+# Status: reported to Arch DevOps, cleanup in progress as of 2026-06-14.
+algobox
+alist-desktop-bin
+arpoison
+asymptote-git
+aurbs
+blackfire-cli
+ccsm-git
+chinadns
+closure-hib
+cmaptools
+cypher-shell
+daggerfall-fixes
+dbacl
+docan-bin
+docan-unstable
+emacs-evil
+enyo-launcher
+esy
+faudio-git
+findwild
+gbdk
+gnome-pomodoro-git
+hidapi-git
+hypatia
+infer
+kicadlibrarian
+libdmx
+libparserutils-git
+llama.cpp-sycl-f16-git
+nikto-git
+nodejs-serverless
+nodejs-uglifycss
+nullfs-dkms-git
+onivim2-git
+onvifviewer
+pcb
+pcmanx-gtk2-git
+perl-xml-filter-domfilter-libxml
+pfqueue
+pgdbf
+plasma-theme-helium
+plataro-icons
+pngrim-git
+proteus-hib
+psychopy
+purple-gowhatsapp
+python-cmake-bin
+python-graphsrv
+python-imagebackup
+python-json2html
+python-llama-cpp-hip
+python-monkeytype
+python-pytest-filedata
+python-tmpl
+redocly
+rigsofrods-bin
+ruby-open_uri_redirections
+ruby-snapsync
+samsung-ssd-dc-toolkit
+scd
+softmaker-office-2012-bin
+spacebar-client-git
+spacebar-git
+swig2
+systemtap-git
+tapeutape
+thomaswasalone-hib
+ttf-dotsies
+tuwunel-git
+ultimatevocalremovergui-git
+vaping
+vim-railscasts
+zenta-git
