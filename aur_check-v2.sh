@@ -163,8 +163,8 @@ DKMS_ALLOWLIST="${DKMS_ALLOWLIST:-}"
 _dkms_cfg="$AUR_CONFIG_DIR/dkms_allowlist.conf"
 if [[ -f "$_dkms_cfg" ]]; then
     while IFS= read -r _dl || [[ -n "$_dl" ]]; do
-        _dl="${_dl%%#*}"           # strip inline comments
-        _dl="${_dl//[[:space:]]/}" # strip whitespace
+        _dl="${_dl%%#*}"       # strip inline comments
+        read -r _dl _ <<< "$_dl"  # take first token only (ignores trailing descriptions)
         [[ -z "$_dl" ]] && continue
         DKMS_ALLOWLIST="${DKMS_ALLOWLIST:+${DKMS_ALLOWLIST}:}${_dl}"
     done < "$_dkms_cfg"

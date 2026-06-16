@@ -116,14 +116,14 @@ done
 if [[ ! -f "$CONFIG_DIR/dkms_allowlist.conf" ]]; then
     cat > "$CONFIG_DIR/dkms_allowlist.conf" << 'EOF'
 # DKMS modules to skip during --check-kmod
-# One module name per line; lines starting with # are comments.
+# One module name per line. Everything after # is a comment.
 # Add modules that are known-good but not tracked by pacman.
 #
 # Common examples (uncomment as needed):
-#   tuxedo-drivers   — TUXEDO Computers hardware driver
-#   v4l2loopback     — virtual camera (OBS, video conferencing)
-#   vboxdrv          — VirtualBox host kernel module
-#   vmmon            — VMware Workstation
+# tuxedo-drivers  # TUXEDO Computers hardware driver
+# v4l2loopback    # virtual camera (OBS, video conferencing)
+# vboxdrv         # VirtualBox host kernel module
+# vmmon           # VMware Workstation
 EOF
     echo "  seeded:    $CONFIG_DIR/dkms_allowlist.conf"
 else
