@@ -63,6 +63,12 @@ if $UNINSTALL; then
         fi
     done
 
+    local desktop_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications/aur-malware-check.desktop"
+    if [[ -f "$desktop_dst" ]]; then
+        rm "$desktop_dst"
+        echo "  removed: $desktop_dst"
+    fi
+
     if [[ -d "$CONFIG_DIR" ]]; then
         rm -rf "$CONFIG_DIR"
         echo "  removed: $CONFIG_DIR"
@@ -109,6 +115,12 @@ echo "  installed: $BIN_DIR/aur_malware_menu.sh"
 cp "$REPO_DIR/aur_malware_gui.sh" "$BIN_DIR/aur_malware_gui.sh"
 chmod +x "$BIN_DIR/aur_malware_gui.sh"
 echo "  installed: $BIN_DIR/aur_malware_gui.sh"
+
+# Install desktop entry
+DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$DESKTOP_DIR"
+cp "$REPO_DIR/aur-malware-check.desktop" "$DESKTOP_DIR/aur-malware-check.desktop"
+echo "  installed: $DESKTOP_DIR/aur-malware-check.desktop"
 
 # Seed config dir (only if files don't already exist)
 for f in package_list.txt malicious_npm_packages.txt; do
