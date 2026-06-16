@@ -11,6 +11,7 @@
 | Desktop alert | Fires a critical notification on exit code 2; with `notify-send.sh` it adds a **Show Menu** button (falls back to plain `notify-send`). `--no-notify` suppresses it |
 | `aur_malware_menu.sh` | fzf-driven TUI menu to run individual checks or view the last log; opens from the **Show Menu** notification button or directly from the terminal |
 | `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages (catches quote-split commands) |
+| `--check-bpftool` | Enumerates **all** loaded eBPF programs via `bpftool` — complements `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps) by catching unpinned or differently-named programs; warns on stealth hook types (kprobe/tracing/lsm/tracepoint) used by eBPF rootkits |
 | Updated lists | `nextfile-js` added to malicious npm list; package list refreshed to 1936 entries |
 
 See [docs/systemd.md](docs/systemd.md) for running as a systemd user service with timer and desktop notifications.
@@ -42,6 +43,9 @@ comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/YOUR
 
 # Full scan with all optional checks
 ./aur_check-v2.sh --full
+
+# Enumerate loaded eBPF programs (needs root) — flags stealth hook types
+sudo ./aur_check-v2.sh --check-bpftool
 
 # Interactive fzf menu — run individual checks or view last log
 ./aur_malware_menu.sh
@@ -80,7 +84,8 @@ A consolidated detection script combining the best features from all community f
 | Compressed log support (.gz/.xz/.zst/.bz2) | Kacper-Kondracki fork |
 | ~1600 known compromised packages (live via `--refresh`) | Consolidated from all sources + HedgeDoc |
 | systemd persistence check | Original addition |
-| eBPF rootkit check | Original addition |
+| eBPF rootkit check (`/sys/fs/bpf/hidden_*` maps) | Original addition |
+| eBPF program enumeration (`--check-bpftool`, via `bpftool prog/link show`) | Original addition |
 | npm cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
 | bun cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
 | `--refresh` flag (live package list) | PR #8 (drbbgh) |
@@ -252,7 +257,7 @@ This analysis aggregates information from the following sources:
 1. **Preserve the system**: Do not power off - use forensic acquisition with trusted media
 2. **Rotate ALL credentials**: Discord, GitHub, npm, Slack, Teams, SSH keys, Vault tokens, cloud provider keys
 3. **Check for persistence**: `systemctl list-units --type=service --state=running` (check for unknown services)
-4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`
+4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`, and enumerate loaded programs with `sudo bpftool prog show` / `sudo bpftool link show` — look for `kprobe`/`tracing`/`lsm`/`tracepoint` hooks you didn't install (or run `sudo aur_check-v2.sh --check-bpftool`)
 5. **Clean with trusted media**: Boot from Arch ISO, mount filesystem, remove malicious systemd units
 6. **Consider reinstallation**: The rootkit makes the system untrustworthy
 7. **Report findings**: https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/

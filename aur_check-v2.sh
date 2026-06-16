@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.4.0"
+SCRIPT_VERSION="2.5.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -56,6 +56,7 @@ CHECK_EBPF=false
 CHECK_NPM_CACHE=false
 CHECK_BUN_CACHE=false
 CHECK_PKGBUILD=false
+CHECK_BPFTOOL=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
@@ -77,7 +78,8 @@ for arg in "$@"; do
         --check-npm-cache) CHECK_NPM_CACHE=true ;;
         --check-bun-cache) CHECK_BUN_CACHE=true ;;
         --check-pkgbuild)  CHECK_PKGBUILD=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true ;;
+        --check-bpftool)   CHECK_BPFTOOL=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -94,6 +96,7 @@ for arg in "$@"; do
             echo "  --check-npm-cache  Check npm cache for packages listed in malicious_npm_packages.txt"
             echo "  --check-bun-cache  Check bun cache for packages listed in malicious_npm_packages.txt"
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
+            echo "  --check-bpftool    Enumerate loaded eBPF programs/links (needs root); flags stealth hook types"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
@@ -389,6 +392,58 @@ check_ebpf() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 8: loaded eBPF programs/links (bpftool)
+# Complements --check-ebpf: that greps /sys/fs/bpf for pinned hidden_* maps;
+# this enumerates ALL programs/links actually loaded in the kernel — including
+# UNPINNED ones an eBPF rootkit may keep alive via an open fd or a BPF link,
+# which the bpffs glob structurally cannot see.
+#
+# A loaded-program count is NOT itself an indicator: systemd, networking and
+# container runtimes legitimately load cgroup/sched_cls/xdp/socket_filter
+# programs. So this is informational, and only WARNS (exit 1, not 2) when
+# stealth-associated hook types are present — kprobe/kretprobe/tracepoint/
+# raw_tracepoint/perf_event/tracing(fentry,fexit,lsm)/lsm — the hooks an eBPF
+# rootkit uses to hide PIDs, files and itself. Legitimate if you run
+# bpftrace/bcc/sysprof/Falco; confirm the source before dismissing.
+# ---------------------------------------------------------------------------
+check_bpftool() {
+    if ! command -v bpftool &>/dev/null; then
+        echo "  Skipped: bpftool not installed (pacman -S bpf)."
+        return 0
+    fi
+
+    # Enumerating BPF objects requires CAP_BPF / CAP_SYS_ADMIN.
+    local progs
+    if ! progs=$(bpftool prog show 2>/dev/null); then
+        echo "  Cannot enumerate BPF programs — needs root."
+        echo "  → Try: sudo $0 --check-bpftool"
+        return 0
+    fi
+
+    if [[ -z "$progs" ]]; then
+        echo "  Clean: no eBPF programs loaded."
+        return 0
+    fi
+
+    local total stealth
+    total=$(grep -cE '^[0-9]+:' <<<"$progs")
+    # Match the program-type token (2nd field, e.g. "12: kprobe  name ...").
+    stealth=$(grep -oiwE 'kprobe|kretprobe|tracepoint|raw_tracepoint|perf_event|tracing|lsm' <<<"$progs" \
+              | tr '[:upper:]' '[:lower:]' | sort -u | paste -sd, -)
+
+    echo "  Loaded eBPF programs: $total"
+    if [[ -n "$stealth" ]]; then
+        echo "  WARNING: stealth-associated program types present: $stealth"
+        echo "  These hook types are used by eBPF rootkits to hide PIDs/files/processes."
+        echo "  Review: sudo bpftool prog show ; sudo bpftool link show"
+        echo "  (Legitimate if you run bpftrace/bcc/sysprof/Falco — confirm the source.)"
+        return 1
+    fi
+    echo "  Clean: only non-stealth program types (cgroup/net) loaded."
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Check 5: npm cache for malicious packages
 # ---------------------------------------------------------------------------
 check_npm_cache() {
@@ -603,6 +658,13 @@ fi
 if $CHECK_PKGBUILD; then
     echo "--- [7] PKGBUILD/install file scan (obfuscation-aware) ---"
     check_pkgbuild_caches && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_BPFTOOL; then
+    echo "--- [8] Loaded eBPF programs/links (bpftool) ---"
+    check_bpftool && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi

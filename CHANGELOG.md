@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0 (2026-06-16) — personal fork
+- New: `--check-bpftool` (included in `--full`) — enumerates **all** loaded eBPF programs via `bpftool prog show`, complementing `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps). Catches unpinned or differently-named programs an eBPF rootkit may keep alive via an open fd or a BPF link. Informational by default; **warns** (exit 1) when stealth-associated hook types are present (`kprobe`/`kretprobe`/`tracepoint`/`raw_tracepoint`/`perf_event`/`tracing`/`lsm`). Requires root to enumerate; skips gracefully otherwise. Needs the `bpf` package (provides `bpftool`).
+- Change: `install.sh` now prefers `~/.local/bin` (XDG) over `~/bin`
+
 ## 2.4.0 (2026-06-14) — personal fork
 - New: XDG config dir — package lists live in `~/.config/aur-malware-check/` (respects `$XDG_CONFIG_HOME`); created automatically on first run
 - New: auto-seed config dir from bundled txt files when running from a new install location

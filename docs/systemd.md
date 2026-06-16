@@ -14,11 +14,13 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/aur-malware-check.sh --refresh --full --all-time
+ExecStart=%h/.local/bin/aur-malware-check.sh --refresh --full --all-time --log-file=%h/.config/aur-malware-check/last-scan.log
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=aur-malware-check
 ```
+
+> `--log-file=` is set to a fixed path so the scan overwrites one log instead of dropping a timestamped `aur-check-<date>.log` in the service's working directory (`$HOME` for user units) on every run. Full output is also in the journal.
 
 **`~/.config/systemd/user/aur-malware-check.timer`**
 ```ini
@@ -26,6 +28,7 @@ SyslogIdentifier=aur-malware-check
 Description=Run AUR malware check weekly and on boot
 
 [Timer]
+OnBootSec=5min
 OnCalendar=weekly
 Persistent=true
 
@@ -74,7 +77,7 @@ The script prefers `notify-send.sh` if present and silently falls back to `notif
 
 ### Interactive menu
 
-When the **Show Menu** button is clicked, a terminal opens running `aur_malware_menu.sh` — an fzf menu to view the last log or re-run individual checks (systemd, eBPF, npm/bun cache, PKGBUILD).
+When the **Show Menu** button is clicked, a terminal opens running `aur_malware_menu.sh` — an fzf menu to view the last log or re-run individual checks (systemd, eBPF, bpftool, npm/bun cache, PKGBUILD).
 
 Requirements for the button + menu:
 
@@ -87,3 +90,43 @@ Place `aur_malware_menu.sh` next to the main script (e.g. `~/.local/bin/`).
 ## Refreshing the package list
 
 `--refresh` is included in the service above. It fetches the latest compromised package list from the Arch Linux HedgeDoc and writes it to `~/.config/aur-malware-check/package_list.txt` before each scan.
+
+## Scan after every pacman transaction (optional)
+
+The weekly timer catches things eventually; a `.path` unit watches `/var/log/pacman.log` and runs a scan **right after any install/upgrade/removal** — so a freshly installed compromised package is caught immediately.
+
+This uses a **dedicated lightweight service** that runs **without `--refresh`** (uses the cached list the weekly timer keeps fresh) so each transaction triggers an instant, offline scan instead of a network round-trip.
+
+**`~/.config/systemd/user/aur-malware-check-onchange.service`**
+```ini
+[Unit]
+Description=AUR malware check (triggered after pacman transactions)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/aur-malware-check.sh --full --all-time --log-file=%h/.config/aur-malware-check/last-scan.log
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aur-malware-check
+```
+
+**`~/.config/systemd/user/aur-malware-check.path`**
+```ini
+[Unit]
+Description=Trigger AUR malware check after pacman transactions
+
+[Path]
+PathChanged=/var/log/pacman.log
+Unit=aur-malware-check-onchange.service
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start:
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now aur-malware-check.path
+```
+
+> The path unit only triggers when `/var/log/pacman.log` changes; systemd coalesces rapid writes (e.g. a big `-Syu`) so the scan runs once after the transaction settles. Use `--full` (cached list) here rather than `--refresh` to keep it fast and offline; freshness comes from the weekly timer.

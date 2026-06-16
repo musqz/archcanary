@@ -6,12 +6,13 @@ Full overview of how this fork is deployed and how the pieces connect.
 
 | Component | Package / Source | Purpose |
 |-----------|-----------------|---------|
-| `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence, eBPF rootkit, npm/bun cache, PKGBUILD obfuscation |
+| `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence, eBPF rootkit, npm/bun cache, PKGBUILD obfuscation, loaded-eBPF enumeration (`bpftool`) |
 | `aur_malware_menu.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | fzf TUI menu — run individual checks or view last log from the notification |
 | `aurscan` | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM-based pre-install PKGBUILD scanner using Claude — proactive check before installing an AUR package |
 | `notify-send.sh` | [vlevit/notify-send.sh](https://github.com/vlevit/notify-send.sh) — [AUR: notify-send.sh](https://aur.archlinux.org/packages/notify-send.sh) | Drop-in replacement for `notify-send` with action button support — enables the **Show Menu** button on the alert |
 | `fzf` | [junegunn/fzf](https://github.com/junegunn/fzf) — official repos | Menu picker used by `aur_malware_menu.sh` |
 | `libnotify` | official repos | Fallback notification backend when `notify-send.sh` is not installed |
+| `bpftool` | `bpf` — official repos | Enumerates loaded eBPF programs for `--check-bpftool` |
 | terminal emulator | your preferred terminal | Opened by the **Show Menu** button — auto-detected via `$TERMINAL`, or falls back to `kitty` → `alacritty` → `xterm` → `gnome-terminal` → `xfce4-terminal` |
 
 ## How the pieces connect
@@ -25,7 +26,8 @@ systemd timer (weekly + on boot)
             ├── [4] eBPF rootkit traces
             ├── [5] npm cache
             ├── [6] bun cache
-            └── [7] PKGBUILD / install file scan (obfuscation-aware)
+            ├── [7] PKGBUILD / install file scan (obfuscation-aware)
+            └── [8] loaded eBPF programs via bpftool (needs root; stealth hook types)
                     │
                     └── exit code 2 (infected)?
                             └── notify-send.sh → critical alert + [Show Menu] button
@@ -64,7 +66,8 @@ aurscan (manual — before installing any AUR package)
 
 ```bash
 # Official repos (terminator is personal preference — any terminal works)
-sudo pacman -S fzf libnotify
+# bpf provides bpftool, used by --check-bpftool
+sudo pacman -S fzf libnotify bpf
 
 # AUR
 yay -S notify-send.sh
@@ -83,19 +86,19 @@ See [systemd.md](systemd.md) for the full service and timer contents.
 # 1. Clone the fork
 git clone https://github.com/musqz/aur-malware-check.git ~/Github/aur-malware-check
 
-# 2. Install dependencies
-sudo pacman -S fzf libnotify
+# 2. Install dependencies (bpf provides bpftool for --check-bpftool)
+sudo pacman -S fzf libnotify bpf
 yay -S notify-send.sh
 
 # aurscan — GitHub only, no AUR package
 git clone https://github.com/manticore-projects/aurscan.git
 # see its README for install instructions
 
-# 3. Run install script (auto-detects ~/.local/bin or ~/bin from PATH)
+# 3. Run install script (installs to ~/.local/bin by default)
 bash ~/Github/aur-malware-check/install.sh
 
-# To use ~/bin explicitly:
-# bash ~/Github/aur-malware-check/install.sh ~/bin
+# To install elsewhere, pass a target dir:
+# bash ~/Github/aur-malware-check/install.sh ~/some/bin
 
 # 4. Run a first scan with package list refresh
 aur-malware-check.sh --refresh --full --all-time

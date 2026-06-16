@@ -2,17 +2,17 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# install.sh — install aur-malware-check to ~/.local/bin or ~/bin
+# install.sh — install aur-malware-check to ~/.local/bin (preferred) or ~/bin
 # ---------------------------------------------------------------------------
 
 REPO_DIR="$(dirname "$(realpath "$0")")"
 
-# Determine install dir: prefer ~/bin if in PATH, else ~/.local/bin
+# Determine install dir: prefer the XDG ~/.local/bin, fall back to ~/bin
 DEFAULT_BIN=""
-if [[ ":$PATH:" == *":$HOME/bin:"* ]]; then
-    DEFAULT_BIN="$HOME/bin"
-elif [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
+if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
     DEFAULT_BIN="$HOME/.local/bin"
+elif [[ ":$PATH:" == *":$HOME/bin:"* ]]; then
+    DEFAULT_BIN="$HOME/bin"
 else
     DEFAULT_BIN="$HOME/.local/bin"
 fi
