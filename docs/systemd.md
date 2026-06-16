@@ -77,7 +77,7 @@ The script prefers `notify-send.sh` if present and silently falls back to `notif
 
 ### Interactive menu
 
-When the **Show Menu** button is clicked, a terminal opens running `aur_malware_menu.sh` — an fzf menu to view the last log or re-run individual checks (systemd, eBPF, bpftool, npm/bun cache, PKGBUILD).
+When the **Show Menu** button is clicked, a terminal opens running `aur_malware_menu.sh` — an fzf menu to view the last log or re-run individual checks (systemd, eBPF, bpftool, npm/bun cache, PKGBUILD, ld.so.preload, XDG autostart, kernel modules).
 
 Requirements for the button + menu:
 

@@ -6,7 +6,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 
 | Component | Package / Source | Purpose |
 |-----------|-----------------|---------|
-| `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence, eBPF rootkit, npm/bun cache, PKGBUILD obfuscation, loaded-eBPF enumeration (`bpftool`) |
+| `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
 | `aur_malware_menu.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | fzf TUI menu — run individual checks or view last log from the notification |
 | `aurscan` | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM-based pre-install PKGBUILD scanner using Claude — proactive check before installing an AUR package |
 | `notify-send.sh` | [vlevit/notify-send.sh](https://github.com/vlevit/notify-send.sh) — [AUR: notify-send.sh](https://aur.archlinux.org/packages/notify-send.sh) | Drop-in replacement for `notify-send` with action button support — enables the **Show Menu** button on the alert |
@@ -20,14 +20,17 @@ Full overview of how this fork is deployed and how the pieces connect.
 ```
 systemd timer (weekly + on boot)
     └── aur_check-v2.sh --refresh --full --all-time
-            ├── [1] currently installed foreign packages
-            ├── [2] historical pacman logs
-            ├── [3] systemd persistence artifacts
-            ├── [4] eBPF rootkit traces
-            ├── [5] npm cache
-            ├── [6] bun cache
-            ├── [7] PKGBUILD / install file scan (obfuscation-aware)
-            └── [8] loaded eBPF programs via bpftool (needs root; stealth hook types)
+            ├── [1]  currently installed foreign packages
+            ├── [2]  historical pacman logs
+            ├── [3]  systemd persistence (services, drop-ins, timers)
+            ├── [4]  eBPF rootkit traces (/sys/fs/bpf/hidden_*)
+            ├── [5]  npm cache
+            ├── [6]  bun cache
+            ├── [7]  PKGBUILD / install file scan (obfuscation-aware)
+            ├── [8]  loaded eBPF programs via bpftool (stealth hook types)
+            ├── [9]  ld.so.preload injection
+            ├── [10] XDG autostart + shell RC persistence
+            └── [11] kernel module / DKMS audit (needs root)
                     │
                     └── exit code 2 (infected)?
                             └── notify-send.sh → critical alert + [Show Menu] button

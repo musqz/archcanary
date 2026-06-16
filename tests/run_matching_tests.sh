@@ -456,6 +456,57 @@ test_pkgbuild_obfuscation() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 13: check_kmod — unknown module detection via mocked lsmod
+# ---------------------------------------------------------------------------
+test_check_kmod() {
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --check-kmod --no-notify
+    )
+    local out rc=0
+
+    # Helper: create a script that outputs fixed content
+    make_cmd_script() {
+        local script content
+        script=$(mktemp); content="$1"
+        printf '#!/bin/sh\nprintf "%%s" "%s"\n' "$content" > "$script"
+        chmod +x "$script"; echo "$script"
+    }
+
+    local null_dkms
+    null_dkms=$(make_cmd_script "")
+
+    # Sub-test A: lsmod with an unknown module → WARNING (exit 2)
+    local lsmod_evil
+    lsmod_evil=$(make_cmd_script "$(printf 'Module                  Size  Used by\nevil_rootkit_kmod      65536  0\n')")
+
+    rc=0
+    out=$(LSMOD_CMD="$lsmod_evil" DKMS_CMD="$null_dkms" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING"* && "$out" == *"evil_rootkit_kmod"* ]]; then
+        pass "check_kmod: unknown module → WARNING (exit 2) with name listed"
+    else
+        fail "check_kmod: unknown module not detected, rc=$rc"
+    fi
+
+    # Sub-test B: empty lsmod + empty dkms → clean
+    local lsmod_empty
+    lsmod_empty=$(make_cmd_script "$(printf 'Module                  Size  Used by\n')")
+
+    rc=0
+    out=$(LSMOD_CMD="$lsmod_empty" DKMS_CMD="$null_dkms" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_kmod: empty lsmod/dkms → clean"
+    else
+        fail "check_kmod: empty lsmod/dkms → expected clean, got: $out"
+    fi
+
+    rm -f "$null_dkms" "$lsmod_evil" "$lsmod_empty"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -497,6 +548,9 @@ test_check_autostart
 
 $VERBOSE && msg "--- Test 12: pkgbuild_obfuscation ---"
 test_pkgbuild_obfuscation
+
+$VERBOSE && msg "--- Test 13: check_kmod ---"
+test_check_kmod
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

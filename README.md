@@ -10,8 +10,12 @@
 | Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
 | Desktop alert | Fires a critical notification on exit code 2; with `notify-send.sh` it adds a **Show Menu** button (falls back to plain `notify-send`). `--no-notify` suppresses it |
 | `aur_malware_menu.sh` | fzf-driven TUI menu to run individual checks or view the last log; opens from the **Show Menu** notification button or directly from the terminal |
-| `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages (catches quote-split commands) |
+| `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages — catches quote-split, base64-decode-to-shell, `eval+$(...)`, `printf` hex/octal, and variable-split command reassembly |
 | `--check-bpftool` | Enumerates **all** loaded eBPF programs via `bpftool` — complements `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps) by catching unpinned or differently-named programs; warns on stealth hook types (kprobe/tracing/lsm/tracepoint) used by eBPF rootkits |
+| Hardened systemd check | `--check-systemd` now covers drop-in override dirs (`*.service.d/*.conf`), wider `Restart=` policy match (`always\|on-failure\|on-abnormal\|on-abort`), and `.timer` units with `OnBootSec=` + `Persistent=true` |
+| `--check-ldso` | Detects shared library injection via `/etc/ld.so.preload` — any non-empty content causes the dynamic linker to load the listed `.so` into every process; also flags `/etc/ld.so.conf.d/` entries modified within the campaign window |
+| `--check-autostart` | Scans `~/.config/autostart/*.desktop` for suspicious `Exec=` paths, user systemd services with unowned binaries, and shell RCs (`.bashrc`/`.zshrc`/`.profile`) for download-and-execute or `eval+subshell` patterns |
+| `--check-kmod` | Audits loaded kernel modules against pacman-owned `.ko` files; flags unowned modules and DKMS builds from untracked source packages (needs root) |
 | Updated lists | `nextfile-js` added to malicious npm list; package list refreshed to 1936 entries |
 
 See [docs/systemd.md](docs/systemd.md) for running as a systemd user service with timer and desktop notifications.
@@ -83,11 +87,14 @@ A consolidated detection script combining the best features from all community f
 | Historical pacman.log scanning | Kacper-Kondracki fork |
 | Compressed log support (.gz/.xz/.zst/.bz2) | Kacper-Kondracki fork |
 | ~1600 known compromised packages (live via `--refresh`) | Consolidated from all sources + HedgeDoc |
-| systemd persistence check | Original addition |
+| systemd persistence check (drop-ins, timers, wider Restart= match) | Original addition + hardened |
 | eBPF rootkit check (`/sys/fs/bpf/hidden_*` maps) | Original addition |
 | eBPF program enumeration (`--check-bpftool`, via `bpftool prog/link show`) | Original addition |
 | npm cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
 | bun cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
+| `ld.so.preload` injection check (`--check-ldso`) | Original addition |
+| XDG autostart + shell RC persistence (`--check-autostart`) | Original addition |
+| Kernel module / DKMS audit (`--check-kmod`) | Original addition |
 | `--refresh` flag (live package list) | PR #8 (drbbgh) |
 | `--package-list=PATH` CLI flag | Original addition |
 | `--malicious-npm-list=PATH` CLI flag | Original addition |
@@ -256,8 +263,11 @@ This analysis aggregates information from the following sources:
 
 1. **Preserve the system**: Do not power off - use forensic acquisition with trusted media
 2. **Rotate ALL credentials**: Discord, GitHub, npm, Slack, Teams, SSH keys, Vault tokens, cloud provider keys
-3. **Check for persistence**: `systemctl list-units --type=service --state=running` (check for unknown services)
+3. **Check for persistence**: `systemctl list-units --type=service --state=running` (check for unknown services); also check drop-ins and timers with `--check-systemd`
 4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`, and enumerate loaded programs with `sudo bpftool prog show` / `sudo bpftool link show` — look for `kprobe`/`tracing`/`lsm`/`tracepoint` hooks you didn't install (or run `sudo aur_check-v2.sh --check-bpftool`)
+4a. **Check for library injection**: `cat /etc/ld.so.preload` — any non-empty content means a `.so` is being injected into every process (or run `aur_check-v2.sh --check-ldso`)
+4b. **Check for user-space persistence**: review `~/.config/autostart/`, `~/.config/systemd/user/`, and shell RC files for suspicious entries (or run `aur_check-v2.sh --check-autostart`)
+4c. **Check for rogue kernel modules**: `lsmod` and `dkms status` — flag any module not from a known package (or run `sudo aur_check-v2.sh --check-kmod`)
 5. **Clean with trusted media**: Boot from Arch ISO, mount filesystem, remove malicious systemd units
 6. **Consider reinstallation**: The rootkit makes the system untrustworthy
 7. **Report findings**: https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/

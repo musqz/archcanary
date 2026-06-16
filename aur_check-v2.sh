@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.7.1"
+SCRIPT_VERSION="2.8.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -59,6 +59,7 @@ CHECK_PKGBUILD=false
 CHECK_BPFTOOL=false
 CHECK_LDSO=false
 CHECK_AUTOSTART=false
+CHECK_KMOD=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
@@ -83,7 +84,8 @@ for arg in "$@"; do
         --check-bpftool)   CHECK_BPFTOOL=true ;;
         --check-ldso)      CHECK_LDSO=true ;;
         --check-autostart) CHECK_AUTOSTART=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true ;;
+        --check-kmod)      CHECK_KMOD=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -103,6 +105,7 @@ for arg in "$@"; do
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links (needs root); flags stealth hook types"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
             echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
+            echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
@@ -729,6 +732,77 @@ check_autostart() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 11: kernel module / DKMS audit
+# Flags loaded modules not traceable to any pacman-installed package, and
+# DKMS modules whose source package is not tracked by pacman.
+# Requires root for reliable module attribution; skips gracefully otherwise.
+# LSMOD_CMD / DKMS_CMD env vars override the real commands for testing.
+# ---------------------------------------------------------------------------
+check_kmod() {
+    local lsmod_cmd="${LSMOD_CMD:-lsmod}"
+    local dkms_cmd="${DKMS_CMD:-dkms}"
+    local found=0
+
+    # Root check — module file attribution via pacman -Ql needs root-readable paths
+    if [[ $EUID -ne 0 && -z "${LSMOD_CMD:-}" ]]; then
+        echo "  Skipped: --check-kmod requires root for reliable module attribution."
+        echo "  → Try: sudo $0 --check-kmod"
+        return 0
+    fi
+
+    # Build set of all .ko paths owned by pacman
+    local pacman_mods
+    pacman_mods=$(pacman -Ql 2>/dev/null | awk '{print $2}' | grep '\.ko' | sed 's/\.ko.*//' | xargs -I{} basename {} 2>/dev/null | sort -u)
+
+    local lsmod_out
+    if ! lsmod_out=$($lsmod_cmd 2>/dev/null); then
+        echo "  Skipped: could not run lsmod."
+        return 0
+    fi
+
+    local unknown=()
+    while IFS= read -r line; do
+        # lsmod format: Module Size UsedBy
+        local mod
+        mod=$(awk '{print $1}' <<< "$line")
+        [[ "$mod" == "Module" || -z "$mod" ]] && continue
+        if ! grep -qxF "$mod" <<< "$pacman_mods" 2>/dev/null; then
+            unknown+=("$mod")
+        fi
+    done <<< "$lsmod_out"
+
+    if [[ ${#unknown[@]} -gt 0 ]]; then
+        echo "  WARNING: ${#unknown[@]} loaded module(s) not found in any pacman package:"
+        print_list unknown
+        echo "  Verify with: modinfo <module> ; pacman -Qo \$(modinfo -n <module>)"
+        found=2
+    else
+        echo "  Clean: all loaded modules traceable to pacman packages."
+    fi
+
+    # DKMS check (optional — skip if dkms not installed)
+    if command -v "$dkms_cmd" &>/dev/null || [[ -n "${DKMS_CMD:-}" ]]; then
+        local dkms_out
+        dkms_out=$($dkms_cmd status 2>/dev/null) || dkms_out=""
+        if [[ -n "$dkms_out" ]]; then
+            while IFS= read -r entry; do
+                [[ -z "$entry" ]] && continue
+                local pkg_name
+                # dkms status format: "name/version, kernel, arch: status"
+                # extract just the name before the first /
+                pkg_name=$(awk -F'[/,]' '{print $1}' <<< "$entry" | xargs)
+                if ! pacman -Qi "$pkg_name" &>/dev/null 2>&1; then
+                    echo "  WARNING: DKMS module from untracked source: $entry"
+                    found=2
+                fi
+            done <<< "$dkms_out"
+        fi
+    fi
+
+    return $found
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
@@ -835,6 +909,13 @@ fi
 if $CHECK_AUTOSTART; then
     echo "--- [10] XDG autostart + shell RC persistence check ---"
     check_autostart && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    echo
+fi
+
+if $CHECK_KMOD; then
+    echo "--- [11] Kernel module / DKMS audit ---"
+    check_kmod && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi

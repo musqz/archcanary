@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.8.0 (2026-06-16) — personal fork
+- New: `--check-kmod` (included in `--full`) — audits loaded kernel modules against the full set of `.ko` files owned by pacman packages; flags any module with no traceable owner. Also checks `dkms status` for DKMS modules whose source package is not in `pacman -Q`. Requires root for reliable module attribution; skips gracefully otherwise. `LSMOD_CMD` / `DKMS_CMD` env vars injectable for testing.
+
 ## 2.7.1 (2026-06-16) — personal fork
 - Improved: `--check-pkgbuild` now detects four additional obfuscation patterns beyond the original quote-stripping: base64-decode-to-shell (`base64 -d | bash`), `eval`+subshell (`eval $(...)`, eval+backtick), `printf` hex/octal escape sequences, and variable-split command reassembly (`a=bu; b=n; $a$b add`)
 - `PKGBUILD_CACHE_DIRS` env var (colon-separated) overrides AUR helper cache locations for testing
