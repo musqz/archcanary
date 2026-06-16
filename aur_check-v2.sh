@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.7.0"
+SCRIPT_VERSION="2.7.1"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -555,13 +555,10 @@ check_bun_cache() {
 # obfuscation like 'b''u''n' 'a'"d""d" 'j''s'"-""d""i""g""e""s""t"
 # ---------------------------------------------------------------------------
 check_pkgbuild_caches() {
-    local cache_dirs=(
-        "$HOME/.cache/yay"
-        "$HOME/.cache/paru"
-        "$HOME/.cache/aurutils"
-        "$HOME/.cache/pikaur"
-        "$HOME/.cache/trizen"
-    )
+    # PKGBUILD_CACHE_DIRS overrides the default AUR helper cache locations (colon-separated)
+    local cache_dirs_default="$HOME/.cache/yay:$HOME/.cache/paru:$HOME/.cache/aurutils:$HOME/.cache/pikaur:$HOME/.cache/trizen"
+    IFS=: read -ra cache_dirs <<< "${PKGBUILD_CACHE_DIRS:-$cache_dirs_default}"
+
     local found_count=0
     local scanned=0
 
@@ -570,18 +567,49 @@ check_pkgbuild_caches() {
         local lineno=0
         while IFS= read -r line; do
             (( lineno++ )) || true
+
+            # --- Pattern 1: quote-split bun/npm command (original) ---
             local stripped="${line//\'/}"
             stripped="${stripped//\"/}"
             if [[ "$stripped" =~ (bun[[:space:]]+add|npm[[:space:]]+install) ]]; then
                 for pkg in "${MALICIOUS_NPM_PKGS[@]}"; do
                     if [[ "$stripped" == *"$pkg"* ]]; then
-                        echo "  WARNING: malicious command in $file:$lineno"
+                        echo "  WARNING: malicious package install in $file:$lineno"
                         echo "    $line"
                         found_count=2
                         break
                     fi
                 done
             fi
+
+            # --- Pattern 2: base64 decode piped to shell ---
+            if [[ "$line" =~ base64[[:space:]]+(--decode|-d)[[:space:]]*\|[[:space:]]*(bash|sh|eval) ]]; then
+                echo "  WARNING: base64-decode-to-shell in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 3: eval + command substitution ---
+            if [[ "$line" =~ eval[[:space:]]+\$\( || "$line" =~ eval[[:space:]]+\` ]]; then
+                echo "  WARNING: eval+subshell in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 4: printf hex/octal obfuscation ---
+            if [[ "$line" == *'printf'* ]] && [[ "$line" == *'\x'* || "$line" == *'\0'* ]]; then
+                echo "  WARNING: printf hex/octal obfuscation in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 5: variable-split command reassembly (a=bu; b=n; $a$b) ---
+            if [[ "$line" =~ [a-z_]+=[a-zA-Z]+\;[[:space:]]*[a-z_]+=[a-zA-Z]+\;[[:space:]]*\$ ]]; then
+                echo "  WARNING: variable-split command reassembly in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
         done < "$file"
     done < <(
         for dir in "${cache_dirs[@]}"; do

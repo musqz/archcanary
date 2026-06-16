@@ -1,0 +1,11 @@
+pkgname=pkg-clean
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/pkg-1.0.tar.gz")
+build() {
+    ./configure --prefix=/usr
+    make
+}
+package() {
+    make DESTDIR="$pkgdir" install
+}

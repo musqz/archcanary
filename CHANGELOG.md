@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.7.1 (2026-06-16) — personal fork
+- Improved: `--check-pkgbuild` now detects four additional obfuscation patterns beyond the original quote-stripping: base64-decode-to-shell (`base64 -d | bash`), `eval`+subshell (`eval $(...)`, eval+backtick), `printf` hex/octal escape sequences, and variable-split command reassembly (`a=bu; b=n; $a$b add`)
+- `PKGBUILD_CACHE_DIRS` env var (colon-separated) overrides AUR helper cache locations for testing
+
 ## 2.7.0 (2026-06-16) — personal fork
 - New: `--check-autostart` (included in `--full`) — detects low-privilege persistence requiring no root: suspicious XDG autostart `.desktop` files (`Exec=` outside `/usr/` or `/opt/`), user systemd services whose `ExecStart=` binary is untracked by pacman, and shell RC files (`.bashrc`, `.zshrc`, `.bash_profile`, `.profile`) containing download-and-execute or `eval`+subshell patterns
 - Home dir injectable via `AUTOSTART_HOME` for testing

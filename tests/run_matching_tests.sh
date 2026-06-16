@@ -393,6 +393,69 @@ test_check_autostart() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 12: check_pkgbuild_caches hardened obfuscation patterns
+# ---------------------------------------------------------------------------
+test_pkgbuild_obfuscation() {
+    local fixtures="$SCRIPT_DIR/fake_pkgbuilds"
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --check-pkgbuild --no-notify
+    )
+    local out rc=0
+
+    # Sub-test A: base64 -d | bash → WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-base64" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"base64"* ]]; then
+        pass "pkgbuild_obfuscation: base64-decode-to-shell detected"
+    else
+        fail "pkgbuild_obfuscation: base64 pattern missed, rc=$rc"
+    fi
+
+    # Sub-test B: eval $(...) → WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-eval" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"eval"* ]]; then
+        pass "pkgbuild_obfuscation: eval+subshell detected"
+    else
+        fail "pkgbuild_obfuscation: eval pattern missed, rc=$rc"
+    fi
+
+    # Sub-test C: printf hex → WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-printf" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"printf"* ]]; then
+        pass "pkgbuild_obfuscation: printf hex/octal detected"
+    else
+        fail "pkgbuild_obfuscation: printf pattern missed, rc=$rc"
+    fi
+
+    # Sub-test D: variable-split reassembly → WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-varsplit" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"variable-split"* ]]; then
+        pass "pkgbuild_obfuscation: variable-split reassembly detected"
+    else
+        fail "pkgbuild_obfuscation: varsplit pattern missed, rc=$rc"
+    fi
+
+    # Sub-test E: clean PKGBUILD → no WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-clean" \
+        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "pkgbuild_obfuscation: clean PKGBUILD → no false positive"
+    else
+        fail "pkgbuild_obfuscation: clean PKGBUILD triggered WARNING — false positive"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -431,6 +494,9 @@ test_check_systemd_hardened
 
 $VERBOSE && msg "--- Test 11: check_autostart ---"
 test_check_autostart
+
+$VERBOSE && msg "--- Test 12: pkgbuild_obfuscation ---"
+test_pkgbuild_obfuscation
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

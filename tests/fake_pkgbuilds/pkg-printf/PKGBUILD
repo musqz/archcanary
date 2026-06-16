@@ -1,0 +1,6 @@
+pkgname=pkg-printf
+pkgver=1.0
+pkgrel=1
+build() {
+    printf '\x62\x75\x6e' | bash
+}
