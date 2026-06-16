@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# install.sh — install aur-malware-check to ~/.local/bin (preferred) or ~/bin
+# install.sh — install or uninstall aur-malware-check
+#   Usage: ./install.sh [uninstall] [bin-dir]
 # ---------------------------------------------------------------------------
 
 REPO_DIR="$(dirname "$(realpath "$0")")"
@@ -17,8 +18,47 @@ else
     DEFAULT_BIN="$HOME/.local/bin"
 fi
 
+# Parse arguments: optional "uninstall" verb, optional bin-dir
+UNINSTALL=false
+if [[ "${1:-}" == "uninstall" ]]; then
+    UNINSTALL=true
+    shift
+fi
+
 BIN_DIR="${1:-$DEFAULT_BIN}"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/aur-malware-check"
+
+if $UNINSTALL; then
+    echo "Uninstalling from: $BIN_DIR"
+    echo "Config dir:        $CONFIG_DIR"
+    echo
+
+    removed=0
+    for f in aur-malware-check.sh aur_malware_menu.sh; do
+        if [[ -f "$BIN_DIR/$f" ]]; then
+            rm "$BIN_DIR/$f"
+            echo "  removed: $BIN_DIR/$f"
+            removed=$((removed + 1))
+        else
+            echo "  not found: $BIN_DIR/$f"
+        fi
+    done
+
+    if [[ -d "$CONFIG_DIR" ]]; then
+        rm -rf "$CONFIG_DIR"
+        echo "  removed: $CONFIG_DIR"
+    else
+        echo "  not found: $CONFIG_DIR"
+    fi
+
+    echo
+    if [[ $removed -gt 0 ]]; then
+        echo "Done. aur-malware-check uninstalled."
+    else
+        echo "Nothing was removed (files not found at $BIN_DIR)."
+    fi
+    exit 0
+fi
 
 echo "Installing to: $BIN_DIR"
 echo "Config dir:    $CONFIG_DIR"
