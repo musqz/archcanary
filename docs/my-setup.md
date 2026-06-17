@@ -128,10 +128,11 @@ The GUI is for interactive desktop use; the CLI covers everything else (SSH, cro
 
 ~/.config/aur-malware-check/
     ├── package_list.txt              # refreshed weekly via --refresh
-    ├── malicious_npm_packages.txt    # static list, auto-seeded on first run
-    └── dkms_allowlist.conf           # DKMS modules to skip in --check-kmod
+    └── malicious_npm_packages.txt    # static list, auto-seeded on first run
 
-~/.config/systemd/user/                   # desktop notifier (see systemd.md)
+~/.config/systemd/user/                   # installed by ./install.sh --system
+    ├── aur-malware-check-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
+    ├── aur-malware-check-user.timer      # weekly + on boot
     ├── aur-malware-check-notify.path     # watches the root scan's result file
     └── aur-malware-check-notify.service  # greps INFECTED → notify-send
 
@@ -142,12 +143,14 @@ The GUI is for interactive desktop use; the CLI covers everything else (SSH, cro
     ├── malicious_npm_packages.txt
     ├── chaos_rat_packages.txt
     └── root-helper                   # pkexec target (validates flags, restores XDG env)
+/etc/aur-malware-check/
+    └── dkms_allowlist.conf           # the single DKMS allowlist (edit via GUI/sudoedit)
 /usr/share/polkit-1/actions/
     └── org.aur-malware-check.policy  # polkit policy allowing GUI to call root-helper
 
-# automated scan (root) — units you create per docs/systemd.md
+# automated scan — units installed by ./install.sh --system
 /etc/systemd/system/
-    ├── aur-malware-check.service     # full scan as root, writes last-scan.log
+    ├── aur-malware-check.service     # system-level scan as root, writes last-scan.log
     ├── aur-malware-check.timer       # weekly + on boot
     ├── aur-malware-check-onchange.service
     └── aur-malware-check.path        # triggers after each pacman transaction

@@ -7,6 +7,9 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.9.9 (2026-06-17) — personal fork
+- Change: the DKMS allowlist is now a **single system-wide file** at `/etc/aur-malware-check/dkms_allowlist.conf`. After the system/user scan split the kmod audit only runs as root, so a per-user `~/.config` copy was vestigial and confusing (two files, only `/etc` authoritative). The script now reads only `/etc` (override with `DKMS_ALLOWLIST_FILE` for tests); `install.sh --system` seeds it (migrating any existing `~/.config` entries, then removing that per-user copy); base `install.sh` no longer creates a per-user allowlist; and the GUI **Edit DKMS allowlist** button now edits `/etc` and saves it back via pkexec. Edit it with the GUI button or `sudoedit /etc/aur-malware-check/dkms_allowlist.conf`.
+
 ## 2.9.8 (2026-06-17) — personal fork
 - Fix: the GUI no longer marks **every** check ❌ when a full scan finds one problem. `_propagate_full_scan` used to stamp the single overall verdict onto all rows, so one `INFECTED` check (e.g. an unallowlisted DKMS module) lit up the whole list. It now parses each check's own `--- [N] ---` section in the scan output and sets that row from its own result (WARNING/INFECTED → ❌, Skipped/needs-root → ?, otherwise ✅) — a finding points at the check that found it.
 

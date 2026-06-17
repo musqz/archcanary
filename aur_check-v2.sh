@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.9.8"
+SCRIPT_VERSION="2.9.9"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -210,19 +210,20 @@ CHAOS_RAT_PKGS=()
 
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
-# Merge dkms_allowlist.conf into DKMS_ALLOWLIST (colon-separated, env var takes precedence).
-# Read both the system-wide file (honored by the root system scan, which runs with
-# HOME=/root and can't see the per-user config) and the per-user file.
+# Merge the DKMS allowlist into DKMS_ALLOWLIST (colon-separated; the env var, if
+# set, takes precedence and is appended to). The allowlist is a single system-wide
+# file — DKMS modules are machine-level and the kmod audit only runs as root.
+# Override the path with DKMS_ALLOWLIST_FILE (used by the tests).
 DKMS_ALLOWLIST="${DKMS_ALLOWLIST:-}"
-for _dkms_cfg in /etc/aur-malware-check/dkms_allowlist.conf "$AUR_CONFIG_DIR/dkms_allowlist.conf"; do
-    [[ -r "$_dkms_cfg" ]] || continue   # skip missing/unreadable (don't abort under set -e)
+_dkms_cfg="${DKMS_ALLOWLIST_FILE:-/etc/aur-malware-check/dkms_allowlist.conf}"
+if [[ -r "$_dkms_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
     while IFS= read -r _dl || [[ -n "$_dl" ]]; do
         _dl="${_dl%%#*}"       # strip inline comments
         read -r _dl _ <<< "$_dl"  # take first token only (ignores trailing descriptions)
         [[ -z "$_dl" ]] && continue
         DKMS_ALLOWLIST="${DKMS_ALLOWLIST:+${DKMS_ALLOWLIST}:}${_dl}"
     done < "$_dkms_cfg"
-done
+fi
 unset _dkms_cfg _dl
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then

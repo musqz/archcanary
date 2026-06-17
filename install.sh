@@ -147,22 +147,8 @@ for f in package_list.txt malicious_npm_packages.txt; do
     fi
 done
 
-if [[ ! -f "$CONFIG_DIR/dkms_allowlist.conf" ]]; then
-    cat > "$CONFIG_DIR/dkms_allowlist.conf" << 'EOF'
-# DKMS modules to skip during --check-kmod
-# One module name per line. Everything after # is a comment.
-# Add modules that are known-good but not tracked by pacman.
-#
-# Common examples (uncomment as needed):
-# tuxedo-drivers  # TUXEDO Computers hardware driver
-# v4l2loopback    # virtual camera (OBS, video conferencing)
-# vboxdrv         # VirtualBox host kernel module
-# vmmon           # VMware Workstation
-EOF
-    echo "  seeded:    $CONFIG_DIR/dkms_allowlist.conf"
-else
-    echo "  kept:      $CONFIG_DIR/dkms_allowlist.conf (already exists)"
-fi
+# The DKMS allowlist is a single system-wide file at /etc/aur-malware-check/
+# (the kmod audit only runs as root). It is seeded by --system below, not here.
 
 if $SYSTEM; then
     echo
@@ -180,14 +166,34 @@ if $SYSTEM; then
     for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt; do
         [[ -f "$REPO_DIR/$_list" ]] && sudo cp "$REPO_DIR/$_list" "$SYSTEM_LIB/$_list"
     done
-    # Seed the DKMS allowlist system-wide so the root system scan honors it
-    # (the per-user copy in ~/.config is not visible to a root service → it would
-    # otherwise flag allowlisted hardware DKMS modules like tuxedo-drivers).
+    # DKMS allowlist — single system-wide file (the kmod audit only runs as root).
+    # Seed it once (mode 644 so non-root runs can read it), preferring an existing
+    # legacy ~/.config copy so prior entries are preserved on upgrade; otherwise a
+    # commented template. Never clobber an existing /etc copy.
     sudo install -d -m 755 /etc/aur-malware-check
+    if [[ ! -f /etc/aur-malware-check/dkms_allowlist.conf ]]; then
+        if [[ -f "$CONFIG_DIR/dkms_allowlist.conf" ]]; then
+            sudo install -m 644 "$CONFIG_DIR/dkms_allowlist.conf" /etc/aur-malware-check/dkms_allowlist.conf
+        else
+            sudo tee /etc/aur-malware-check/dkms_allowlist.conf >/dev/null << 'EOF'
+# DKMS modules to skip during --check-kmod (system-wide allowlist).
+# One module name per line. Everything after # is a comment.
+# Add modules that are known-good but not tracked by pacman.
+#
+# Common examples (uncomment as needed):
+# tuxedo-drivers  # TUXEDO Computers hardware driver
+# v4l2loopback    # virtual camera (OBS, video conferencing)
+# vboxdrv         # VirtualBox host kernel module
+# vmmon           # VMware Workstation
+EOF
+            sudo chmod 644 /etc/aur-malware-check/dkms_allowlist.conf
+        fi
+    fi
+    # The per-user allowlist is no longer read — remove the legacy copy to avoid
+    # confusion (its entries were migrated to /etc above on first run).
     if [[ -f "$CONFIG_DIR/dkms_allowlist.conf" ]]; then
-        # -m 644: the user-level scan (running as you) also reads this file, so it
-        # must be world-readable even if your ~/.config copy is mode 600.
-        sudo install -m 644 "$CONFIG_DIR/dkms_allowlist.conf" /etc/aur-malware-check/dkms_allowlist.conf
+        rm -f "$CONFIG_DIR/dkms_allowlist.conf"
+        echo "  migrated:  ~/.config dkms_allowlist.conf → /etc (per-user copy removed)"
     fi
     echo "  installed: $SYSTEM_LIB/aur-malware-check.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
