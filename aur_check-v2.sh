@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.9.6"
+SCRIPT_VERSION="2.9.7"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -215,7 +215,7 @@ MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages
 # HOME=/root and can't see the per-user config) and the per-user file.
 DKMS_ALLOWLIST="${DKMS_ALLOWLIST:-}"
 for _dkms_cfg in /etc/aur-malware-check/dkms_allowlist.conf "$AUR_CONFIG_DIR/dkms_allowlist.conf"; do
-    [[ -f "$_dkms_cfg" ]] || continue
+    [[ -r "$_dkms_cfg" ]] || continue   # skip missing/unreadable (don't abort under set -e)
     while IFS= read -r _dl || [[ -n "$_dl" ]]; do
         _dl="${_dl%%#*}"       # strip inline comments
         read -r _dl _ <<< "$_dl"  # take first token only (ignores trailing descriptions)

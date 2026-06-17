@@ -7,6 +7,10 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.9.7 (2026-06-17) — personal fork
+- Change: automated scanning is split by context so neither half false-positives. The **root system** timer now runs only the system-level checks (`--check-systemd/--check-ebpf/--check-bpftool/--check-ldso/--check-kmod` + the always-on package/log checks); a new **user** timer (`aur-malware-check-user.{service,timer}`) runs the user-level checks (`--check-npm-cache/--check-bun-cache/--check-yarn-cache/--check-pnpm-cache/--check-pkgbuild/--check-autostart`) as your user, so they scan your real `~/.cache`/`~/.config` instead of `/root`. Fixes the root scan flagging root's own `/root/.config/autostart` session relics as a false `RESULT: INFECTED`. The user scan notifies itself (runs in your session); the root scan still uses the path-watched notifier. `install.sh --system` installs and enables both; `systemd.md` updated.
+- Fix: the DKMS allowlist loader used `[[ -f ]]` and aborted the whole scan (`Permission denied`, exit 1, under `set -e`) when `/etc/aur-malware-check/dkms_allowlist.conf` existed but was not readable. It now tests `[[ -r ]]` and skips unreadable files, and `install.sh --system` installs the system allowlist mode `644` (the user-level scan reads it too, even if your `~/.config` copy is `600`).
+
 ## 2.9.6 (2026-06-17) — personal fork
 - Fix: the root **system** scan flagged allowlisted DKMS modules (e.g. `tuxedo-drivers`) as "untracked source" → false `RESULT: INFECTED`. The DKMS allowlist lived only in the user's `~/.config`, which the root service (`HOME=/root`) can't see. The script now also reads a **system-wide** `/etc/aur-malware-check/dkms_allowlist.conf` (merged with the per-user file), and `install.sh --system` seeds it from your user allowlist. Re-run `install.sh --system` (or edit `/etc/...`) after changing the allowlist.
 

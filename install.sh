@@ -80,10 +80,13 @@ if $UNINSTALL; then
         echo
         echo "Removing system components (requires root)..."
 
-        # User-session notifier
+        # User-scope units (user scan + notifier)
         systemctl --user disable --now aur-malware-check-notify.path 2>/dev/null || true
+        systemctl --user disable --now aur-malware-check-user.timer 2>/dev/null || true
         rm -f "$HOME/.config/systemd/user/aur-malware-check-notify.path" \
-              "$HOME/.config/systemd/user/aur-malware-check-notify.service"
+              "$HOME/.config/systemd/user/aur-malware-check-notify.service" \
+              "$HOME/.config/systemd/user/aur-malware-check-user.service" \
+              "$HOME/.config/systemd/user/aur-malware-check-user.timer"
         systemctl --user daemon-reload 2>/dev/null || true
 
         # System scan units
@@ -182,7 +185,9 @@ if $SYSTEM; then
     # otherwise flag allowlisted hardware DKMS modules like tuxedo-drivers).
     sudo install -d -m 755 /etc/aur-malware-check
     if [[ -f "$CONFIG_DIR/dkms_allowlist.conf" ]]; then
-        sudo cp "$CONFIG_DIR/dkms_allowlist.conf" /etc/aur-malware-check/dkms_allowlist.conf
+        # -m 644: the user-level scan (running as you) also reads this file, so it
+        # must be world-readable even if your ~/.config copy is mode 600.
+        sudo install -m 644 "$CONFIG_DIR/dkms_allowlist.conf" /etc/aur-malware-check/dkms_allowlist.conf
     fi
     echo "  installed: $SYSTEM_LIB/aur-malware-check.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
@@ -216,19 +221,24 @@ if $SYSTEM; then
     sudo systemctl enable --now aur-malware-check.timer aur-malware-check.path
     echo "  installed: /etc/systemd/system/aur-malware-check.{service,timer,path} + -onchange.service (enabled)"
 
-    # User-session notifier (raises the desktop alert on a detection)
+    # User-scope units: the user-level scan (npm/bun/pkgbuild caches, autostart —
+    # run as you so they see your real home) + the notifier that watches the root
+    # scan's result. The user scan notifies itself (runs in your session).
     USER_UNITS="$HOME/.config/systemd/user"
     mkdir -p "$USER_UNITS"
     cp "$REPO_DIR"/systemd/user/aur-malware-check-notify.path \
        "$REPO_DIR"/systemd/user/aur-malware-check-notify.service \
+       "$REPO_DIR"/systemd/user/aur-malware-check-user.service \
+       "$REPO_DIR"/systemd/user/aur-malware-check-user.timer \
        "$USER_UNITS/"
     if systemctl --user daemon-reload 2>/dev/null; then
         systemctl --user enable --now aur-malware-check-notify.path 2>/dev/null || true
-        echo "  installed: $USER_UNITS/aur-malware-check-notify.{path,service} (enabled)"
+        systemctl --user enable --now aur-malware-check-user.timer 2>/dev/null || true
+        echo "  installed: $USER_UNITS/aur-malware-check-user.{service,timer} + notify.{path,service} (enabled)"
     else
-        echo "  installed: $USER_UNITS/aur-malware-check-notify.{path,service}"
+        echo "  installed: $USER_UNITS/aur-malware-check-user.{service,timer} + notify.{path,service}"
         echo "             (no user systemd session detected — enable later with:"
-        echo "              systemctl --user enable --now aur-malware-check-notify.path)"
+        echo "              systemctl --user enable --now aur-malware-check-user.timer aur-malware-check-notify.path)"
     fi
 
     echo
