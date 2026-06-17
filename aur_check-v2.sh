@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.9.4"
+SCRIPT_VERSION="2.9.6"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -174,6 +174,14 @@ if [[ $EUID -eq 0 ]]; then
     unset _invoker_home
 fi
 
+# systemd *system* services (and some cron contexts) start with no $HOME, which
+# would make the ${XDG_*:-$HOME/...} fallbacks below fatal under `set -u`.
+# Default it to the running user's home (root → /root for the system scan).
+if [[ -z "${HOME:-}" ]]; then
+    HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+    export HOME="${HOME:-/root}"
+fi
+
 # ---------------------------------------------------------------------------
 # Log file: always write full detail, auto-named unless --log-file=PATH
 # Default location: XDG_CACHE_HOME/aur-malware-check/ (~/.cache/aur-malware-check/)
@@ -202,17 +210,19 @@ CHAOS_RAT_PKGS=()
 
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
-# Merge dkms_allowlist.conf into DKMS_ALLOWLIST (colon-separated, env var takes precedence)
+# Merge dkms_allowlist.conf into DKMS_ALLOWLIST (colon-separated, env var takes precedence).
+# Read both the system-wide file (honored by the root system scan, which runs with
+# HOME=/root and can't see the per-user config) and the per-user file.
 DKMS_ALLOWLIST="${DKMS_ALLOWLIST:-}"
-_dkms_cfg="$AUR_CONFIG_DIR/dkms_allowlist.conf"
-if [[ -f "$_dkms_cfg" ]]; then
+for _dkms_cfg in /etc/aur-malware-check/dkms_allowlist.conf "$AUR_CONFIG_DIR/dkms_allowlist.conf"; do
+    [[ -f "$_dkms_cfg" ]] || continue
     while IFS= read -r _dl || [[ -n "$_dl" ]]; do
         _dl="${_dl%%#*}"       # strip inline comments
         read -r _dl _ <<< "$_dl"  # take first token only (ignores trailing descriptions)
         [[ -z "$_dl" ]] && continue
         DKMS_ALLOWLIST="${DKMS_ALLOWLIST:+${DKMS_ALLOWLIST}:}${_dl}"
     done < "$_dkms_cfg"
-fi
+done
 unset _dkms_cfg _dl
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then

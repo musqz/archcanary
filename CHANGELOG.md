@@ -7,6 +7,12 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.9.6 (2026-06-17) — personal fork
+- Fix: the root **system** scan flagged allowlisted DKMS modules (e.g. `tuxedo-drivers`) as "untracked source" → false `RESULT: INFECTED`. The DKMS allowlist lived only in the user's `~/.config`, which the root service (`HOME=/root`) can't see. The script now also reads a **system-wide** `/etc/aur-malware-check/dkms_allowlist.conf` (merged with the per-user file), and `install.sh --system` seeds it from your user allowlist. Re-run `install.sh --system` (or edit `/etc/...`) after changing the allowlist.
+
+## 2.9.5 (2026-06-17) — personal fork
+- Fix: the root **system** service failed with `HOME: unbound variable` (exit 1) at the cache-dir line. systemd system services start with no `$HOME`, and under `set -u` the `${XDG_CACHE_HOME:-$HOME/.cache}` fallback aborts. The script now defaults `$HOME` to the running user's home (`/root` for the system scan) when it is unset — complementing the `$SUDO_USER`/`$PKEXEC_UID` resolution, which only covers interactive sudo/pkexec. Regression from 2.9.1.
+
 ## 2.9.4 (2026-06-17) — personal fork
 - Fix: `check_systemd` no longer flags a persistent `.timer` (`OnBootSec=` + `Persistent=true`) just for existing — it now vets the **service the timer triggers** and only warns when that target service is itself suspicious (ExecStart outside a standard prefix, not pacman-owned). This stops the scanner from flagging its own `/etc/systemd/system/aur-malware-check.timer` (installed by `install.sh --system`) as a malicious persistence unit, which produced a false `RESULT: INFECTED` and desktop alert. A malicious timer pointing at `/tmp`, `$HOME`, etc. is still caught.
 

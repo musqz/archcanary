@@ -96,8 +96,8 @@ if $UNINSTALL; then
         sudo rm -rf /var/lib/aur-malware-check
         echo "  removed: systemd units (system scan + user notifier) and /var/lib/aur-malware-check"
 
-        sudo rm -rf /usr/lib/aur-malware-check
-        echo "  removed: /usr/lib/aur-malware-check"
+        sudo rm -rf /usr/lib/aur-malware-check /etc/aur-malware-check
+        echo "  removed: /usr/lib/aur-malware-check, /etc/aur-malware-check"
         sudo rm -f /usr/share/polkit-1/actions/org.aur-malware-check.policy
         echo "  removed: /usr/share/polkit-1/actions/org.aur-malware-check.policy"
     fi
@@ -177,9 +177,17 @@ if $SYSTEM; then
     for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt; do
         [[ -f "$REPO_DIR/$_list" ]] && sudo cp "$REPO_DIR/$_list" "$SYSTEM_LIB/$_list"
     done
+    # Seed the DKMS allowlist system-wide so the root system scan honors it
+    # (the per-user copy in ~/.config is not visible to a root service → it would
+    # otherwise flag allowlisted hardware DKMS modules like tuxedo-drivers).
+    sudo install -d -m 755 /etc/aur-malware-check
+    if [[ -f "$CONFIG_DIR/dkms_allowlist.conf" ]]; then
+        sudo cp "$CONFIG_DIR/dkms_allowlist.conf" /etc/aur-malware-check/dkms_allowlist.conf
+    fi
     echo "  installed: $SYSTEM_LIB/aur-malware-check.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages}.txt"
+    echo "  installed: /etc/aur-malware-check/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /usr/share/polkit-1/actions/org.aur-malware-check.policy"
 
     # --- Automated scan: root system units + user-session notifier ---------
