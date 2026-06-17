@@ -4,3 +4,5 @@ subagent-reports/
 
 # Auto-generated run logs (default --log-file output)
 aur-check-*.log
+# claude resume
+claude.txt

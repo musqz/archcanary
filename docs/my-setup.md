@@ -141,6 +141,10 @@ yay -S notify-send.sh traur
 # clone from https://github.com/manticore-projects/aurscan and follow its README
 ```
 
+## Known false positives
+
+See [false-positives.md](false-positives.md) for documented signals that fire on benign packages and how to verify them.
+
 ## Systemd unit files
 
 See [systemd.md](systemd.md) for the full service and timer contents.
