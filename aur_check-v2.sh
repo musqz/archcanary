@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.9.1"
+SCRIPT_VERSION="2.9.2"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -500,7 +500,7 @@ check_ebpf() {
         echo "  → Requires root to scan for hidden BPF maps (e.g. hidden_pids, hidden_names)."
         echo "  → Try: sudo ./aur_check.sh --check-ebpf"
         echo "  → Skip this check if eBPF rootkit detection is not needed for your threat model."
-        return 0
+        return 77
     fi
 
     local found=()
@@ -545,7 +545,7 @@ check_bpftool() {
     if ! progs=$(bpftool prog show 2>/dev/null); then
         echo "  Cannot enumerate BPF programs — needs root."
         echo "  → Try: sudo $0 --check-bpftool"
-        return 0
+        return 77
     fi
 
     if [[ -z "$progs" ]]; then
@@ -1054,7 +1054,7 @@ check_kmod() {
     if [[ $EUID -ne 0 && -z "${LSMOD_CMD:-}" ]]; then
         echo "  Skipped: --check-kmod requires root for reliable module attribution."
         echo "  → Try: sudo $0 --check-kmod"
-        return 0
+        return 77
     fi
 
     # Build set of all .ko paths owned by pacman.
@@ -1131,6 +1131,19 @@ check_kmod() {
 # Main
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
+# Root-requiring checks return 77 when they cannot run without root. We track
+# them so the final result is reported as INCOMPLETE (and exit 1) instead of a
+# misleading CLEAN — a scan that skipped checks is not a clean bill of health.
+SKIPPED_ROOT=()
+
+# Fold a check's return code into EXIT_CODE; 77 means "skipped, needs root".
+_apply_ret() { # $1=return code  $2=check label
+    if [[ "$1" -eq 77 ]]; then
+        SKIPPED_ROOT+=("$2")
+    elif [[ "$1" -gt $EXIT_CODE ]]; then
+        EXIT_CODE="$1"
+    fi
+}
 
 load_packages
 
@@ -1207,7 +1220,7 @@ fi
 if $CHECK_EBPF; then
     echo "--- [4] eBPF rootkit check ---"
     check_ebpf && ret=$? || ret=$?
-    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _apply_ret "$ret" ebpf
     echo
 fi
 
@@ -1249,7 +1262,7 @@ fi
 if $CHECK_BPFTOOL; then
     echo "--- [8] Loaded eBPF programs/links (bpftool) ---"
     check_bpftool && ret=$? || ret=$?
-    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _apply_ret "$ret" bpftool
     echo
 fi
 
@@ -1270,8 +1283,14 @@ fi
 if $CHECK_KMOD; then
     echo "--- [11] Kernel module / DKMS audit ---"
     check_kmod && ret=$? || ret=$?
-    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _apply_ret "$ret" kmod
     echo
+fi
+
+# A scan that skipped root checks is incomplete, not clean — surface it and
+# escalate a would-be CLEAN (0) to WARNINGS (1) so it isn't read as all-clear.
+if [[ ${#SKIPPED_ROOT[@]} -gt 0 && $EXIT_CODE -lt 1 ]]; then
+    EXIT_CODE=1
 fi
 
 echo "============================================================"
@@ -1280,6 +1299,10 @@ case $EXIT_CODE in
     1) echo " RESULT: WARNINGS - Review output above." ;;
     2) echo " RESULT: INFECTED - Indicators found! Follow incident response." ;;
 esac
+if [[ ${#SKIPPED_ROOT[@]} -gt 0 ]]; then
+    echo " INCOMPLETE: ${#SKIPPED_ROOT[@]} root check(s) skipped (no root): ${SKIPPED_ROOT[*]}"
+    echo " Re-run with sudo for the full picture: sudo $0 --full"
+fi
 echo "============================================================"
 
 if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then

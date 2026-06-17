@@ -1,28 +1,44 @@
 # Running aur-malware-check via systemd
 
-Run the scanner automatically on login or on a timer, and get a desktop notification if anything is found.
+Run the scanner automatically with the **full** picture — including the root-only checks (kmod, eBPF, bpftool) — and a desktop notification if anything is found.
 
-## User service + timer (recommended)
+## Model
 
-Create two files under `~/.config/systemd/user/`:
+A complete scan needs root, but desktop notifications need your user session. So it is split in two:
 
-**`~/.config/systemd/user/aur-malware-check.service`**
+```
+system (root):
+  aur-malware-check.service   --refresh --full --all-time --no-notify
+     └─ writes /var/lib/aur-malware-check/last-scan.log   (complete, no INCOMPLETE warning)
+  aur-malware-check.timer     weekly + on boot
+
+user:
+  aur-malware-check-notify.path      watches last-scan.log
+     └─ aur-malware-check-notify.service:  grep INFECTED → notify-send
+```
+
+The root scan runs all checks (so the result is trustworthy, not `INCOMPLETE`) but does **not** notify; the user notifier reads the shared result file and raises the desktop alert.
+
+> Requires the system components — run `sudo ./install.sh --system` first. That installs the root-accessible script, the root helper, the polkit policy, **and** the bundled package lists under `/usr/lib/aur-malware-check/` so the root scan can find them (root's `$HOME` is `/root`, which is not seeded).
+
+## 1. System scan (root)
+
+**`/etc/systemd/system/aur-malware-check.service`**
 ```ini
 [Unit]
-Description=AUR malware check
-After=network.target
+Description=AUR malware check (full scan, root)
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/aur-malware-check.sh --refresh --full --all-time --log-file=%h/.config/aur-malware-check/last-scan.log
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=aur-malware-check
+StateDirectory=aur-malware-check
+ExecStart=/usr/lib/aur-malware-check/aur-malware-check.sh --refresh --full --all-time --no-notify --log-file=/var/lib/aur-malware-check/last-scan.log
 ```
 
-> `--log-file=` is set to a fixed path so the scan overwrites one log instead of dropping a timestamped `aur-check-<date>.log` in the service's working directory (`$HOME` for user units) on every run. Full output is also in the journal.
+> `StateDirectory=aur-malware-check` makes systemd create `/var/lib/aur-malware-check` (mode 0755, root) automatically. Running as root, `--full` performs the kmod/eBPF/bpftool checks, so the scan is complete. `--no-notify` because root has no desktop session — step 2 handles alerts.
 
-**`~/.config/systemd/user/aur-malware-check.timer`**
+**`/etc/systemd/system/aur-malware-check.timer`**
 ```ini
 [Unit]
 Description=Run AUR malware check weekly and on boot
@@ -38,58 +54,59 @@ WantedBy=timers.target
 
 Enable and start:
 ```bash
-systemctl --user daemon-reload
-systemctl --user enable --now aur-malware-check.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now aur-malware-check.timer
 ```
 
-## Checking results
+## 2. Desktop notification (user)
 
-```bash
-# See last run output
-journalctl --user -u aur-malware-check
-
-# Follow live output
-journalctl --user -fu aur-malware-check
-
-# Check timer status
-systemctl --user status aur-malware-check.timer
-```
-
-## Desktop notifications
-
-A critical notification fires via `notify-send` (libnotify) when exit code 2 is returned (malicious package detected). This works automatically when:
-
-- A notification daemon is running (e.g. `dunst`, `mako`, GNOME, KDE)
-- The service runs as your user (not root)
-
-The notification has no action button — it tells you a malicious package was found. To investigate and remediate, open **AUR Malware Check** from your application launcher (it runs `aur_malware_gui.sh`).
-
-No configuration needed. Pass `--no-notify` to suppress it.
-
-## Refreshing the package list
-
-`--refresh` is included in the service above. It fetches the latest compromised package list from the Arch Linux HedgeDoc and writes it to `~/.config/aur-malware-check/package_list.txt` before each scan.
-
-## Scan after every pacman transaction (optional)
-
-The weekly timer catches things eventually; a `.path` unit watches `/var/log/pacman.log` and runs a scan **right after any install/upgrade/removal** — so a freshly installed compromised package is caught immediately.
-
-This uses a **dedicated lightweight service** that runs **without `--refresh`** (uses the cached list the weekly timer keeps fresh) so each transaction triggers an instant, offline scan instead of a network round-trip.
-
-**`~/.config/systemd/user/aur-malware-check-onchange.service`**
+**`~/.config/systemd/user/aur-malware-check-notify.path`**
 ```ini
 [Unit]
-Description=AUR malware check (triggered after pacman transactions)
+Description=Watch for AUR malware scan results
+
+[Path]
+PathModified=/var/lib/aur-malware-check/last-scan.log
+Unit=aur-malware-check-notify.service
+
+[Install]
+WantedBy=default.target
+```
+
+**`~/.config/systemd/user/aur-malware-check-notify.service`**
+```ini
+[Unit]
+Description=Notify on AUR malware detection
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/aur-malware-check.sh --full --all-time --log-file=%h/.config/aur-malware-check/last-scan.log
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=aur-malware-check
+ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/aur-malware-check/last-scan.log && notify-send -u critical -i dialog-warning "AUR: malicious package detected" "Open AUR Malware Check to review." || true'
 ```
 
-**`~/.config/systemd/user/aur-malware-check.path`**
+Enable and start:
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now aur-malware-check-notify.path
+```
+
+> The path unit fires whenever the root scan rewrites the result file; the service notifies only when a detection is present. Needs a notification daemon (`dunst`, `mako`, GNOME, KDE) and `libnotify`. To review/remediate, open **AUR Malware Check** from your app launcher.
+
+## 3. Scan after every pacman transaction (optional)
+
+Same split — a **system** path unit watches `/var/log/pacman.log` and runs an offline (no `--refresh`) full scan right after any install/upgrade/removal, so a freshly installed compromised package is caught immediately. The step-2 user notifier covers these runs too (same result file).
+
+**`/etc/systemd/system/aur-malware-check-onchange.service`**
+```ini
+[Unit]
+Description=AUR malware check (after pacman transaction)
+
+[Service]
+Type=oneshot
+StateDirectory=aur-malware-check
+ExecStart=/usr/lib/aur-malware-check/aur-malware-check.sh --full --all-time --no-notify --log-file=/var/lib/aur-malware-check/last-scan.log
+```
+
+**`/etc/systemd/system/aur-malware-check.path`**
 ```ini
 [Unit]
 Description=Trigger AUR malware check after pacman transactions
@@ -99,13 +116,42 @@ PathChanged=/var/log/pacman.log
 Unit=aur-malware-check-onchange.service
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 ```
 
 Enable and start:
 ```bash
-systemctl --user daemon-reload
-systemctl --user enable --now aur-malware-check.path
+sudo systemctl daemon-reload
+sudo systemctl enable --now aur-malware-check.path
 ```
 
-> The path unit only triggers when `/var/log/pacman.log` changes; systemd coalesces rapid writes (e.g. a big `-Syu`) so the scan runs once after the transaction settles. Use `--full` (cached list) here rather than `--refresh` to keep it fast and offline; freshness comes from the weekly timer.
+> The path unit only triggers when `/var/log/pacman.log` changes; systemd coalesces rapid writes (e.g. a big `-Syu`) so the scan runs once after the transaction settles. Uses `--full` against the cached list (offline); freshness comes from the weekly timer's `--refresh`.
+
+## Checking results
+
+```bash
+# Last scan output (root-owned)
+sudo cat /var/lib/aur-malware-check/last-scan.log
+
+# Or via the journal
+journalctl -u aur-malware-check
+journalctl -u aur-malware-check-onchange
+
+# Timer / unit status
+systemctl status aur-malware-check.timer
+systemctl --user status aur-malware-check-notify.path
+```
+
+## Migrating from the old user service
+
+Earlier versions ran the scan as a **user** service (`~/.config/systemd/user/aur-malware-check.{service,timer}`). Because that runs without root, the kmod/eBPF/bpftool checks are skipped and the scan now reports `INCOMPLETE` (exit 1). Disable the old user units and use the system scan above instead:
+
+```bash
+systemctl --user disable --now aur-malware-check.timer
+rm -f ~/.config/systemd/user/aur-malware-check.service \
+      ~/.config/systemd/user/aur-malware-check.timer
+```
+
+## Why root?
+
+`--full` includes `--check-kmod`, `--check-ebpf`, and `--check-bpftool`, which need root to read kernel-module attribution and enumerate loaded eBPF programs. Run without root, those three are skipped and the scan reports `INCOMPLETE` (exit 1) rather than a misleading `CLEAN`. Running the scan as root (the system service) is what makes the automated result complete and trustworthy.

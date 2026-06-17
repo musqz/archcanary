@@ -18,8 +18,8 @@ Full overview of how this fork is deployed and how the pieces connect.
 ## How the pieces connect
 
 ```
-systemd timer (weekly + on boot)
-    └── aur_check-v2.sh --refresh --full --all-time
+systemd SYSTEM timer (weekly + on boot, runs as root)
+    └── aur-malware-check.sh --refresh --full --all-time --no-notify
             ├── [1]  currently installed foreign packages
             ├── [2]  historical pacman logs
             ├── [3]  systemd persistence (services, drop-ins, timers)
@@ -32,11 +32,13 @@ systemd timer (weekly + on boot)
             ├── [8]  loaded eBPF programs via bpftool (stealth hook types)
             ├── [9]  ld.so.preload injection
             ├── [10] XDG autostart + shell RC persistence
-            └── [11] kernel module / DKMS audit (needs root)
+            └── [11] kernel module / DKMS audit          (root → actually runs)
                     │
-                    └── exit code 2 (infected)?
-                            └── notify-send (libnotify) → critical desktop alert
-                                    └── open AUR Malware Check from the app launcher to review
+                    └── writes /var/lib/aur-malware-check/last-scan.log
+                            │
+   systemd USER path unit watches that file
+            └── on "RESULT: INFECTED" → notify-send (libnotify) → critical desktop alert
+                    └── open AUR Malware Check from the app launcher to review
 
 aur_malware_gui.sh (on-demand — desktop shortcut or app launcher)
     └── yad list menu with per-session status column
@@ -86,12 +88,21 @@ Run from a desktop shortcut or app launcher — grouped menu with a per-session 
 There is no separate terminal menu. Over SSH or on a display-less box, run the scanner directly:
 
 ```bash
-aur-malware-check.sh --full --all-time                # everything
-aur-malware-check.sh --check-systemd                  # a single check
-sudo ~/.local/bin/aur-malware-check.sh --check-kmod   # root-requiring check
+# Full scan — run with sudo for the full picture. Three checks (kmod, ebpf,
+# bpftool) need root; without it they are skipped and the run is reported as
+# INCOMPLETE (exit 1, WARNINGS) rather than CLEAN, so a partial scan is never
+# mistaken for an all-clear.
+sudo ~/.local/bin/aur-malware-check.sh --full --all-time
+
+# User-level checks run fine without root:
+aur-malware-check.sh --check-systemd
+aur-malware-check.sh --check-pkgbuild
+
+# A single root-requiring check:
+sudo ~/.local/bin/aur-malware-check.sh --check-kmod
 ```
 
-> The root check uses the **full path** under `sudo`. `sudo` resets `$PATH` to its
+> Root checks use the **full path** under `sudo`. `sudo` resets `$PATH` to its
 > `secure_path` (set in `/etc/sudoers`), which does not include `~/.local/bin`, so a
 > bare `sudo aur-malware-check.sh` fails with *command not found*. The script then
 > resolves your config from `$SUDO_USER`, so the lists are still found.
@@ -102,9 +113,10 @@ The GUI is for interactive desktop use; the CLI covers everything else (SSH, cro
 
 | Tool | When | Trigger |
 |------|------|---------|
-| `aur_check-v2.sh` | Weekly + on boot (catches missed runs) | systemd timer with `Persistent=true` |
+| `aur-malware-check.sh` (root scan) | Weekly + on boot, and after each pacman transaction | systemd **system** timer (`Persistent=true`) + `.path` unit — see [systemd.md](systemd.md) |
+| notifier | When a root scan records a detection | systemd **user** `.path` unit watching `last-scan.log` → `notify-send` |
 | `aur_malware_gui.sh` | On demand | Desktop shortcut / app launcher |
-| `aur-malware-check.sh` | On demand (SSH / no display) | Run directly with `--full` or a single `--check-*` flag |
+| `aur-malware-check.sh` (manual) | On demand (SSH / no display) | Run directly with `--full` (sudo) or a single `--check-*` flag |
 | `traur` | Before each AUR install | Manual — check maintainer reputation |
 | `aurscan` | Before each AUR install | Manual — run before `yay -S <pkg>` |
 
@@ -119,16 +131,28 @@ The GUI is for interactive desktop use; the CLI covers everything else (SSH, cro
     ├── malicious_npm_packages.txt    # static list, auto-seeded on first run
     └── dkms_allowlist.conf           # DKMS modules to skip in --check-kmod
 
-~/.config/systemd/user/
-    ├── aur-malware-check.service
-    └── aur-malware-check.timer
+~/.config/systemd/user/                   # desktop notifier (see systemd.md)
+    ├── aur-malware-check-notify.path     # watches the root scan's result file
+    └── aur-malware-check-notify.service  # greps INFECTED → notify-send
 
 # system components — installed by ./install.sh --system (requires sudo)
 /usr/lib/aur-malware-check/
     ├── aur-malware-check.sh          # root-accessible copy of the main script
+    ├── package_list.txt              # bundled lists, seeded so the root scan finds them
+    ├── malicious_npm_packages.txt
+    ├── chaos_rat_packages.txt
     └── root-helper                   # pkexec target (validates flags, restores XDG env)
 /usr/share/polkit-1/actions/
     └── org.aur-malware-check.policy  # polkit policy allowing GUI to call root-helper
+
+# automated scan (root) — units you create per docs/systemd.md
+/etc/systemd/system/
+    ├── aur-malware-check.service     # full scan as root, writes last-scan.log
+    ├── aur-malware-check.timer       # weekly + on boot
+    ├── aur-malware-check-onchange.service
+    └── aur-malware-check.path        # triggers after each pacman transaction
+/var/lib/aur-malware-check/
+    └── last-scan.log                 # shared result the user notifier watches
 ```
 
 ## Dependencies

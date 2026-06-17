@@ -155,11 +155,18 @@ if $SYSTEM; then
     sudo chown root:root "$SYSTEM_LIB/root-helper"
     sudo chmod 755 "$SYSTEM_LIB/root-helper"
     sudo cp "$REPO_DIR/org.aur-malware-check.policy" /usr/share/polkit-1/actions/
+    # Seed the bundled package lists next to the system script so a root scan
+    # (system service) finds them — root's $HOME is /root, which is not seeded.
+    for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt; do
+        [[ -f "$REPO_DIR/$_list" ]] && sudo cp "$REPO_DIR/$_list" "$SYSTEM_LIB/$_list"
+    done
     echo "  installed: $SYSTEM_LIB/aur-malware-check.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
+    echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages}.txt"
     echo "  installed: /usr/share/polkit-1/actions/org.aur-malware-check.policy"
     echo
     echo "Root-requiring checks are now available in the GUI via pkexec."
+    echo "For an automated full (root) scan + desktop notification, see docs/systemd.md."
 fi
 
 echo
