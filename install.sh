@@ -53,7 +53,7 @@ if $UNINSTALL; then
     echo
 
     removed=0
-    for f in aur-malware-check.sh aur_malware_menu.sh aur_malware_gui.sh; do
+    for f in aur-malware-check.sh aur_malware_gui.sh; do
         if [[ -f "$BIN_DIR/$f" ]]; then
             rm "$BIN_DIR/$f"
             echo "  removed: $BIN_DIR/$f"
@@ -63,7 +63,7 @@ if $UNINSTALL; then
         fi
     done
 
-    local desktop_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications/aur-malware-check.desktop"
+    desktop_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications/aur-malware-check.desktop"
     if [[ -f "$desktop_dst" ]]; then
         rm "$desktop_dst"
         echo "  removed: $desktop_dst"
@@ -105,11 +105,6 @@ mkdir -p "$BIN_DIR" "$CONFIG_DIR"
 cp "$REPO_DIR/aur_check-v2.sh" "$BIN_DIR/aur-malware-check.sh"
 chmod +x "$BIN_DIR/aur-malware-check.sh"
 echo "  installed: $BIN_DIR/aur-malware-check.sh"
-
-# Install menu script
-cp "$REPO_DIR/aur_malware_menu.sh" "$BIN_DIR/aur_malware_menu.sh"
-chmod +x "$BIN_DIR/aur_malware_menu.sh"
-echo "  installed: $BIN_DIR/aur_malware_menu.sh"
 
 # Install GUI script
 cp "$REPO_DIR/aur_malware_gui.sh" "$BIN_DIR/aur_malware_gui.sh"

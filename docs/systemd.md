@@ -57,35 +57,14 @@ systemctl --user status aur-malware-check.timer
 
 ## Desktop notifications
 
-A critical notification fires when exit code 2 is returned (malicious package detected). This works automatically when:
+A critical notification fires via `notify-send` (libnotify) when exit code 2 is returned (malicious package detected). This works automatically when:
 
 - A notification daemon is running (e.g. `dunst`, `mako`, GNOME, KDE)
 - The service runs as your user (not root)
 
+The notification has no action button — it tells you a malicious package was found. To investigate and remediate, open **AUR Malware Check** from your application launcher (it runs `aur_malware_gui.sh`).
+
 No configuration needed. Pass `--no-notify` to suppress it.
-
-### Two backends — `notify-send.sh` vs `notify-send`
-
-These are **different tools**, and which one you have installed changes the behavior:
-
-| Backend | Package | Behavior |
-|---------|---------|----------|
-| **`notify-send.sh`** | [`notify-send.sh`](https://aur.archlinux.org/packages/notify-send.sh) (AUR) | Notification gains a **Show Menu** button that opens the interactive menu |
-| `notify-send` | `libnotify` (official repos) | Plain notification, no button — fallback |
-
-The script prefers `notify-send.sh` if present and silently falls back to `notify-send`. `notify-send.sh` is a separate drop-in replacement that supports action buttons (`--action`); plain `notify-send` cannot run them.
-
-### Interactive menu
-
-When the **Show Menu** button is clicked, a terminal opens running `aur_malware_menu.sh` — an fzf menu to view the last log or re-run individual checks (systemd, eBPF, bpftool, npm/bun cache, PKGBUILD, ld.so.preload, XDG autostart, kernel modules).
-
-Requirements for the button + menu:
-
-- `notify-send.sh` (AUR) — the only backend that renders the button
-- `fzf` — the menu picker
-- A terminal: `$TERMINAL`, `terminator`, `kitty`, `xterm`, `gnome-terminal`, `xfce4-terminal`, or `mate-terminal`
-
-Place `aur_malware_menu.sh` next to the main script (e.g. `~/.local/bin/`).
 
 ## Refreshing the package list
 

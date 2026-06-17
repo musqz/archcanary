@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.8.5"
+SCRIPT_VERSION="2.9.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -1260,22 +1260,10 @@ esac
 echo "============================================================"
 
 if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
-    _script_dir="$(dirname "$(realpath "$0")")"
-    _gui_script=""
-    for _c in "$_script_dir/aur_malware_gui.sh" "$(command -v aur_malware_gui.sh 2>/dev/null || true)"; do
-        [[ -n "${_c:-}" && -x "$_c" ]] && { _gui_script="$_c"; break; }
-    done
-
-    if command -v notify-send.sh &>/dev/null; then
-        _notify_args=(-u critical -i dialog-warning)
-        [[ -n "$_gui_script" ]] && _notify_args+=(--action="Open Scanner:$_gui_script")
-        notify-send.sh "${_notify_args[@]}" \
-            "AUR: malicious package detected" \
-            "Indicators found."
-    elif command -v notify-send &>/dev/null; then
+    if command -v notify-send &>/dev/null; then
         notify-send -u critical -i dialog-warning \
             "AUR: malicious package detected" \
-            "Indicators found. Check: journalctl --user -u aur-malware-check"
+            "Indicators found. Open AUR Malware Check to review."
     fi
 fi
 

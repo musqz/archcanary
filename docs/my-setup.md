@@ -8,16 +8,12 @@ Full overview of how this fork is deployed and how the pieces connect.
 |-----------|-----------------|---------|
 | `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
 | `aur_malware_gui.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window |
-| `aur_malware_menu.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | fzf TUI menu — run individual checks or view last log from the notification |
 | `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Pre-install trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes) |
 | `aurscan` | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM-based pre-install PKGBUILD scanner using Claude — proactive check before installing an AUR package |
-| `notify-send.sh` | [vlevit/notify-send.sh](https://github.com/vlevit/notify-send.sh) — [AUR: notify-send.sh](https://aur.archlinux.org/packages/notify-send.sh) | Drop-in replacement for `notify-send` with action button support — enables the **Show Menu** button on the alert |
 | `yad` | official repos | GTK dialog toolkit used by `aur_malware_gui.sh` |
 | `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
-| `fzf` | [junegunn/fzf](https://github.com/junegunn/fzf) — official repos | Menu picker used by `aur_malware_menu.sh` |
-| `libnotify` | official repos | Fallback notification backend when `notify-send.sh` is not installed |
+| `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
 | `bpftool` | `bpf` — official repos | Enumerates loaded eBPF programs for `--check-bpftool` |
-| terminal emulator | your preferred terminal | Opened by the **Show Menu** button — auto-detected via `$TERMINAL`, or falls back to `kitty` → `alacritty` → `xterm` → `gnome-terminal` → `xfce4-terminal` |
 
 ## How the pieces connect
 
@@ -39,8 +35,8 @@ systemd timer (weekly + on boot)
             └── [11] kernel module / DKMS audit (needs root)
                     │
                     └── exit code 2 (infected)?
-                            └── notify-send.sh → critical alert + [Open Scanner] button
-                                    └── aur_malware_gui.sh opens directly (no terminal needed)
+                            └── notify-send (libnotify) → critical desktop alert
+                                    └── open AUR Malware Check from the app launcher to review
 
 aur_malware_gui.sh (on-demand — desktop shortcut or app launcher)
     └── yad list menu with per-session status column
@@ -85,13 +81,17 @@ Run from a desktop shortcut or app launcher — grouped menu with a per-session 
 
 ![aur_malware_gui.sh yad GUI — status column and grouped checks](../images/gui.png)
 
-### The fzf menu (`aur_malware_menu.sh`)
+### Headless / SSH
 
-Terminal/SSH fallback — pick a single check to run, or view the last scan log:
+There is no separate terminal menu. Over SSH or on a display-less box, run the scanner directly:
 
-![aur_malware_menu.sh fzf TUI — pick a check or view the last log](../images/fzf.png)
+```bash
+aur-malware-check.sh --full --all-time     # everything
+aur-malware-check.sh --check-systemd       # a single check
+sudo aur-malware-check.sh --check-kmod     # root-requiring check
+```
 
-> **Limitations vs the GUI:** no root checks (no polkit in a terminal context), no per-session status column, no infected follow-up dialog. Use the GUI for day-to-day work; use this over SSH or when there is no display.
+The GUI is for interactive desktop use; the CLI covers everything else (SSH, cron, systemd, scripting).
 
 ## When each tool runs
 
@@ -99,7 +99,7 @@ Terminal/SSH fallback — pick a single check to run, or view the last scan log:
 |------|------|---------|
 | `aur_check-v2.sh` | Weekly + on boot (catches missed runs) | systemd timer with `Persistent=true` |
 | `aur_malware_gui.sh` | On demand | Desktop shortcut / app launcher |
-| `aur_malware_menu.sh` | On demand | Directly from terminal (SSH / no display) |
+| `aur-malware-check.sh` | On demand (SSH / no display) | Run directly with `--full` or a single `--check-*` flag |
 | `traur` | Before each AUR install | Manual — check maintainer reputation |
 | `aurscan` | Before each AUR install | Manual — run before `yay -S <pkg>` |
 
@@ -107,7 +107,6 @@ Terminal/SSH fallback — pick a single check to run, or view the last scan log:
 
 ```
 ~/.local/bin/aur-malware-check.sh     # main script
-~/.local/bin/aur_malware_menu.sh      # fzf menu script
 ~/.local/bin/aur_malware_gui.sh       # yad GUI script
 
 ~/.config/aur-malware-check/
@@ -131,11 +130,12 @@ Terminal/SSH fallback — pick a single check to run, or view the last scan log:
 
 ```bash
 # Official repos
-# bpf provides bpftool (--check-bpftool); yad is the GUI toolkit
-sudo pacman -S fzf libnotify bpf yad polkit
+# bpf provides bpftool (--check-bpftool); yad is the GUI toolkit;
+# libnotify provides notify-send for the desktop alert
+sudo pacman -S libnotify bpf yad polkit
 
 # AUR
-yay -S notify-send.sh traur
+yay -S traur
 
 # aurscan — GitHub only, no AUR package
 # clone from https://github.com/manticore-projects/aurscan and follow its README
@@ -156,8 +156,8 @@ See [systemd.md](systemd.md) for the full service and timer contents.
 git clone https://github.com/musqz/aur-malware-check.git ~/Github/aur-malware-check
 
 # 2. Install dependencies (bpf provides bpftool for --check-bpftool; yad for GUI)
-sudo pacman -S fzf libnotify bpf yad polkit
-yay -S notify-send.sh traur
+sudo pacman -S libnotify bpf yad polkit
+yay -S traur
 
 # aurscan — GitHub only, no AUR package
 git clone https://github.com/manticore-projects/aurscan.git

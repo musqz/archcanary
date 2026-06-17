@@ -7,6 +7,14 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.9.0 (2026-06-17) — personal fork
+- Removed: `aur_malware_menu.sh` (fzf TUI) — the yad GUI covers interactive desktop use and the CLI (`aur-malware-check.sh --full` / single `--check-*` flags) covers headless / SSH. The menu had drifted (missing yarn/pnpm checks) and its "View last log" used the abandoned journalctl path. Two surfaces now: GUI + CLI.
+- Removed: `notify-send.sh` dependency and the notification action button. The exit-code-2 alert now uses plain `notify-send` (libnotify) with no button; open AUR Malware Check from the app launcher to review and remediate.
+- Removed: "View last log" from the GUI — the per-session status column already shows pass/fail per check; re-run a check to see its detail.
+- Removed: orphaned `IS_FULL_SCAN` header marker (only ever fed the now-deleted GUI log picker).
+- Fix: `install.sh` used `local` outside a function in the uninstall path (runtime error on `bash`).
+- Dependencies dropped: `fzf`, `notify-send.sh`.
+
 ## 2.8.5 (2026-06-16) — personal fork
 - New: `DKMS_ALLOWLIST` env var (colon-separated module names) — DKMS modules installed outside pacman by proprietary hardware drivers (e.g. `tuxedo-drivers`) can be acknowledged without suppressing genuine unknown-module warnings. Allowlisted entries print INFO instead of WARNING and do not set exit 2.
 
