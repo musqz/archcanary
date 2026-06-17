@@ -79,6 +79,23 @@ if $UNINSTALL; then
     if $SYSTEM; then
         echo
         echo "Removing system components (requires root)..."
+
+        # User-session notifier
+        systemctl --user disable --now aur-malware-check-notify.path 2>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/aur-malware-check-notify.path" \
+              "$HOME/.config/systemd/user/aur-malware-check-notify.service"
+        systemctl --user daemon-reload 2>/dev/null || true
+
+        # System scan units
+        sudo systemctl disable --now aur-malware-check.timer aur-malware-check.path 2>/dev/null || true
+        sudo rm -f /etc/systemd/system/aur-malware-check.service \
+                   /etc/systemd/system/aur-malware-check.timer \
+                   /etc/systemd/system/aur-malware-check-onchange.service \
+                   /etc/systemd/system/aur-malware-check.path
+        sudo systemctl daemon-reload
+        sudo rm -rf /var/lib/aur-malware-check
+        echo "  removed: systemd units (system scan + user notifier) and /var/lib/aur-malware-check"
+
         sudo rm -rf /usr/lib/aur-malware-check
         echo "  removed: /usr/lib/aur-malware-check"
         sudo rm -f /usr/share/polkit-1/actions/org.aur-malware-check.policy
@@ -164,9 +181,51 @@ if $SYSTEM; then
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages}.txt"
     echo "  installed: /usr/share/polkit-1/actions/org.aur-malware-check.policy"
+
+    # --- Automated scan: root system units + user-session notifier ---------
+    # Migrate away from the old user-scope scan units (superseded by the root
+    # system scan; running --full as the user skips the root checks).
+    for _u in aur-malware-check.service aur-malware-check.timer \
+              aur-malware-check.path aur-malware-check-onchange.service; do
+        if [[ -f "$HOME/.config/systemd/user/$_u" ]]; then
+            systemctl --user disable --now "$_u" 2>/dev/null || true
+            rm -f "$HOME/.config/systemd/user/$_u"
+            echo "  migrated:  removed old user unit $_u"
+        fi
+    done
+
+    # Pre-create the result dir so the user notifier can watch it right away
+    # (the scan's StateDirectory= also creates it, but the .path needs it now).
+    sudo install -d -m 755 /var/lib/aur-malware-check
+
+    # System scan units (run as root → complete scan)
+    sudo cp "$REPO_DIR"/systemd/system/aur-malware-check.service \
+            "$REPO_DIR"/systemd/system/aur-malware-check.timer \
+            "$REPO_DIR"/systemd/system/aur-malware-check-onchange.service \
+            "$REPO_DIR"/systemd/system/aur-malware-check.path \
+            /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now aur-malware-check.timer aur-malware-check.path
+    echo "  installed: /etc/systemd/system/aur-malware-check.{service,timer,path} + -onchange.service (enabled)"
+
+    # User-session notifier (raises the desktop alert on a detection)
+    USER_UNITS="$HOME/.config/systemd/user"
+    mkdir -p "$USER_UNITS"
+    cp "$REPO_DIR"/systemd/user/aur-malware-check-notify.path \
+       "$REPO_DIR"/systemd/user/aur-malware-check-notify.service \
+       "$USER_UNITS/"
+    if systemctl --user daemon-reload 2>/dev/null; then
+        systemctl --user enable --now aur-malware-check-notify.path 2>/dev/null || true
+        echo "  installed: $USER_UNITS/aur-malware-check-notify.{path,service} (enabled)"
+    else
+        echo "  installed: $USER_UNITS/aur-malware-check-notify.{path,service}"
+        echo "             (no user systemd session detected — enable later with:"
+        echo "              systemctl --user enable --now aur-malware-check-notify.path)"
+    fi
+
     echo
-    echo "Root-requiring checks are now available in the GUI via pkexec."
-    echo "For an automated full (root) scan + desktop notification, see docs/systemd.md."
+    echo "Root-requiring checks are also available in the GUI via pkexec."
+    echo "Automated scan: weekly + on boot + after each pacman transaction (see docs/systemd.md)."
 fi
 
 echo

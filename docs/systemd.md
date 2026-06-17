@@ -19,7 +19,17 @@ user:
 
 The root scan runs all checks (so the result is trustworthy, not `INCOMPLETE`) but does **not** notify; the user notifier reads the shared result file and raises the desktop alert.
 
-> Requires the system components — run `sudo ./install.sh --system` first. That installs the root-accessible script, the root helper, the polkit policy, **and** the bundled package lists under `/usr/lib/aur-malware-check/` so the root scan can find them (root's `$HOME` is `/root`, which is not seeded).
+## Quick setup (recommended)
+
+`./install.sh --system` does all of this for you — it installs the system scan units, the user notifier, creates `/var/lib/aur-malware-check/`, seeds the package lists, enables the timer + pacman-trigger + notifier, and migrates away any old user-scope scan units:
+
+```bash
+./install.sh --system
+```
+
+The rest of this document describes the units it installs, for reference or manual setup.
+
+> The system components are required — `install.sh --system` installs the root-accessible script, the root helper, the polkit policy, **and** the bundled package lists under `/usr/lib/aur-malware-check/` so the root scan can find them (root's `$HOME` is `/root`, which is not seeded).
 
 ## 1. System scan (root)
 

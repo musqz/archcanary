@@ -7,6 +7,10 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.9.3 (2026-06-17) — personal fork
+- New: the systemd units are now shipped under `systemd/` and `install.sh --system` installs and enables them — no more hand-creating files. It drops the root system scan units (`aur-malware-check.{service,timer,path}` + `-onchange.service`) into `/etc/systemd/system/`, the user notifier (`aur-malware-check-notify.{path,service}`) into `~/.config/systemd/user/`, pre-creates `/var/lib/aur-malware-check/`, enables the timer + pacman trigger + notifier, and migrates away the old user-scope scan units. `uninstall --system` reverses all of it.
+- Fix: the user notifier `.path` unit failed to start when `/var/lib/aur-malware-check/` did not exist yet (inotify watch on a missing directory). The install now pre-creates the directory.
+
 ## 2.9.2 (2026-06-17) — personal fork
 - Fix: a scan that skips root-requiring checks no longer reports a misleading `RESULT: CLEAN`. When `--check-kmod` / `--check-ebpf` / `--check-bpftool` (or `--full`) is run without root, those checks now return a dedicated "skipped" code; the run is reported as `INCOMPLETE: N root check(s) skipped` and the result escalates from CLEAN (0) to WARNINGS (exit 1) so automation and the systemd user service can detect that the scan was not complete. Run with `sudo` for the full picture. Genuine findings (exit 2) are unchanged.
 - Change: systemd model reworked so automated scans get the **full picture**. The scan now runs as a **root system** service+timer (writes `/var/lib/aur-malware-check/last-scan.log`), and a **user** `.path` unit watches that file and fires the desktop notification on a detection — replacing the old user-only service that silently skipped the root checks. `docs/systemd.md` rewritten with the new units and a migration note.
