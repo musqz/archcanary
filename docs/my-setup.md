@@ -85,7 +85,7 @@ Run from a desktop shortcut or app launcher — grouped menu with a per-session 
 
 ### Headless / SSH
 
-There is no separate terminal menu. Over SSH or on a display-less box, run the scanner directly:
+Run the scanner directly:
 
 ```bash
 # Full scan — run with sudo for the full picture. Three checks (kmod, ebpf,
