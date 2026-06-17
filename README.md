@@ -272,10 +272,10 @@ This analysis aggregates information from the following sources:
 1. **Preserve the system**: Do not power off - use forensic acquisition with trusted media
 2. **Rotate ALL credentials**: Discord, GitHub, npm, Slack, Teams, SSH keys, Vault tokens, cloud provider keys
 3. **Check for persistence**: `systemctl list-units --type=service --state=running` (check for unknown services); also check drop-ins and timers with `--check-systemd`
-4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`, and enumerate loaded programs with `sudo bpftool prog show` / `sudo bpftool link show` — look for `kprobe`/`tracing`/`lsm`/`tracepoint` hooks you didn't install (or run `sudo aur_check-v2.sh --check-bpftool`)
-4a. **Check for library injection**: `cat /etc/ld.so.preload` — any non-empty content means a `.so` is being injected into every process (or run `aur_check-v2.sh --check-ldso`)
-4b. **Check for user-space persistence**: review `~/.config/autostart/`, `~/.config/systemd/user/`, and shell RC files for suspicious entries (or run `aur_check-v2.sh --check-autostart`)
-4c. **Check for rogue kernel modules**: `lsmod` and `dkms status` — flag any module not from a known package (or run `sudo aur_check-v2.sh --check-kmod`)
+4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`, and enumerate loaded programs with `sudo bpftool prog show` / `sudo bpftool link show` — look for `kprobe`/`tracing`/`lsm`/`tracepoint` hooks you didn't install (or run `sudo ./aur_check-v2.sh --check-bpftool`)
+4a. **Check for library injection**: `cat /etc/ld.so.preload` — any non-empty content means a `.so` is being injected into every process (or run `./aur_check-v2.sh --check-ldso`)
+4b. **Check for user-space persistence**: review `~/.config/autostart/`, `~/.config/systemd/user/`, and shell RC files for suspicious entries (or run `./aur_check-v2.sh --check-autostart`)
+4c. **Check for rogue kernel modules**: `lsmod` and `dkms status` — flag any module not from a known package (or run `sudo ./aur_check-v2.sh --check-kmod`)
 5. **Clean with trusted media**: Boot from Arch ISO, mount filesystem, remove malicious systemd units
 6. **Consider reinstallation**: The rootkit makes the system untrustworthy
 7. **Report findings**: https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/

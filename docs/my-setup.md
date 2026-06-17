@@ -86,10 +86,15 @@ Run from a desktop shortcut or app launcher — grouped menu with a per-session 
 There is no separate terminal menu. Over SSH or on a display-less box, run the scanner directly:
 
 ```bash
-aur-malware-check.sh --full --all-time     # everything
-aur-malware-check.sh --check-systemd       # a single check
-sudo aur-malware-check.sh --check-kmod     # root-requiring check
+aur-malware-check.sh --full --all-time                # everything
+aur-malware-check.sh --check-systemd                  # a single check
+sudo ~/.local/bin/aur-malware-check.sh --check-kmod   # root-requiring check
 ```
+
+> The root check uses the **full path** under `sudo`. `sudo` resets `$PATH` to its
+> `secure_path` (set in `/etc/sudoers`), which does not include `~/.local/bin`, so a
+> bare `sudo aur-malware-check.sh` fails with *command not found*. The script then
+> resolves your config from `$SUDO_USER`, so the lists are still found.
 
 The GUI is for interactive desktop use; the CLI covers everything else (SSH, cron, systemd, scripting).
 

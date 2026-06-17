@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.9.0"
+SCRIPT_VERSION="2.9.1"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -149,6 +149,29 @@ fi
 
 if [[ -n "$CHAOS_RAT_LIST_OPT" ]]; then
     CHAOS_RAT_LIST="$CHAOS_RAT_LIST_OPT"
+fi
+
+# ---------------------------------------------------------------------------
+# Invoking-user home under sudo/pkexec
+# Root-requiring checks (--check-kmod/--check-bpftool/--check-ebpf) are run as
+# root, but the package lists, dkms allowlist and log/cache dirs live in the
+# *invoking* user's home — not /root. The pkexec path is fixed by the root
+# helper (via PKEXEC_UID); this restores the same for a direct `sudo` run
+# (via SUDO_USER) so the lists are found and logs land in the user's cache.
+# ---------------------------------------------------------------------------
+if [[ $EUID -eq 0 ]]; then
+    _invoker_home=""
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+        _invoker_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+    elif [[ -n "${PKEXEC_UID:-}" ]]; then
+        _invoker_home="$(getent passwd "$PKEXEC_UID" | cut -d: -f6)"
+    fi
+    if [[ -n "$_invoker_home" ]]; then
+        export HOME="$_invoker_home"
+        export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$_invoker_home/.config}"
+        export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$_invoker_home/.cache}"
+    fi
+    unset _invoker_home
 fi
 
 # ---------------------------------------------------------------------------

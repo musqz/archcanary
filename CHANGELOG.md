@@ -7,6 +7,9 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.9.1 (2026-06-17) — personal fork
+- Fix: `sudo aur-malware-check.sh --check-kmod` (and other root checks run directly with `sudo`) no longer fails with `Malicious npm package list not found: /root/.config/...`. When running as root via `sudo`, the script now resolves the invoking user's home from `$SUDO_USER` (and `$PKEXEC_UID` for the pkexec path) so package lists, the DKMS allowlist, and the log/cache dirs come from the user's `~/.config` / `~/.cache` instead of `/root`. Mirrors what the polkit root helper already did for the GUI.
+
 ## 2.9.0 (2026-06-17) — personal fork
 - Removed: `aur_malware_menu.sh` (fzf TUI) — the yad GUI covers interactive desktop use and the CLI (`aur-malware-check.sh --full` / single `--check-*` flags) covers headless / SSH. The menu had drifted (missing yarn/pnpm checks) and its "View last log" used the abandoned journalctl path. Two surfaces now: GUI + CLI.
 - Removed: `notify-send.sh` dependency and the notification action button. The exit-code-2 alert now uses plain `notify-send` (libnotify) with no button; open AUR Malware Check from the app launcher to review and remediate.
