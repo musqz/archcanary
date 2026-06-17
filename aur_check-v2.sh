@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.9.3"
+SCRIPT_VERSION="2.9.4"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -433,6 +433,36 @@ check_logs() {
 #   - .timer units with OnBootSec= + Persistent=true (timer-based persistence)
 # Scan dirs are overridable via SYSTEMD_SCAN_DIRS (colon-separated) for testing.
 # ---------------------------------------------------------------------------
+# Returns 0 if a .service file is legitimate: pacman-owned, or its ExecStart
+# binary lives in a standard system prefix and exists on disk. Malware points
+# ExecStart at /tmp/, /dev/shm/, $HOME, etc., which is never vetted.
+_service_vetted() {
+    local svc="$1"
+    [[ -f "$svc" ]] || return 1
+    pacman -Qo "$svc" &>/dev/null 2>&1 && return 0
+    local exec_start
+    exec_start=$(grep -oP '^ExecStart=[-+@!:]*\K[^[:space:]]+' "$svc" 2>/dev/null | head -1)
+    if [[ -n "$exec_start" && "$exec_start" == /* ]]; then
+        if [[ "$exec_start" == /usr/* || "$exec_start" == /opt/* || \
+              "$exec_start" == /bin/* || "$exec_start" == /sbin/* || \
+              "$exec_start" == /usr/local/* ]] && [[ -f "$exec_start" ]]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Locate the .service file a unit name resolves to, across the standard dirs
+# plus the directory currently being scanned.
+_find_service_file() {
+    local name="$1" scan_dir="$2" cand
+    for cand in "$scan_dir/$name" /etc/systemd/system/"$name" \
+                /run/systemd/system/"$name" /usr/lib/systemd/system/"$name"; do
+        [[ -f "$cand" ]] && { printf '%s\n' "$cand"; return 0; }
+    done
+    return 1
+}
+
 check_systemd() {
     local found=()
     local re_restart='^Restart=(always|on-failure|on-abnormal|on-abort)'
@@ -471,12 +501,22 @@ check_systemd() {
             fi
         done < <(find "$dir" \( -name '*.service' -o -name '*.conf' \) -type f 2>/dev/null)
 
-        # .timer units with boot persistence — system dirs only, pacman-owned skipped
+        # .timer units with boot persistence — system dirs only, pacman-owned skipped.
+        # A timer itself is harmless; what matters is the service it launches. So a
+        # persistent timer is only flagged when its target .service is NOT vetted
+        # (e.g. ExecStart in /tmp). A timer triggering a legit service (standard
+        # prefix or pacman-owned) is benign — this is why our own units don't trip.
         $is_user_dir && continue
         while IFS= read -r timer; do
             pacman -Qo "$timer" &>/dev/null 2>&1 && continue
             if grep -q 'OnBootSec=' "$timer" 2>/dev/null && grep -q 'Persistent=true' "$timer" 2>/dev/null; then
-                found+=("$timer (timer: OnBootSec + Persistent=true)")
+                local target svc_file
+                target=$(grep -oP '^\s*Unit=\K\S+' "$timer" 2>/dev/null | head -1)
+                [[ -z "$target" ]] && target="$(basename "${timer%.timer}").service"
+                svc_file=$(_find_service_file "$target" "$dir") || svc_file=""
+                # Vetted target → benign timer; skip. Otherwise flag it.
+                [[ -n "$svc_file" ]] && _service_vetted "$svc_file" && continue
+                found+=("$timer (timer → ${target}${svc_file:+, unvetted})")
             fi
         done < <(find "$dir" -name '*.timer' -type f 2>/dev/null)
     done

@@ -7,6 +7,9 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.9.4 (2026-06-17) — personal fork
+- Fix: `check_systemd` no longer flags a persistent `.timer` (`OnBootSec=` + `Persistent=true`) just for existing — it now vets the **service the timer triggers** and only warns when that target service is itself suspicious (ExecStart outside a standard prefix, not pacman-owned). This stops the scanner from flagging its own `/etc/systemd/system/aur-malware-check.timer` (installed by `install.sh --system`) as a malicious persistence unit, which produced a false `RESULT: INFECTED` and desktop alert. A malicious timer pointing at `/tmp`, `$HOME`, etc. is still caught.
+
 ## 2.9.3 (2026-06-17) — personal fork
 - New: the systemd units are now shipped under `systemd/` and `install.sh --system` installs and enables them — no more hand-creating files. It drops the root system scan units (`aur-malware-check.{service,timer,path}` + `-onchange.service`) into `/etc/systemd/system/`, the user notifier (`aur-malware-check-notify.{path,service}`) into `~/.config/systemd/user/`, pre-creates `/var/lib/aur-malware-check/`, enables the timer + pacman trigger + notifier, and migrates away the old user-scope scan units. `uninstall --system` reverses all of it.
 - Fix: the user notifier `.path` unit failed to start when `/var/lib/aur-malware-check/` did not exist yet (inotify watch on a missing directory). The install now pre-creates the directory.
