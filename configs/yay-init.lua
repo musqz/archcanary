@@ -13,8 +13,6 @@ yay.opt.clean_after = false
 yay.opt.sort_by     = "votes"
 yay.opt.bottom_up   = false
 
-yay.log.info("yay init.lua loaded")
-
 -- Warn about AUR packages with PKGBUILD modified < 3 days ago
 yay.create_autocmd("UpgradeSelect", {
   desc = "flag recently modified AUR upgrades",
