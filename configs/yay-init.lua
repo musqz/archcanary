@@ -7,7 +7,7 @@
 
 -- Options
 yay.opt.diff_menu   = true
-yay.opt.edit_menu   = false   -- aurscan already handles PKGBUILD review
+yay.opt.edit_menu   = true    -- required: yay runs the aurscan-gate editor here
 yay.opt.clean_menu  = true
 yay.opt.clean_after = false
 yay.opt.sort_by     = "votes"
