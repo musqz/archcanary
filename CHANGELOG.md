@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.2 (2026-06-18)
+
+- New: **Russian Spam Campaign list** (`malicious_russian_spam_packages.txt`, 83
+  entries, Sid Karunaratne 2026-06-14) wired into the scanner as a dedicated
+  detection layer alongside the CHAOS RAT list. Packages injecting spam into
+  `~/.bashrc` / `~/.zshrc`. Shown in the scan header; accessible via
+  `--russian-spam-list=PATH`. Copied to `/usr/lib/archcanary/` by `--system`
+  install so the root scan finds it.
+- Fix: `--doctor` user-install check was looking for `~/.local/bin/archcanary.sh`
+  (always MISS); now checks `~/.local/bin/archcanary`.
+- Fix: GUI candidate lookup used `command -v archcanary.sh` (never matched);
+  replaced with `/usr/lib/archcanary/archcanary.sh` as a third fallback so the
+  GUI finds the system install when run outside the repo.
+- Fix: all user-facing text, docs, and hints updated from `archcanary.sh` →
+  `archcanary` to match the installed binary name (no `.sh` extension).
+
 ## v0.1.1 (2026-06-18) — post-release fix
 
 - Fix: `--doctor` treated missing aurscan, traur, `alias yay=syay`, and yay
