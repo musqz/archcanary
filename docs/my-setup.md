@@ -9,7 +9,8 @@ Full overview of how this fork is deployed and how the pieces connect.
 | `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
 | `aur_malware_gui.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window |
 | `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Pre-install trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes) |
-| `aurscan` | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM-based pre-install PKGBUILD scanner using Claude — proactive check before installing an AUR package |
+| `aurscan` (`syay`) | [musqz/aurscan](https://github.com/musqz/aurscan) (fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan)) | LLM-based PKGBUILD scanner using Claude. Installed as `syay` and bound with `alias yay=syay` in `.bashrc`, so it runs **automatically** on every AUR install/upgrade — it reads the PKGBUILD with Claude (plus offline static rules) and only hands off to the real `/usr/bin/yay` on a CLEAN verdict |
+| `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — runs on every install/upgrade *after* aurscan clears it: upgrade-age warning (`UpgradeSelect`), offline malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
 | `yad` | official repos | GTK dialog toolkit used by `aur_malware_gui.sh` |
 | `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
 | `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
@@ -62,8 +63,23 @@ traur — two use cases:
     note: pre-install scan of a specific package requires the terminal —
           the GUI has no package name input
 
-aurscan (manual — before installing any AUR package)
-    └── scans PKGBUILD with Claude LLM before yay installs it
+every AUR install / upgrade (automatic — `alias yay=syay`)
+    └── syay  (aurscan wrapper)
+            ├── offline static rules  — known campaign signatures
+            ├── Claude LLM reads the PKGBUILD — novel / obfuscated patterns
+            └── on CLEAN → hands off to /usr/bin/yay
+                    └── yay 13.0 init.lua hooks (~/.config/yay/init.lua)
+                            ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
+                            ├── AURPreInstall  — abort on malicious patterns
+                            │                    (npm atomic-lockfile, bun js-digest,
+                            │                     curl|bash / wget|sh download-exec)
+                            └── PostInstall    — log AUR installs (name + version)
+            └── on suspicious → aurscan blocks the build, yay never runs
+
+standalone aurscan (manual — audit without installing)
+    ├── aurscan <pkg>            — scan a single package
+    ├── aurscan --update-check   — audit pending updates without installing
+    └── aurscan --rules-only     — offline static rules only, no LLM call
 ```
 
 ### Scanner comparison
@@ -72,7 +88,8 @@ aurscan (manual — before installing any AUR package)
 |------|------|-----|---------|
 | `traur scan <pkg>` | Before install (terminal) | 279 heuristic signals | Unknown suspicious packages |
 | `traur scan` (GUI) | On demand — periodic audit | Same signals, all installed AUR pkgs | Suspicious packages already on system |
-| `aurscan` | Before install (terminal) | LLM reads PKGBUILD | Novel / obfuscated patterns |
+| `aurscan` / `syay` | Every AUR install (automatic via alias) | LLM reads PKGBUILD + offline static rules | Novel / obfuscated patterns |
+| yay `init.lua` hooks | Every AUR install / upgrade (automatic) | Offline Lua pattern match + age warning | Known campaign signatures, stale-rewrite upgrades |
 | `aur_check-v2.sh` | After install (automated) | IOC list matching | Known-compromised packages |
 
 All are complementary — none replaces the others.
@@ -118,7 +135,8 @@ The GUI is for interactive desktop use; the CLI covers everything else (SSH, cro
 | `aur_malware_gui.sh` | On demand | Desktop shortcut / app launcher |
 | `aur-malware-check.sh` (manual) | On demand (SSH / no display) | Run directly with `--full` (sudo) or a single `--check-*` flag |
 | `traur` | Before each AUR install | Manual — check maintainer reputation |
-| `aurscan` | Before each AUR install | Manual — run before `yay -S <pkg>` |
+| `aurscan` / `syay` | Every AUR install / upgrade | Automatic — `alias yay=syay` wraps every `yay` call |
+| yay `init.lua` hooks | Every AUR install / upgrade | Automatic — yay 13.0 runs them after aurscan clears the build |
 
 ## Install locations
 
@@ -129,6 +147,12 @@ The GUI is for interactive desktop use; the CLI covers everything else (SSH, cro
 ~/.config/aur-malware-check/
     ├── package_list.txt              # refreshed weekly via --refresh
     └── malicious_npm_packages.txt    # static list, auto-seeded on first run
+
+~/.config/yay/                        # yay 13.0
+    ├── init.lua                      # Lua hooks (age warning, pattern block, install log)
+    └── config.json                   # yay config — "version": "13.0.0", editmenu off (aurscan owns review)
+
+/usr/local/bin/aurscan                # = syay; alias yay=syay in ~/.bashrc
 
 ~/.config/systemd/user/                   # installed by ./install.sh --system
     ├── aur-malware-check-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
@@ -170,8 +194,25 @@ sudo pacman -S libnotify bpf yad polkit
 yay -S traur
 
 # aurscan — GitHub only, no AUR package
-# clone from https://github.com/manticore-projects/aurscan and follow its README
+# clone the fork, install as syay, then alias yay to it
+git clone https://github.com/musqz/aurscan.git ~/Github/aurscan
+cd ~/Github/aurscan && ./install.sh
+echo 'alias yay=syay' >> ~/.bashrc
 ```
+
+## yay 13.0 integration
+
+yay 13.0 added a Lua config (`~/.config/yay/init.lua`) — a ready-to-copy version lives in this repo at [`configs/yay-init.lua`](../configs/yay-init.lua). The aurscan wrapper (`syay`) runs *first* — it reads the PKGBUILD with Claude and applies offline static rules, aborting the build on a suspicious verdict. Only on CLEAN does it call the real `/usr/bin/yay`, which then runs these hooks:
+
+| Hook | Event | What it does |
+|------|-------|--------------|
+| Upgrade-age warning | `UpgradeSelect` | Warns for any AUR upgrade whose PKGBUILD was modified < 3 days ago (prints hours since change) — a freshly rewritten PKGBUILD is the classic compromise signal |
+| Pattern block | `AURPreInstall` | Aborts the build if the PKGBUILD matches a known-malicious pattern: `npm install atomic-lockfile` (Atomic Arch wave 1), `bun install js-digest` (wave 2), or `curl`/`wget` piped to `bash`/`sh` |
+| Install log | `PostInstall` | Logs every installed AUR package (name + version) via `yay.log.info` |
+
+Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and **`edit_menu = false`** — PKGBUILD review is delegated to aurscan, so yay's own edit prompt is disabled to avoid a redundant second review. `config.json` mirrors this (`"editmenu": false`).
+
+> The two layers are complementary: aurscan/Claude catches novel or obfuscated payloads; the Lua hooks are a fast offline backstop for known campaign signatures and stale-rewrite upgrades, and run even if the LLM call is unavailable.
 
 ## Known false positives
 
@@ -191,9 +232,10 @@ git clone https://github.com/musqz/aur-malware-check.git ~/Github/aur-malware-ch
 sudo pacman -S libnotify bpf yad polkit
 yay -S traur
 
-# aurscan — GitHub only, no AUR package
-git clone https://github.com/manticore-projects/aurscan.git
-# see its README for install instructions
+# aurscan — GitHub only, no AUR package (fork installs as syay)
+git clone https://github.com/musqz/aurscan.git ~/Github/aurscan
+cd ~/Github/aurscan && ./install.sh
+echo 'alias yay=syay' >> ~/.bashrc
 
 # 3. Run install script (installs to ~/.local/bin by default)
 bash ~/Github/aur-malware-check/install.sh
@@ -201,6 +243,10 @@ bash ~/Github/aur-malware-check/install.sh
 # Also install root helper + polkit policy (enables eBPF/kmod checks in the GUI)
 bash ~/Github/aur-malware-check/install.sh --system
 
-# 4. Run a first scan with package list refresh
+# 4. yay 13.0 Lua hooks (age warning, pattern block, install log)
+mkdir -p ~/.config/yay
+cp ~/Github/aur-malware-check/configs/yay-init.lua ~/.config/yay/init.lua
+
+# 5. Run a first scan with package list refresh
 aur-malware-check.sh --refresh --full --all-time
 ```
