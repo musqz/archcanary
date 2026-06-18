@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.12.0"
+SCRIPT_VERSION="2.12.1"
 
 # ---------------------------------------------------------------------------
 # Configuration
