@@ -78,6 +78,7 @@ DOCTOR_SECTIONS=""
 PACKAGE_LIST_FILE_OPT=""
 MALICIOUS_NPM_LIST_OPT=""
 CHAOS_RAT_LIST_OPT=""
+RUSSIAN_SPAM_LIST_OPT=""
 
 # Temp file cleanup on exit/interrupt
 CLEANUP_FILES=()
@@ -105,6 +106,7 @@ for arg in "$@"; do
         --package-list=*)        PACKAGE_LIST_FILE_OPT="${arg#*=}" ;;
         --malicious-npm-list=*)  MALICIOUS_NPM_LIST_OPT="${arg#*=}" ;;
         --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
+        --russian-spam-list=*)   RUSSIAN_SPAM_LIST_OPT="${arg#*=}" ;;
         --all-time)              ALL_TIME=true ;;
         --no-notify)             NO_NOTIFY=true ;;
         --doctor)                DOCTOR=true ;;
@@ -129,7 +131,8 @@ for arg in "$@"; do
             echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/archcanary/aur-check-<date>.log)"
             echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
             echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
-            echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)"
+            echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)
+  --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)"
             echo "  --all-time                Disable recency window — flag any installed infected"
             echo "                            package regardless of install date (for cross-campaign checks)"
             echo "  --no-notify               Suppress the desktop notification on detection"
@@ -459,6 +462,10 @@ if [[ -n "$CHAOS_RAT_LIST_OPT" ]]; then
     CHAOS_RAT_LIST="$CHAOS_RAT_LIST_OPT"
 fi
 
+if [[ -n "$RUSSIAN_SPAM_LIST_OPT" ]]; then
+    RUSSIAN_SPAM_LIST="$RUSSIAN_SPAM_LIST_OPT"
+fi
+
 # ---------------------------------------------------------------------------
 # Invoking-user home under sudo/pkexec
 # Root-requiring checks (--check-kmod/--check-bpftool/--check-ebpf) are run as
@@ -515,6 +522,9 @@ INFECTED_PKGS=()
 
 CHAOS_RAT_LIST="${CHAOS_RAT_LIST:-$(dirname "$(realpath "$0")")/chaos_rat_packages.txt}"
 CHAOS_RAT_PKGS=()
+
+RUSSIAN_SPAM_LIST="${RUSSIAN_SPAM_LIST:-$(dirname "$(realpath "$0")")/malicious_russian_spam_packages.txt}"
+RUSSIAN_SPAM_PKGS=()
 
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
@@ -612,6 +622,15 @@ load_packages() {
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             CHAOS_RAT_PKGS+=("$line")
         done <"$CHAOS_RAT_LIST"
+    fi
+
+    # Russian Spam Campaign list (optional — absence is not fatal)
+    RUSSIAN_SPAM_PKGS=()
+    if [[ -f "$RUSSIAN_SPAM_LIST" ]]; then
+        while IFS= read -r line; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            RUSSIAN_SPAM_PKGS+=("$line")
+        done <"$RUSSIAN_SPAM_LIST"
     fi
 }
 
@@ -1514,6 +1533,13 @@ for p in "${CHAOS_RAT_PKGS[@]}"; do
     INFECTED_PKGS+=("$p")
 done
 
+# Russian Spam Campaign — packages injecting spam into shell configs
+declare -A RUSSIAN_SPAM_LOOKUP
+for p in "${RUSSIAN_SPAM_PKGS[@]}"; do
+    RUSSIAN_SPAM_LOOKUP["$p"]=1
+    INFECTED_PKGS+=("$p")
+done
+
 # Build exact-match lookup table from INFECTED_PKGS
 # (pacman -Qmq does prefix matching; this prevents false positives)
 declare -A INFECTED_LOOKUP
@@ -1536,6 +1562,9 @@ if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
     else
         echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, window ${CHAOS_START_DATE} to ${CHAOS_END_DATE})"
     fi
+fi
+if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
+    echo "   (incl. ${#RUSSIAN_SPAM_PKGS[@]} Russian Spam Campaign pkgs, 2026-06-14)"
 fi
 echo "============================================================"
 echo

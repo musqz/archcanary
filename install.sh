@@ -163,7 +163,7 @@ if $SYSTEM; then
     sudo cp "$REPO_DIR/org.archcanary.policy" /usr/share/polkit-1/actions/
     # Seed the bundled package lists next to the system script so a root scan
     # (system service) finds them — root's $HOME is /root, which is not seeded.
-    for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt; do
+    for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt malicious_russian_spam_packages.txt; do
         [[ -f "$REPO_DIR/$_list" ]] && sudo cp "$REPO_DIR/$_list" "$SYSTEM_LIB/$_list"
     done
     # DKMS allowlist — single system-wide file (the kmod audit only runs as root).
@@ -197,7 +197,7 @@ EOF
     fi
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
-    echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages}.txt"
+    echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
