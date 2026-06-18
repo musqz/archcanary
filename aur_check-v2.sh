@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.9.9"
+SCRIPT_VERSION="2.10.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -71,6 +71,7 @@ REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
 NO_NOTIFY=false
+DOCTOR=false
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -105,6 +106,7 @@ for arg in "$@"; do
         --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
         --all-time)              ALL_TIME=true ;;
         --no-notify)             NO_NOTIFY=true ;;
+        --doctor)                DOCTOR=true ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -129,11 +131,139 @@ for arg in "$@"; do
             echo "  --all-time                Disable recency window — flag any installed infected"
             echo "                            package regardless of install date (for cross-campaign checks)"
             echo "  --no-notify               Suppress the desktop notification on detection"
+            echo "  --doctor                  Report install/config status of every stack element"
+            echo "                            (deps, install, systemd, aurscan, traur, yay hooks) and exit"
             echo "  --help, -h                Show this help"
             exit 0
             ;;
     esac
 done
+
+# ---------------------------------------------------------------------------
+# Setup doctor
+# ---------------------------------------------------------------------------
+# Standalone health check: report the install/config status of every element
+# of the stack and exit. Runs BEFORE the scan machinery (no log tee, no list
+# loading) so it never errors on the very state it is meant to report.
+#
+# Each missing/misconfigured item prints the exact command to fix it. The GUI
+# surfaces these fix commands as copyable text / open-terminal actions — it
+# never runs them automatically (this is a security tool: it guides, it does
+# not silently execute installs).
+# ---------------------------------------------------------------------------
+run_doctor() {
+    local repo_dir cfg_dir user_bin user_sd
+    repo_dir="$(dirname "$(realpath "$0")")"
+    cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aur-malware-check"
+    user_bin="$HOME/.local/bin"
+    user_sd="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+    # The repo-relative fix sources only exist when run from a clone; degrade
+    # gracefully to a hint when run from an installed copy.
+    local installer="$repo_dir/install.sh" luasrc="$repo_dir/configs/yay-init.lua"
+    [[ -f $installer ]] || installer="install.sh   # (run from the aur-malware-check repo)"
+    [[ -f $luasrc    ]] || luasrc="configs/yay-init.lua   # (from the aur-malware-check repo)"
+
+    # Colours only on a real terminal; piped/GUI-captured output stays plain.
+    local G='' Y='' B='' N=''
+    if [[ -t 1 ]]; then
+        G=$'\e[32m'; Y=$'\e[33m'; B=$'\e[1m'; N=$'\e[0m'
+    fi
+
+    local fail=0
+    _ok()   { printf '  %s[ OK ]%s  %s\n' "$G" "$N" "$1"; }
+    _miss() {
+        printf '  %s[MISS]%s  %s\n' "$Y" "$N" "$1"
+        if [[ -n ${2:-} ]]; then
+            printf '           %s↳ fix:%s %s\n' "$B" "$N" "$2"
+        fi
+        fail=1
+    }
+    # _item LABEL TEST-EXIT [FIX]
+    _item() { if [[ $2 -eq 0 ]]; then _ok "$1"; else _miss "$1" "${3:-}"; fi; }
+    _have() { command -v "$1" >/dev/null 2>&1 && echo 0 || echo 1; }
+    _file() { [[ -e $1 ]] && echo 0 || echo 1; }
+
+    printf '%s============================================================%s\n' "$B" "$N"
+    printf '%s AUR Malware Check — setup doctor%s\n' "$B" "$N"
+    printf '%s============================================================%s\n\n' "$B" "$N"
+
+    # --- Platform ----------------------------------------------------------
+    local pretty="unknown"
+    if [[ -r /etc/os-release ]]; then
+        pretty="$(. /etc/os-release; echo "${PRETTY_NAME:-${ID:-unknown}}")"
+    fi
+    local helpers=() h
+    for h in yay paru pamac pikaur trizen aurutils; do
+        command -v "$h" >/dev/null 2>&1 && helpers+=("$h") || true
+    done
+    printf '%sPlatform%s\n' "$B" "$N"
+    printf '  detected:    %s\n' "$pretty"
+    printf '  AUR helpers: %s\n' "${helpers[*]:-none found}"
+    if command -v mhwd >/dev/null 2>&1; then
+        printf '  mhwd:        present (Manjaro driver manager — expect DKMS modules)\n'
+    fi
+    printf '\n'
+
+    # --- Dependencies ------------------------------------------------------
+    printf '%sDependencies (official repos)%s\n' "$B" "$N"
+    _item "yad (GUI toolkit)"            "$(_have yad)"          "sudo pacman -S yad"
+    _item "bpftool (eBPF enumeration)"   "$(_have bpftool)"      "sudo pacman -S bpf"
+    _item "notify-send (desktop alerts)" "$(_have notify-send)"  "sudo pacman -S libnotify"
+    _item "pkexec (GUI root checks)"     "$(_have pkexec)"       "sudo pacman -S polkit"
+    printf '\n'
+
+    # --- User install ------------------------------------------------------
+    printf '%sUser install%s\n' "$B" "$N"
+    _item "main scanner (~/.local/bin)" "$(_file "$user_bin/aur-malware-check.sh")" "bash $installer"
+    _item "GUI (~/.local/bin)"          "$(_file "$user_bin/aur_malware_gui.sh")"   "bash $installer"
+    _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "aur-malware-check.sh --refresh"
+    printf '\n'
+
+    # --- System install (root) --------------------------------------------
+    printf '%sSystem install (root)%s\n' "$B" "$N"
+    _item "system scanner copy" "$(_file /usr/lib/aur-malware-check/aur-malware-check.sh)"          "sudo bash $installer --system"
+    _item "root-helper (pkexec)" "$(_file /usr/lib/aur-malware-check/root-helper)"                  "sudo bash $installer --system"
+    _item "polkit policy"        "$(_file /usr/share/polkit-1/actions/org.aur-malware-check.policy)" "sudo bash $installer --system"
+    _item "DKMS allowlist"       "$(_file /etc/aur-malware-check/dkms_allowlist.conf)"              "sudo bash $installer --system"
+    printf '\n'
+
+    # --- Automation (systemd) ---------------------------------------------
+    printf '%sAutomation (systemd)%s\n' "$B" "$N"
+    _item "system scan timer"    "$(_file /etc/systemd/system/aur-malware-check.timer)" "sudo bash $installer --system"
+    _item "pacman-tx path unit"  "$(_file /etc/systemd/system/aur-malware-check.path)"  "sudo bash $installer --system"
+    _item "user notifier (path)" "$(_file "$user_sd/aur-malware-check-notify.path")"    "bash $installer --system"
+    printf '\n'
+
+    # --- Pre-install layer (external) -------------------------------------
+    printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
+    _item "aurscan / syay wrapper" \
+        "$( { command -v syay || command -v aurscan; } >/dev/null 2>&1 && echo 0 || echo 1)" \
+        "install from https://github.com/musqz/aurscan"
+    # Check the resolved alias in an interactive shell rather than grepping a
+    # specific file — distros source aliases from varying places and may quote
+    # the value (alias yay='syay'). End-state detection, not file guessing.
+    _item "alias yay=syay (active)" \
+        "$(bash -ic 'alias yay' 2>/dev/null | grep -q "syay" && echo 0 || echo 1)" \
+        "echo \"alias yay=syay\" >> ~/.bashrc   # (or your distro's aliases file)"
+    _item "traur (heuristic scanner)" "$(_have traur)" "yay -S traur"
+    _item "yay init.lua hooks"        "$(_file "$HOME/.config/yay/init.lua")" "cp $luasrc ~/.config/yay/init.lua"
+    printf '\n'
+
+    # --- Summary -----------------------------------------------------------
+    printf '%s============================================================%s\n' "$B" "$N"
+    if [[ $fail -eq 0 ]]; then
+        printf ' %sRESULT: all elements present.%s\n' "$G" "$N"
+    else
+        printf ' %sRESULT: some elements missing — see the fix commands above.%s\n' "$Y" "$N"
+    fi
+    printf '%s============================================================%s\n' "$B" "$N"
+    return $fail
+}
+
+if $DOCTOR; then
+    if run_doctor; then exit 0; else exit 1; fi
+fi
 
 # ---------------------------------------------------------------------------
 # Apply CLI overrides for env-var-backed settings

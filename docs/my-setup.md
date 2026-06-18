@@ -114,6 +114,10 @@ aur-malware-check.sh --check-pkgbuild
 
 # A single root-requiring check:
 sudo ~/.local/bin/aur-malware-check.sh --check-kmod
+
+# Setup health check — is every element installed and configured? (no root,
+# no scan; auto-detects distro/AUR helpers and prints a fix command per gap)
+aur-malware-check.sh --doctor
 ```
 
 > Root checks use the **full path** under `sudo`. `sudo` resets `$PATH` to its

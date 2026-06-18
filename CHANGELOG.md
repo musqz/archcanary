@@ -7,6 +7,9 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.10.0 (2026-06-18) — personal fork
+- New: `--doctor` — a standalone setup health check that reports the install/config status of every element of the stack (dependencies, user install, system/root install, systemd automation, and the pre-install layer: aurscan/syay, the `yay=syay` alias, traur, yay `init.lua` hooks). Each missing item prints the exact command to fix it. It runs before the scan machinery (no log tee, no list loading) so it never errors on the very state it reports, and it auto-detects the platform (distro, AUR helpers present, `mhwd`). Exit 0 = all present, 1 = something missing. The alias check reads the resolved interactive alias rather than grepping a fixed file, so it works regardless of which file defines it or whether the value is quoted. The GUI will surface these fix commands as copyable / open-terminal actions (it never auto-runs installs).
+
 ## 2.9.9 (2026-06-17) — personal fork
 - Change: the DKMS allowlist is now a **single system-wide file** at `/etc/aur-malware-check/dkms_allowlist.conf`. After the system/user scan split the kmod audit only runs as root, so a per-user `~/.config` copy was vestigial and confusing (two files, only `/etc` authoritative). The script now reads only `/etc` (override with `DKMS_ALLOWLIST_FILE` for tests); `install.sh --system` seeds it (migrating any existing `~/.config` entries, then removing that per-user copy); base `install.sh` no longer creates a per-user allowlist; and the GUI **Edit DKMS allowlist** button now edits `/etc` and saves it back via pkexec. Edit it with the GUI button or `sudoedit /etc/aur-malware-check/dkms_allowlist.conf`.
 
