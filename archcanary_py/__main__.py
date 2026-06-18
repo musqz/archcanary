@@ -9,14 +9,14 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from aur_check_py.merger import (
+from archcanary_py.merger import (
     HEDGEDOC_URL,
     extract_package_names,
     fetch_url,
     merge_lists,
     read_file,
 )
-from aur_check_py.scanner import (
+from archcanary_py.scanner import (
     AurScanner,
     BunMatch,
     LogHit,
@@ -26,7 +26,7 @@ from aur_check_py.scanner import (
 
 SCRIPT_VERSION = '3.0'
 
-logger = logging.getLogger('aur_check')
+logger = logging.getLogger('archcanary')
 
 
 def setup_logging(log_file: str, debug: bool = False) -> None:
@@ -48,7 +48,7 @@ def setup_logging(log_file: str, debug: bool = False) -> None:
 
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description='AUR Malware Check - scans for indicators of compromise',
+        description='Archcanary - scans for indicators of compromise',
     )
     parser.add_argument('--check-systemd', action='store_true',
         help='Scan for unknown systemd services (Restart=always)')
@@ -89,7 +89,7 @@ def create_parser() -> argparse.ArgumentParser:
 
 def print_banner(infected_count: int, start_date: str, end_date: str, all_time: bool) -> None:
     print('============================================================')
-    print(f' AUR Malware Check v{SCRIPT_VERSION}')
+    print(f' Archcanary v{SCRIPT_VERSION}')
     print(' Campaign: malicious npm packages (malicious_npm_packages.txt) infostealer + eBPF rootkit')
     if all_time:
         print(' Date window: all-time (no recency filter)')
@@ -148,7 +148,7 @@ def print_ebpf_hits(hits: list[Path], bpf_accessible: bool) -> None:
     if not bpf_accessible:
         print('  /sys/fs/bpf not accessible \u2014 BPF filesystem not mounted or insufficient privileges.')
         print('  \u2192 Requires root to scan for hidden BPF maps (e.g. hidden_pids, hidden_names).')
-        print('  \u2192 Try: sudo ./aur_check.sh --check-ebpf')
+        print('  \u2192 Try: sudo ./archcanary.sh --check-ebpf')
         print('  \u2192 Skip this check if eBPF rootkit detection is not needed for your threat model.')
         return
     if not hits:

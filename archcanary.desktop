@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=AUR Malware Check
+Name=Archcanary
 Comment=Scan for compromised AUR packages
-Exec=aur_malware_gui.sh
+Exec=archcanary-gui.sh
 Icon=security-high
 Categories=System;Security;
 Terminal=false

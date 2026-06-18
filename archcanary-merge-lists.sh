@@ -3,7 +3,7 @@
 # custom_list_merge_aur_scan.sh — Fetch, merge, dedup, and scan
 #
 # Fetches the official HedgeDoc list (optional), merges with custom package
-# lists from URLs or files, deduplicates, and runs aur_check-v2.sh.
+# lists from URLs or files, deduplicates, and runs archcanary.sh.
 # By default the campaign date window applies.  Pass -- --all-time after
 # the options separator to scan regardless of install date.
 #
@@ -23,14 +23,14 @@
 #   --help                       Show this help
 #
 #   --    Separator — all following arguments are passed through to
-#         aur_check-v2.sh unchanged.
+#         archcanary.sh unchanged.
 #         Useful flags: --all-time (disable date window), --verbose,
 #         --check-systemd, --check-npm-cache, --check-bun-cache, --full.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-AUR_CHECK="$SCRIPT_DIR/aur_check-v2.sh"
+ARCHCANARY="$SCRIPT_DIR/archcanary.sh"
 HEDGEDOC_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
 
 LISTS=()
@@ -109,9 +109,9 @@ if $SKIP_HEDGEDOC && [[ ${#LISTS[@]} -eq 0 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Check aur_check-v2.sh exists
+# Check archcanary.sh exists
 # ---------------------------------------------------------------------------
-[[ -x "$AUR_CHECK" ]] || error "aur_check-v2.sh not found or not executable at: $AUR_CHECK"
+[[ -x "$ARCHCANARY" ]] || error "archcanary.sh not found or not executable at: $ARCHCANARY"
 
 # ---------------------------------------------------------------------------
 # Source helpers (reuse load_list logic)
@@ -237,13 +237,13 @@ if [[ ${#LISTS[@]} -gt 0 || ${#NPM_LISTS[@]} -gt 0 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Run aur_check-v2.sh
+# Run archcanary.sh
 # Temp files remain in /tmp — v2 reads them via --package-list= and
 # --malicious-npm-list=.  The cleanup trap above handles early exits;
 # after exec the trap is irrelevant (process image replaced).
 # ---------------------------------------------------------------------------
-info "running: aur_check-v2.sh --package-list=$AUR_TEMP ${AUR_ARGS[*]}"
-exec "$AUR_CHECK" \
+info "running: archcanary.sh --package-list=$AUR_TEMP ${AUR_ARGS[*]}"
+exec "$ARCHCANARY" \
     --package-list="$AUR_TEMP" \
     --malicious-npm-list="$NPM_TEMP" \
     "${AUR_ARGS[@]}"

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from aur_check_py.scanner import (
+from archcanary_py.scanner import (
     AurScanner,
     BunMatch,
     LogHit,

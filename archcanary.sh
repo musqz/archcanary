@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# aur_check.sh - Consolidated AUR Malware Check Script
+# archcanary.sh - Consolidated Archcanary Script
 # Campaign: June 2026 - atomic-lockfile infostealer + eBPF rootkit
 #
 # Combines best features from all community forks:
@@ -16,15 +16,15 @@
 #   - atomic-lockfile npm cache presence
 #
 # Usage:
-#   ./aur_check.sh                    # normal check
-#   ./aur_check.sh --check-systemd    # also scan systemd for unknown services
-#   ./aur_check.sh --check-ebpf       # also check for eBPF rootkit traces
-#   ./aur_check.sh --check-npm-cache  # also check npm cache for atomic-lockfile
-#   ./aur_check.sh --full             # enable all checks
+#   ./archcanary.sh                    # normal check
+#   ./archcanary.sh --check-systemd    # also scan systemd for unknown services
+#   ./archcanary.sh --check-ebpf       # also check for eBPF rootkit traces
+#   ./archcanary.sh --check-npm-cache  # also check npm cache for atomic-lockfile
+#   ./archcanary.sh --full             # enable all checks
 #
 # Environment:
-#   START_DATE=2026-06-09  END_DATE=2026-06-12  ./aur_check.sh
-#   PACMAN_LOG_GLOB="/var/log/pacman.log*"       ./aur_check.sh
+#   START_DATE=2026-06-09  END_DATE=2026-06-12  ./archcanary.sh
+#   PACMAN_LOG_GLOB="/var/log/pacman.log*"       ./archcanary.sh
 #
 # Exit codes:
 #   0 = clean
@@ -126,7 +126,7 @@ for arg in "$@"; do
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
-            echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/aur-malware-check/aur-check-<date>.log)"
+            echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/archcanary/aur-check-<date>.log)"
             echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
             echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
             echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)"
@@ -170,15 +170,15 @@ done
 run_doctor() {
     local repo_dir cfg_dir user_bin user_sd
     repo_dir="$(dirname "$(realpath "$0")")"
-    cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aur-malware-check"
+    cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
     user_bin="$HOME/.local/bin"
     user_sd="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
     # The repo-relative fix sources only exist when run from a clone; degrade
     # gracefully to a hint when run from an installed copy.
     local installer="$repo_dir/install.sh" luasrc="$repo_dir/configs/yay-init.lua"
-    [[ -f $installer ]] || installer="install.sh   # (run from the aur-malware-check repo)"
-    [[ -f $luasrc    ]] || luasrc="configs/yay-init.lua   # (from the aur-malware-check repo)"
+    [[ -f $installer ]] || installer="install.sh   # (run from the archcanary repo)"
+    [[ -f $luasrc    ]] || luasrc="configs/yay-init.lua   # (from the archcanary repo)"
 
     # --- Section selection -------------------------------------------------
     # Sections are listed in install order (prerequisite chain) so a full run
@@ -306,7 +306,7 @@ run_doctor() {
     }
 
     printf '%s============================================================%s\n' "$B" "$N"
-    printf '%s AUR Malware Check — setup doctor%s\n' "$B" "$N"
+    printf '%s Archcanary — setup doctor%s\n' "$B" "$N"
     if [[ -n $DOCTOR_SECTIONS ]]; then
         # Show the resolved sections (in order), not the raw input — keeps the
         # header clean when tool-name aliases or stray spaces were used.
@@ -350,19 +350,19 @@ run_doctor() {
     # --- User install ------------------------------------------------------
     if [[ -n ${want[user]:-} ]]; then
         printf '%sUser install%s\n' "$B" "$N"
-        _item "main scanner (~/.local/bin)" "$(_file "$user_bin/aur-malware-check.sh")" "bash $installer"           "path: $user_bin/aur-malware-check.sh"
-        _item "GUI (~/.local/bin)"          "$(_file "$user_bin/aur_malware_gui.sh")"   "bash $installer"           "path: $user_bin/aur_malware_gui.sh"
-        _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "aur-malware-check.sh --refresh" "path: $cfg_dir/package_list.txt"
+        _item "main scanner (~/.local/bin)" "$(_file "$user_bin/archcanary.sh")" "bash $installer"           "path: $user_bin/archcanary.sh"
+        _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui.sh")"   "bash $installer"           "path: $user_bin/archcanary-gui.sh"
+        _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "archcanary.sh --refresh" "path: $cfg_dir/package_list.txt"
         printf '\n'
     fi
 
     # --- System install (root) --------------------------------------------
     if [[ -n ${want[system]:-} ]]; then
         printf '%sSystem install (root)%s\n' "$B" "$N"
-        _item "system scanner copy" "$(_file /usr/lib/aur-malware-check/aur-malware-check.sh)"          "sudo bash $installer --system" "path: /usr/lib/aur-malware-check/aur-malware-check.sh"
-        _item "root-helper (pkexec)" "$(_file /usr/lib/aur-malware-check/root-helper)"                  "sudo bash $installer --system" "path: /usr/lib/aur-malware-check/root-helper"
-        _item "polkit policy"        "$(_file /usr/share/polkit-1/actions/org.aur-malware-check.policy)" "sudo bash $installer --system" "path: /usr/share/polkit-1/actions/org.aur-malware-check.policy"
-        _item "DKMS allowlist"       "$(_file /etc/aur-malware-check/dkms_allowlist.conf)"              "sudo bash $installer --system" "path: /etc/aur-malware-check/dkms_allowlist.conf"
+        _item "system scanner copy" "$(_file /usr/lib/archcanary/archcanary.sh)"          "sudo bash $installer --system" "path: /usr/lib/archcanary/archcanary.sh"
+        _item "root-helper (pkexec)" "$(_file /usr/lib/archcanary/root-helper)"                  "sudo bash $installer --system" "path: /usr/lib/archcanary/root-helper"
+        _item "polkit policy"        "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "sudo bash $installer --system" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
+        _item "DKMS allowlist"       "$(_file /etc/archcanary/dkms_allowlist.conf)"              "sudo bash $installer --system" "path: /etc/archcanary/dkms_allowlist.conf"
         printf '\n'
     fi
 
@@ -371,10 +371,10 @@ run_doctor() {
         printf '%sAutomation (systemd)%s\n' "$B" "$N"
         # Checks enabled state (not just file presence) for the four units the
         # installer enables: two system, two user.
-        _unit system "aur-malware-check.timer"        "system scan timer (weekly + boot)"
-        _unit system "aur-malware-check.path"         "pacman-tx trigger (scan after each install)"
-        _unit user   "aur-malware-check-user.timer"   "user scan timer (cache/autostart checks)"
-        _unit user   "aur-malware-check-notify.path"  "desktop notifier (watches last-scan.log)"
+        _unit system "archcanary.timer"        "system scan timer (weekly + boot)"
+        _unit system "archcanary.path"         "pacman-tx trigger (scan after each install)"
+        _unit user   "archcanary-user.timer"   "user scan timer (cache/autostart checks)"
+        _unit user   "archcanary-notify.path"  "desktop notifier (watches last-scan.log)"
         printf '\n'
     fi
 
@@ -471,9 +471,9 @@ fi
 
 # ---------------------------------------------------------------------------
 # Log file: always write full detail, auto-named unless --log-file=PATH
-# Default location: XDG_CACHE_HOME/aur-malware-check/ (~/.cache/aur-malware-check/)
+# Default location: XDG_CACHE_HOME/archcanary/ (~/.cache/archcanary/)
 # ---------------------------------------------------------------------------
-_AUR_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/aur-malware-check"
+_AUR_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/archcanary"
 mkdir -p "$_AUR_CACHE_DIR"
 : "${LOG_FILE:=$_AUR_CACHE_DIR/aur-check-$(date +%Y%m%d-%H%M%S).log}"
 unset _AUR_CACHE_DIR
@@ -483,10 +483,10 @@ unset _AUR_CACHE_DIR
 exec > >(tee "$LOG_FILE") 2>&1
 
 # ---------------------------------------------------------------------------
-# Config dir: XDG_CONFIG_HOME/aur-malware-check (default ~/.config/aur-malware-check)
+# Config dir: XDG_CONFIG_HOME/archcanary (default ~/.config/archcanary)
 # Can be overridden via PACKAGE_LIST_FILE / MALICIOUS_NPM_LIST env vars
 # ---------------------------------------------------------------------------
-AUR_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/aur-malware-check"
+AUR_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
 mkdir -p "$AUR_CONFIG_DIR"
 
 PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$AUR_CONFIG_DIR/package_list.txt}"
@@ -502,7 +502,7 @@ MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages
 # file — DKMS modules are machine-level and the kmod audit only runs as root.
 # Override the path with DKMS_ALLOWLIST_FILE (used by the tests).
 DKMS_ALLOWLIST="${DKMS_ALLOWLIST:-}"
-_dkms_cfg="${DKMS_ALLOWLIST_FILE:-/etc/aur-malware-check/dkms_allowlist.conf}"
+_dkms_cfg="${DKMS_ALLOWLIST_FILE:-/etc/archcanary/dkms_allowlist.conf}"
 if [[ -r "$_dkms_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
     while IFS= read -r _dl || [[ -n "$_dl" ]]; do
         _dl="${_dl%%#*}"       # strip inline comments
@@ -836,7 +836,7 @@ check_ebpf() {
     if [[ ! -d /sys/fs/bpf ]]; then
         echo "  /sys/fs/bpf not accessible — BPF filesystem not mounted or insufficient privileges."
         echo "  → Requires root to scan for hidden BPF maps (e.g. hidden_pids, hidden_names)."
-        echo "  → Try: sudo ./aur_check.sh --check-ebpf"
+        echo "  → Try: sudo ./archcanary.sh --check-ebpf"
         echo "  → Skip this check if eBPF rootkit detection is not needed for your threat model."
         return 77
     fi
@@ -1501,7 +1501,7 @@ for p in "${INFECTED_PKGS[@]}"; do
 done
 
 echo "============================================================"
-echo " AUR Malware Check v${SCRIPT_VERSION}"
+echo " Archcanary v${SCRIPT_VERSION}"
 echo " Campaign: malicious npm packages (malicious_npm_packages.txt) infostealer + eBPF rootkit"
 if $ALL_TIME; then
     echo " Date window: all-time (no recency filter)"
@@ -1647,7 +1647,7 @@ if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
     if command -v notify-send &>/dev/null; then
         notify-send -u critical -i dialog-warning \
             "AUR: malicious package detected" \
-            "Indicators found. Open AUR Malware Check to review."
+            "Indicators found. Open Archcanary to review."
     fi
 fi
 

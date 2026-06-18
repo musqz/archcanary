@@ -5,22 +5,22 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 MAIN_SCRIPT=""
 
 for candidate in \
-    "$SCRIPT_DIR/aur-malware-check.sh" \
-    "$SCRIPT_DIR/aur_check-v2.sh" \
-    "$(command -v aur-malware-check.sh 2>/dev/null || true)"; do
+    "$SCRIPT_DIR/archcanary.sh" \
+    "$SCRIPT_DIR/archcanary.sh" \
+    "$(command -v archcanary.sh 2>/dev/null || true)"; do
     [[ -n "${candidate:-}" && -x "$candidate" ]] && { MAIN_SCRIPT="$candidate"; break; }
 done
 
 if [[ -z "$MAIN_SCRIPT" ]]; then
     yad --error \
-        --title="AUR Malware Check" \
+        --title="Archcanary" \
         --window-icon=security-high \
-        --text="<b>aur-malware-check.sh not found.</b>\n\nRun <tt>./install.sh</tt> first." \
+        --text="<b>archcanary.sh not found.</b>\n\nRun <tt>./install.sh</tt> first." \
         --width=400
     exit 1
 fi
 
-ROOT_HELPER="/usr/lib/aur-malware-check/root-helper"
+ROOT_HELPER="/usr/lib/archcanary/root-helper"
 PKEXEC="$(command -v pkexec 2>/dev/null || true)"
 HAS_ROOT=false
 [[ -n "$PKEXEC" && -x "$ROOT_HELPER" ]] && HAS_ROOT=true
@@ -124,7 +124,7 @@ _propagate_full_scan() {
 
 _show_infected_dialog() {
     yad --error \
-        --title="Infected — AUR Malware Check" \
+        --title="Infected — Archcanary" \
         --window-icon=security-high \
         --width=520 \
         --text="<b>Infected or compromised packages detected.</b>\n\n<b>1.</b>  Remove the package:\n      <tt>paru -R &lt;package-name&gt;</tt>\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
@@ -134,10 +134,10 @@ _show_infected_dialog() {
 edit_allowlist() {
     # Single system-wide allowlist (the kmod audit only runs as root). The file
     # is world-readable, so yad loads it directly; the save writes back as root.
-    local cfg="/etc/aur-malware-check/dkms_allowlist.conf"
+    local cfg="/etc/archcanary/dkms_allowlist.conf"
     if [[ ! -f "$cfg" ]]; then
         yad --warning \
-            --title="DKMS Allowlist — AUR Malware Check" \
+            --title="DKMS Allowlist — Archcanary" \
             --window-icon=security-high \
             --text="<b>$cfg</b> does not exist.\n\nRun <tt>sudo ./install.sh --system</tt> first to create it." \
             --width=440 2>/dev/null || true
@@ -146,7 +146,7 @@ edit_allowlist() {
     local tmpout
     tmpout="$(mktemp /tmp/aur-mc-XXXXXX.txt)"
     if yad --text-info \
-        --title="DKMS Allowlist (system) — AUR Malware Check" \
+        --title="DKMS Allowlist (system) — Archcanary" \
         --window-icon=security-high \
         --filename="$cfg" \
         --width=640 --height=380 \
@@ -157,7 +157,7 @@ edit_allowlist() {
         > "$tmpout" 2>/dev/null; then
         # Write back to /etc as root — pkexec prompts via the polkit agent.
         if [[ -z "$PKEXEC" ]] || ! "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
-            yad --error --title="AUR Malware Check" --window-icon=security-high \
+            yad --error --title="Archcanary" --window-icon=security-high \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -176,7 +176,7 @@ show_output() {
     (tail --pid="$scan_pid" -f -n +1 "$tmpout" 2>/dev/null
      printf '\n─── done ───\n') \
         | yad --text-info \
-            --title="$title — AUR Malware Check" \
+            --title="$title — Archcanary" \
             --window-icon=security-high \
             --width=1000 --height=660 \
             --fontname="Monospace 10" \
@@ -241,7 +241,7 @@ run_action() {
             wait "$pkexec_pid" 2>/dev/null || pkexec_exit=$?
             rm -f "$tmpout"
             [[ $pkexec_exit -ne 0 && $pkexec_exit -ne 126 ]] && \
-                yad --error --title="AUR Malware Check" \
+                yad --error --title="Archcanary" \
                     --window-icon=security-high \
                     --text="pkexec failed (exit $pkexec_exit)" \
                     --width=360 2>/dev/null || true
@@ -261,7 +261,7 @@ run_action() {
         # When user clicks Close, yad exits → pipe breaks → tail exits.
         tail -f -n +1 "$tmpout" 2>/dev/null \
             | yad --text-info \
-                --title="$label — AUR Malware Check" \
+                --title="$label — Archcanary" \
                 --window-icon=security-high \
                 --width=1000 --height=660 \
                 --fontname="Monospace 10" \
@@ -312,7 +312,7 @@ while true; do
 
     selected=$(yad \
         --list \
-        --title="AUR Malware Check" \
+        --title="Archcanary" \
         --window-icon=security-high \
         --width=580 --height=560 \
         --column="" \

@@ -1,17 +1,17 @@
 # Changelog
 
 ## 3.0 (2026-06-16)
-- New: `aur_check_py/` — Python 3.14+ port of `aur_check-v2.sh`, stdlib only
+- New: `archcanary_py/` — Python 3.14+ port of `archcanary.sh`, stdlib only
 - All 6 checks preserved, `--merge` mode, compressed log support (gzip/xz/bz2/zstd)
 - 75 unit tests, `unittest` + `unittest.mock`, laufen ohne Arch-System
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
 ## 2.12.1 (2026-06-18) — personal fork
-- Fix: the desktop notifier (`aur-malware-check-notify.path`) wedged into a permanent `failed` (`start-limit-hit`) state, silently disabling detection alerts. The path unit used `PathModified=`, which fires on **every write** to `last-scan.log`; since the scan streams that file line-by-line via `tee`, a single scan triggered the oneshot notifier dozens of times in seconds and tripped systemd's default start limit. Switched to `PathChanged=` (fires once when the writer closes the file) and set `StartLimitIntervalSec=0` on both the `.path` and `.service` so a transient burst can never permanently wedge the watcher. Recover an already-failed unit with `systemctl --user reset-failed aur-malware-check-notify.path && systemctl --user restart aur-malware-check-notify.path` (or re-run `install.sh --system`). Surfaced by the new `--doctor` systemd state check.
+- Fix: the desktop notifier (`archcanary-notify.path`) wedged into a permanent `failed` (`start-limit-hit`) state, silently disabling detection alerts. The path unit used `PathModified=`, which fires on **every write** to `last-scan.log`; since the scan streams that file line-by-line via `tee`, a single scan triggered the oneshot notifier dozens of times in seconds and tripped systemd's default start limit. Switched to `PathChanged=` (fires once when the writer closes the file) and set `StartLimitIntervalSec=0` on both the `.path` and `.service` so a transient burst can never permanently wedge the watcher. Recover an already-failed unit with `systemctl --user reset-failed archcanary-notify.path && systemctl --user restart archcanary-notify.path` (or re-run `install.sh --system`). Surfaced by the new `--doctor` systemd state check.
 
 ## 2.12.0 (2026-06-18) — personal fork
-- Change: `--doctor` Automation (systemd) section now checks **real unit state**, not just whether the unit file exists. It queries `systemctl is-enabled`/`is-active` (no root needed) for the four units the installer enables — system `aur-malware-check.timer` + `.path`, and **user** `aur-malware-check-user.timer` + `notify.path` (the user scan timer was previously not checked at all) — and gives a **state-appropriate fix**: not installed → re-run the installer; present but disabled → `systemctl enable --now`; enabled but failed/inactive → `systemctl restart` + a `status` hint. The user bus being unavailable (over SSH/sudo) is reported, not flagged as missing.
+- Change: `--doctor` Automation (systemd) section now checks **real unit state**, not just whether the unit file exists. It queries `systemctl is-enabled`/`is-active` (no root needed) for the four units the installer enables — system `archcanary.timer` + `.path`, and **user** `archcanary-user.timer` + `notify.path` (the user scan timer was previously not checked at all) — and gives a **state-appropriate fix**: not installed → re-run the installer; present but disabled → `systemctl enable --now`; enabled but failed/inactive → `systemctl restart` + a `status` hint. The user bus being unavailable (over SSH/sudo) is reported, not flagged as missing.
 - New: a third status marker **`[WARN]`** (yellow) for elements that are present but not functioning (e.g. a unit installed-but-disabled or enabled-but-failed), distinct from `[MISS]` (red, absent) and `[ OK ]` (green). WARN and MISS both feed the next-step pointer and set a non-zero exit.
 
 ## 2.11.1 (2026-06-18) — personal fork
@@ -25,39 +25,39 @@
 - New: `--doctor` — a standalone setup health check that reports the install/config status of every element of the stack (dependencies, user install, system/root install, systemd automation, and the pre-install layer: aurscan/syay, the `yay=syay` alias, traur, yay `init.lua` hooks). Each missing item prints the exact command to fix it. It runs before the scan machinery (no log tee, no list loading) so it never errors on the very state it reports, and it auto-detects the platform (distro, AUR helpers present, `mhwd`). Exit 0 = all present, 1 = something missing. The alias check reads the resolved interactive alias rather than grepping a fixed file, so it works regardless of which file defines it or whether the value is quoted. The GUI will surface these fix commands as copyable / open-terminal actions (it never auto-runs installs).
 
 ## 2.9.9 (2026-06-17) — personal fork
-- Change: the DKMS allowlist is now a **single system-wide file** at `/etc/aur-malware-check/dkms_allowlist.conf`. After the system/user scan split the kmod audit only runs as root, so a per-user `~/.config` copy was vestigial and confusing (two files, only `/etc` authoritative). The script now reads only `/etc` (override with `DKMS_ALLOWLIST_FILE` for tests); `install.sh --system` seeds it (migrating any existing `~/.config` entries, then removing that per-user copy); base `install.sh` no longer creates a per-user allowlist; and the GUI **Edit DKMS allowlist** button now edits `/etc` and saves it back via pkexec. Edit it with the GUI button or `sudoedit /etc/aur-malware-check/dkms_allowlist.conf`.
+- Change: the DKMS allowlist is now a **single system-wide file** at `/etc/archcanary/dkms_allowlist.conf`. After the system/user scan split the kmod audit only runs as root, so a per-user `~/.config` copy was vestigial and confusing (two files, only `/etc` authoritative). The script now reads only `/etc` (override with `DKMS_ALLOWLIST_FILE` for tests); `install.sh --system` seeds it (migrating any existing `~/.config` entries, then removing that per-user copy); base `install.sh` no longer creates a per-user allowlist; and the GUI **Edit DKMS allowlist** button now edits `/etc` and saves it back via pkexec. Edit it with the GUI button or `sudoedit /etc/archcanary/dkms_allowlist.conf`.
 
 ## 2.9.8 (2026-06-17) — personal fork
 - Fix: the GUI no longer marks **every** check ❌ when a full scan finds one problem. `_propagate_full_scan` used to stamp the single overall verdict onto all rows, so one `INFECTED` check (e.g. an unallowlisted DKMS module) lit up the whole list. It now parses each check's own `--- [N] ---` section in the scan output and sets that row from its own result (WARNING/INFECTED → ❌, Skipped/needs-root → ?, otherwise ✅) — a finding points at the check that found it.
 
 ## 2.9.7 (2026-06-17) — personal fork
-- Change: automated scanning is split by context so neither half false-positives. The **root system** timer now runs only the system-level checks (`--check-systemd/--check-ebpf/--check-bpftool/--check-ldso/--check-kmod` + the always-on package/log checks); a new **user** timer (`aur-malware-check-user.{service,timer}`) runs the user-level checks (`--check-npm-cache/--check-bun-cache/--check-yarn-cache/--check-pnpm-cache/--check-pkgbuild/--check-autostart`) as your user, so they scan your real `~/.cache`/`~/.config` instead of `/root`. Fixes the root scan flagging root's own `/root/.config/autostart` session relics as a false `RESULT: INFECTED`. The user scan notifies itself (runs in your session); the root scan still uses the path-watched notifier. `install.sh --system` installs and enables both; `systemd.md` updated.
-- Fix: the DKMS allowlist loader used `[[ -f ]]` and aborted the whole scan (`Permission denied`, exit 1, under `set -e`) when `/etc/aur-malware-check/dkms_allowlist.conf` existed but was not readable. It now tests `[[ -r ]]` and skips unreadable files, and `install.sh --system` installs the system allowlist mode `644` (the user-level scan reads it too, even if your `~/.config` copy is `600`).
+- Change: automated scanning is split by context so neither half false-positives. The **root system** timer now runs only the system-level checks (`--check-systemd/--check-ebpf/--check-bpftool/--check-ldso/--check-kmod` + the always-on package/log checks); a new **user** timer (`archcanary-user.{service,timer}`) runs the user-level checks (`--check-npm-cache/--check-bun-cache/--check-yarn-cache/--check-pnpm-cache/--check-pkgbuild/--check-autostart`) as your user, so they scan your real `~/.cache`/`~/.config` instead of `/root`. Fixes the root scan flagging root's own `/root/.config/autostart` session relics as a false `RESULT: INFECTED`. The user scan notifies itself (runs in your session); the root scan still uses the path-watched notifier. `install.sh --system` installs and enables both; `systemd.md` updated.
+- Fix: the DKMS allowlist loader used `[[ -f ]]` and aborted the whole scan (`Permission denied`, exit 1, under `set -e`) when `/etc/archcanary/dkms_allowlist.conf` existed but was not readable. It now tests `[[ -r ]]` and skips unreadable files, and `install.sh --system` installs the system allowlist mode `644` (the user-level scan reads it too, even if your `~/.config` copy is `600`).
 
 ## 2.9.6 (2026-06-17) — personal fork
-- Fix: the root **system** scan flagged allowlisted DKMS modules (e.g. `tuxedo-drivers`) as "untracked source" → false `RESULT: INFECTED`. The DKMS allowlist lived only in the user's `~/.config`, which the root service (`HOME=/root`) can't see. The script now also reads a **system-wide** `/etc/aur-malware-check/dkms_allowlist.conf` (merged with the per-user file), and `install.sh --system` seeds it from your user allowlist. Re-run `install.sh --system` (or edit `/etc/...`) after changing the allowlist.
+- Fix: the root **system** scan flagged allowlisted DKMS modules (e.g. `tuxedo-drivers`) as "untracked source" → false `RESULT: INFECTED`. The DKMS allowlist lived only in the user's `~/.config`, which the root service (`HOME=/root`) can't see. The script now also reads a **system-wide** `/etc/archcanary/dkms_allowlist.conf` (merged with the per-user file), and `install.sh --system` seeds it from your user allowlist. Re-run `install.sh --system` (or edit `/etc/...`) after changing the allowlist.
 
 ## 2.9.5 (2026-06-17) — personal fork
 - Fix: the root **system** service failed with `HOME: unbound variable` (exit 1) at the cache-dir line. systemd system services start with no `$HOME`, and under `set -u` the `${XDG_CACHE_HOME:-$HOME/.cache}` fallback aborts. The script now defaults `$HOME` to the running user's home (`/root` for the system scan) when it is unset — complementing the `$SUDO_USER`/`$PKEXEC_UID` resolution, which only covers interactive sudo/pkexec. Regression from 2.9.1.
 
 ## 2.9.4 (2026-06-17) — personal fork
-- Fix: `check_systemd` no longer flags a persistent `.timer` (`OnBootSec=` + `Persistent=true`) just for existing — it now vets the **service the timer triggers** and only warns when that target service is itself suspicious (ExecStart outside a standard prefix, not pacman-owned). This stops the scanner from flagging its own `/etc/systemd/system/aur-malware-check.timer` (installed by `install.sh --system`) as a malicious persistence unit, which produced a false `RESULT: INFECTED` and desktop alert. A malicious timer pointing at `/tmp`, `$HOME`, etc. is still caught.
+- Fix: `check_systemd` no longer flags a persistent `.timer` (`OnBootSec=` + `Persistent=true`) just for existing — it now vets the **service the timer triggers** and only warns when that target service is itself suspicious (ExecStart outside a standard prefix, not pacman-owned). This stops the scanner from flagging its own `/etc/systemd/system/archcanary.timer` (installed by `install.sh --system`) as a malicious persistence unit, which produced a false `RESULT: INFECTED` and desktop alert. A malicious timer pointing at `/tmp`, `$HOME`, etc. is still caught.
 
 ## 2.9.3 (2026-06-17) — personal fork
-- New: the systemd units are now shipped under `systemd/` and `install.sh --system` installs and enables them — no more hand-creating files. It drops the root system scan units (`aur-malware-check.{service,timer,path}` + `-onchange.service`) into `/etc/systemd/system/`, the user notifier (`aur-malware-check-notify.{path,service}`) into `~/.config/systemd/user/`, pre-creates `/var/lib/aur-malware-check/`, enables the timer + pacman trigger + notifier, and migrates away the old user-scope scan units. `uninstall --system` reverses all of it.
-- Fix: the user notifier `.path` unit failed to start when `/var/lib/aur-malware-check/` did not exist yet (inotify watch on a missing directory). The install now pre-creates the directory.
+- New: the systemd units are now shipped under `systemd/` and `install.sh --system` installs and enables them — no more hand-creating files. It drops the root system scan units (`archcanary.{service,timer,path}` + `-onchange.service`) into `/etc/systemd/system/`, the user notifier (`archcanary-notify.{path,service}`) into `~/.config/systemd/user/`, pre-creates `/var/lib/archcanary/`, enables the timer + pacman trigger + notifier, and migrates away the old user-scope scan units. `uninstall --system` reverses all of it.
+- Fix: the user notifier `.path` unit failed to start when `/var/lib/archcanary/` did not exist yet (inotify watch on a missing directory). The install now pre-creates the directory.
 
 ## 2.9.2 (2026-06-17) — personal fork
 - Fix: a scan that skips root-requiring checks no longer reports a misleading `RESULT: CLEAN`. When `--check-kmod` / `--check-ebpf` / `--check-bpftool` (or `--full`) is run without root, those checks now return a dedicated "skipped" code; the run is reported as `INCOMPLETE: N root check(s) skipped` and the result escalates from CLEAN (0) to WARNINGS (exit 1) so automation and the systemd user service can detect that the scan was not complete. Run with `sudo` for the full picture. Genuine findings (exit 2) are unchanged.
-- Change: systemd model reworked so automated scans get the **full picture**. The scan now runs as a **root system** service+timer (writes `/var/lib/aur-malware-check/last-scan.log`), and a **user** `.path` unit watches that file and fires the desktop notification on a detection — replacing the old user-only service that silently skipped the root checks. `docs/systemd.md` rewritten with the new units and a migration note.
-- Change: `install.sh --system` now also seeds the bundled package lists (`package_list.txt`, `malicious_npm_packages.txt`, `chaos_rat_packages.txt`) into `/usr/lib/aur-malware-check/` so the root system scan finds them (root's `$HOME` is `/root`, which is not seeded).
+- Change: systemd model reworked so automated scans get the **full picture**. The scan now runs as a **root system** service+timer (writes `/var/lib/archcanary/last-scan.log`), and a **user** `.path` unit watches that file and fires the desktop notification on a detection — replacing the old user-only service that silently skipped the root checks. `docs/systemd.md` rewritten with the new units and a migration note.
+- Change: `install.sh --system` now also seeds the bundled package lists (`package_list.txt`, `malicious_npm_packages.txt`, `chaos_rat_packages.txt`) into `/usr/lib/archcanary/` so the root system scan finds them (root's `$HOME` is `/root`, which is not seeded).
 
 ## 2.9.1 (2026-06-17) — personal fork
-- Fix: `sudo aur-malware-check.sh --check-kmod` (and other root checks run directly with `sudo`) no longer fails with `Malicious npm package list not found: /root/.config/...`. When running as root via `sudo`, the script now resolves the invoking user's home from `$SUDO_USER` (and `$PKEXEC_UID` for the pkexec path) so package lists, the DKMS allowlist, and the log/cache dirs come from the user's `~/.config` / `~/.cache` instead of `/root`. Mirrors what the polkit root helper already did for the GUI.
+- Fix: `sudo archcanary.sh --check-kmod` (and other root checks run directly with `sudo`) no longer fails with `Malicious npm package list not found: /root/.config/...`. When running as root via `sudo`, the script now resolves the invoking user's home from `$SUDO_USER` (and `$PKEXEC_UID` for the pkexec path) so package lists, the DKMS allowlist, and the log/cache dirs come from the user's `~/.config` / `~/.cache` instead of `/root`. Mirrors what the polkit root helper already did for the GUI.
 
 ## 2.9.0 (2026-06-17) — personal fork
-- Removed: `aur_malware_menu.sh` (fzf TUI) — the yad GUI covers interactive desktop use and the CLI (`aur-malware-check.sh --full` / single `--check-*` flags) covers headless / SSH. The menu had drifted (missing yarn/pnpm checks) and its "View last log" used the abandoned journalctl path. Two surfaces now: GUI + CLI.
-- Removed: `notify-send.sh` dependency and the notification action button. The exit-code-2 alert now uses plain `notify-send` (libnotify) with no button; open AUR Malware Check from the app launcher to review and remediate.
+- Removed: `archcanary-menu.sh` (fzf TUI) — the yad GUI covers interactive desktop use and the CLI (`archcanary.sh --full` / single `--check-*` flags) covers headless / SSH. The menu had drifted (missing yarn/pnpm checks) and its "View last log" used the abandoned journalctl path. Two surfaces now: GUI + CLI.
+- Removed: `notify-send.sh` dependency and the notification action button. The exit-code-2 alert now uses plain `notify-send` (libnotify) with no button; open Archcanary from the app launcher to review and remediate.
 - Removed: "View last log" from the GUI — the per-session status column already shows pass/fail per check; re-run a check to see its detail.
 - Removed: orphaned `IS_FULL_SCAN` header marker (only ever fed the now-deleted GUI log picker).
 - Fix: `install.sh` used `local` outside a function in the uninstall path (runtime error on `bash`).
@@ -75,7 +75,7 @@
 - Fix: `check_systemd` now also skips services whose `ExecStart=` binary lives under a standard system prefix (`/usr/`, `/opt/`, `/bin/`, `/sbin/`, `/usr/local/`) and actually exists on disk — handles proprietary installers (piavpn, forgejo) that write a `.service` file without registering it with pacman. Malware still gets caught because it points to binaries in `/tmp/`, `$HOME/`, `/dev/shm/`, etc.
 
 ## 2.8.2 (2026-06-16) — personal fork
-- Fix: run logs now default to `~/.cache/aur-malware-check/` (`$XDG_CACHE_HOME`) instead of the current working directory — prevents log accumulation in the repo or install source dir
+- Fix: run logs now default to `~/.cache/archcanary/` (`$XDG_CACHE_HOME`) instead of the current working directory — prevents log accumulation in the repo or install source dir
 
 ## 2.8.1 (2026-06-16) — personal fork
 - Fix: `check_systemd` no longer flags pacman-owned `.service` / drop-in `.conf` files — legitimate system daemons from packages carry `Restart=on-failure` by design. Timer check is now skipped for user-space dirs (`~/.config/systemd/user/`) since `OnBootSec + Persistent=true` is standard for user timers (cron replacements, update schedulers).
@@ -112,13 +112,13 @@
 - Change: `install.sh` now prefers `~/.local/bin` (XDG) over `~/bin`
 
 ## 2.4.0 (2026-06-14) — personal fork
-- New: XDG config dir — package lists live in `~/.config/aur-malware-check/` (respects `$XDG_CONFIG_HOME`); created automatically on first run
+- New: XDG config dir — package lists live in `~/.config/archcanary/` (respects `$XDG_CONFIG_HOME`); created automatically on first run
 - New: auto-seed config dir from bundled txt files when running from a new install location
 - New: `--check-pkgbuild` (included in `--full`) — obfuscation-aware scan of AUR helper caches (`~/.cache/yay`, `~/.cache/paru`, etc.) for `bun add` / `npm install` of malicious packages; catches quote-split commands like `'b''u''n' 'a'"d""d"`
 - New: `nextfile-js` added to malicious npm package list (reported upstream issue #11 / PR #12)
-- New: `aur_malware_menu.sh` — fzf TUI menu to run individual checks or view the last log; loops back to menu after each action
+- New: `archcanary-menu.sh` — fzf TUI menu to run individual checks or view the last log; loops back to menu after each action
 - New: `--no-notify` flag — suppresses desktop notification when called as subprocess (e.g. from the menu)
-- Improved: notification prefers `notify-send.sh` (AUR) over plain `notify-send`; adds a **Show Menu** button that opens `aur_malware_menu.sh` in a terminal when clicked
+- Improved: notification prefers `notify-send.sh` (AUR) over plain `notify-send`; adds a **Show Menu** button that opens `archcanary-menu.sh` in a terminal when clicked
 - Package list refreshed to 1936 entries
 
 ## 2.3.3 (2026-06-13)
@@ -129,7 +129,7 @@
 ## 2.3.2 (2026-06-13)
 - New: `--all-time` flag (v2) — disable recency window for cross-campaign detection
 - New: `custom_list_merge_aur_scan.sh` — fetch HedgeDoc + merge custom lists +
-  dedup + run aur_check-v2.sh
+  dedup + run archcanary.sh
   - `-l/--list=URL|FILE`: additional AUR package lists (repeatable)
   - `-m/--malicious-npm=URL|FILE`: additional npm lists (repeatable)
   - `--skip-hedgedoc`: exclude official HedgeDoc list
@@ -180,7 +180,7 @@
 - New attacker accounts custodiatovar, veramagalhaes in iocs.txt
 
 ## 2.0.0 (2026-06-12)
-- `aur_check-v2.sh`: optimized log scanner (bash regex + O(1) assoc. array)
+- `archcanary.sh`: optimized log scanner (bash regex + O(1) assoc. array)
 - Same detection logic as v1, ~150x faster for large pacman.log files
 - v1 retained for completeness as reference implementation
 
@@ -194,7 +194,7 @@
 - Pipe-to-subshell fixed: `while read` now uses process substitution
 
 ## 1.0.0 (2026-06-12)
-- Consolidated aur_check.sh combining all 5 community forks
+- Consolidated archcanary.sh combining all 5 community forks
 - Package list: ~588 known compromised AUR packages
 - Detection: current install + pacman logs + date window
 - Optional checks: systemd, eBPF, npm cache

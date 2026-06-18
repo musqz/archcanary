@@ -5,5 +5,5 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-StateDirectory=aur-malware-check
-ExecStart=/usr/lib/aur-malware-check/aur-malware-check.sh --refresh --all-time --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/aur-malware-check/last-scan.log
+StateDirectory=archcanary
+ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --all-time --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from aur_check_py.merger import (
+from archcanary_py.merger import (
     extract_package_names,
     fetch_url,
     merge_lists,
@@ -91,7 +91,7 @@ class TestReadFile(unittest.TestCase):
 
 
 class TestReadListSource(unittest.TestCase):
-    @patch('aur_check_py.merger.fetch_url')
+    @patch('archcanary_py.merger.fetch_url')
     def test_url(self, mock_fetch):
         mock_fetch.return_value = 'pkg-a\npkg-b\n'
         result = read_list_source('http://example.com/list')
@@ -112,7 +112,7 @@ class TestReadListSource(unittest.TestCase):
 
 
 class TestMergeLists(unittest.TestCase):
-    @patch('aur_check_py.merger.fetch_url')
+    @patch('archcanary_py.merger.fetch_url')
     @patch.object(Path, 'is_file', return_value=False)
     def test_hedgedoc_only(self, mock_is_file, mock_fetch):
         mock_fetch.return_value = 'pkg-a\npkg-b\n'
@@ -120,13 +120,13 @@ class TestMergeLists(unittest.TestCase):
         self.assertEqual(aur_set, {'pkg-a', 'pkg-b'})
         self.assertEqual(npm_set, set())
 
-    @patch('aur_check_py.merger.fetch_url')
+    @patch('archcanary_py.merger.fetch_url')
     @patch.object(Path, 'is_file', return_value=False)
     def test_skip_hedgedoc(self, mock_is_file, mock_fetch):
         aur_set, npm_set = merge_lists(skip_hedgedoc=True)
         self.assertEqual(aur_set, set())
 
-    @patch('aur_check_py.merger.fetch_url')
+    @patch('archcanary_py.merger.fetch_url')
     @patch.object(Path, 'is_file', return_value=False)
     def test_extra_aur_lists(self, mock_is_file, mock_fetch):
         def fake_fetch(url, timeout=15):
@@ -140,14 +140,14 @@ class TestMergeLists(unittest.TestCase):
         )
         self.assertEqual(aur_set, {'pkg-a', 'pkg-b'})
 
-    @patch('aur_check_py.merger.fetch_url')
+    @patch('archcanary_py.merger.fetch_url')
     @patch.object(Path, 'is_file', return_value=False)
     def test_dedup(self, mock_is_file, mock_fetch):
         mock_fetch.return_value = 'pkg-a\npkg-a\npkg-b\n'
         aur_set, npm_set = merge_lists(skip_hedgedoc=False)
         self.assertEqual(aur_set, {'pkg-a', 'pkg-b'})
 
-    @patch('aur_check_py.merger.fetch_url')
+    @patch('archcanary_py.merger.fetch_url')
     def test_extra_npm_and_aur(self, mock_fetch):
         mock_fetch.return_value = 'pkg-a\n'
         mock_fetch.side_effect = None
