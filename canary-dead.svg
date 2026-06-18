@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" width="100" height="120">
+  <!-- Cage skeleton -->
+  <!-- Top bar -->
+  <line x1="15" y1="10" x2="85" y2="10" stroke="#444" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Bottom bar -->
+  <line x1="15" y1="90" x2="85" y2="90" stroke="#444" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Vertical bars -->
+  <line x1="15" y1="10" x2="15" y2="90" stroke="#444" stroke-width="2" stroke-linecap="round"/>
+  <line x1="29" y1="10" x2="29" y2="90" stroke="#444" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="43" y1="10" x2="43" y2="90" stroke="#444" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="57" y1="10" x2="57" y2="90" stroke="#444" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="71" y1="10" x2="71" y2="90" stroke="#444" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="85" y1="10" x2="85" y2="90" stroke="#444" stroke-width="2" stroke-linecap="round"/>
+  <!-- Perch (now unused, bird is on back) -->
+  <line x1="25" y1="60" x2="75" y2="60" stroke="#444" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Hook at top -->
+  <line x1="50" y1="10" x2="50" y2="2" stroke="#444" stroke-width="2" stroke-linecap="round"/>
+  <path d="M50 2 Q55 2 55 6" fill="none" stroke="#444" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Canary silhouette — lying on its back on the perch -->
+  <!-- Body: rotund, upside-down, centered on perch line -->
+  <ellipse cx="50" cy="68" rx="16" ry="10" fill="#222"/>
+  <!-- Head: to the right, slightly below body level -->
+  <circle cx="67" cy="70" r="7" fill="#222"/>
+  <!-- Beak: pointing upward (bird is upside-down) -->
+  <polygon points="71,65 75,62 74,67" fill="#222"/>
+  <!-- Eye: small X for dead -->
+  <line x1="67" y1="68" x2="70" y2="71" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="70" y1="68" x2="67" y2="71" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Wings: folded, draped to sides -->
+  <path d="M50,68 Q42,72 36,78 Q40,80 46,75 Q48,72 50,70" fill="#111"/>
+  <path d="M50,68 Q58,72 64,78 Q60,80 54,75 Q52,72 50,70" fill="#111"/>
+  <!-- Legs sticking up (upside-down) -->
+  <line x1="47" y1="62" x2="44" y2="54" stroke="#222" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="44" y1="54" x2="41" y2="51" stroke="#222" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="44" y1="54" x2="44" y2="50" stroke="#222" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="44" y1="54" x2="47" y2="51" stroke="#222" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="53" y1="62" x2="56" y2="54" stroke="#222" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="56" y1="54" x2="53" y2="51" stroke="#222" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="56" y1="54" x2="56" y2="50" stroke="#222" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="56" y1="54" x2="59" y2="51" stroke="#222" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- Tail feathers -->
+  <path d="M34,65 Q28,62 24,58 Q29,60 34,63" fill="#222"/>
+  <path d="M34,68 Q28,67 23,65 Q28,66 34,66" fill="#222"/>
+</svg>
