@@ -387,7 +387,7 @@ run_action() {
                 --title="traur not installed" \
                 --window-icon=security-high \
                 --text="<b>traur</b> is not installed.\n\nInstall it from AUR:\n  <tt>paru -S traur</tt>" \
-                --width=360
+                --width=360 2>/dev/null || true
             return
         fi
         local scan_exit=0
@@ -404,7 +404,7 @@ run_action() {
                 --title="Root helper not installed" \
                 --window-icon=security-high \
                 --text="The system root helper is not installed.\n\nRun:\n  <b>./install.sh --system</b>\n\nto enable root-requiring checks." \
-                --width=440
+                --width=440 2>/dev/null || true
             return
         fi
         local tmpout pkexec_exit=0
