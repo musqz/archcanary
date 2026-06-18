@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.11.1"
+SCRIPT_VERSION="2.12.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -213,28 +213,28 @@ run_doctor() {
     fi
 
     # Colours only on a real terminal; piped/GUI-captured output stays plain.
-    local G='' Y='' B='' N=''
+    local G='' Y='' R='' B='' N=''
     if [[ -t 1 ]]; then
-        G=$'\e[32m'; Y=$'\e[33m'; B=$'\e[1m'; N=$'\e[0m'
+        G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; B=$'\e[1m'; N=$'\e[0m'
     fi
 
+    # Three states: OK (present + working), WARN (present but not functioning —
+    # e.g. installed-but-disabled), MISS (absent). WARN and MISS both need
+    # action, so both set fail and feed the next-step pointer.
     local fail=0 first_fix="" first_label=""
-    _ok()   { printf '  %s[ OK ]%s  %s\n' "$G" "$N" "$1"; }
-    _miss() {
-        printf '  %s[MISS]%s  %s\n' "$Y" "$N" "$1"
-        if [[ -n ${2:-} ]]; then
-            printf '           %s↳ fix:%s %s\n' "$B" "$N" "$2"
-        fi
-        fail=1
-        # Record the first gap (sections run in install order, so this is the
-        # earliest unmet prerequisite → the next step the user should take).
-        [[ -z $first_fix ]] && { first_fix="${2:-}"; first_label="$1"; }
+    _mark() {  # COLOR TAG LABEL [FIX] [DETAIL]
+        printf '  %s%s%s  %s\n' "$1" "$2" "$N" "$3"
+        [[ -n ${4:-} ]] && printf '           %s↳ fix:%s %s\n' "$B" "$N" "$4"
+        [[ $detail -eq 1 && -n ${5:-} ]] && printf '           %s\n' "$5"
         return 0
     }
-    # _item LABEL TEST-EXIT [FIX] [DETAIL]
+    _record() { [[ -z $first_fix && -n ${2:-} ]] && { first_fix="$2"; first_label="$1"; }; return 0; }
+    _ok()   { _mark "$G" "[ OK ]" "$1" "" "${2:-}"; }
+    _warn() { _mark "$Y" "[WARN]" "$1" "${2:-}" "${3:-}"; fail=1; _record "$1" "${2:-}"; }
+    _miss() { _mark "$R" "[MISS]" "$1" "${2:-}" "${3:-}"; fail=1; _record "$1" "${2:-}"; }
+    # _item LABEL TEST-EXIT [FIX] [DETAIL]  — binary present/absent helper
     _item() {
-        if [[ $2 -eq 0 ]]; then _ok "$1"; else _miss "$1" "${3:-}"; fi
-        [[ $detail -eq 1 && -n ${4:-} ]] && printf '           %s\n' "$4"
+        if [[ $2 -eq 0 ]]; then _ok "$1" "${4:-}"; else _miss "$1" "${3:-}" "${4:-}"; fi
         return 0
     }
     _have() { command -v "$1" >/dev/null 2>&1 && echo 0 || echo 1; }
@@ -261,6 +261,48 @@ run_doctor() {
             fi
         fi
         _item "$label" "$(_have "$cmd")" "$fix" "$d"
+    }
+    # _unit SCOPE UNIT LABEL — check a systemd unit's real state (enabled), not
+    # just that the file exists, and give a state-appropriate fix:
+    #   not installed  → re-run the installer
+    #   disabled       → enable --now (no reinstall needed)
+    # SCOPE is "system" or "user". Status queries need no root; the user bus may
+    # be absent over SSH/sudo, which is reported rather than flagged as missing.
+    _unit() {
+        local scope=$1 unit=$2 label=$3
+        local sctl="systemctl" pfx="" uarg=""
+        if [[ $scope == user ]]; then
+            sctl="systemctl --user"; uarg="--user "
+        else
+            pfx="sudo "
+        fi
+        if [[ $scope == user ]] && ! systemctl --user show-environment >/dev/null 2>&1; then
+            _warn "$label" \
+                "in a desktop session run: systemctl --user enable --now $unit" \
+                "scope: user — no session bus (e.g. over SSH/sudo); can't verify"
+            return 0
+        fi
+        local state active
+        state="$($sctl is-enabled "$unit" 2>/dev/null || true)"
+        case "$state" in
+            enabled|enabled-runtime|static|indirect|alias|generated)
+                active="$($sctl is-active "$unit" 2>/dev/null || true)"
+                if [[ $active == active ]]; then
+                    _ok "$label" "state: ${state} / ${active}"
+                else
+                    # Enabled but not running (failed/inactive) — a .timer/.path
+                    # should be active; surface it with a restart + status hint.
+                    _warn "$label" \
+                        "${pfx}systemctl ${uarg}restart $unit   # then: systemctl ${uarg}status $unit" \
+                        "state: enabled but ${active:-inactive} — not running; check status"
+                fi ;;
+            disabled)
+                _warn "$label" "${pfx}systemctl ${uarg}enable --now $unit" \
+                    "state: present but disabled — not running automatically" ;;
+            *)
+                _miss "$label" "${pfx}bash $installer --system" \
+                    "state: not installed" ;;
+        esac
     }
 
     printf '%s============================================================%s\n' "$B" "$N"
@@ -327,9 +369,12 @@ run_doctor() {
     # --- Automation (systemd) ---------------------------------------------
     if [[ -n ${want[systemd]:-} ]]; then
         printf '%sAutomation (systemd)%s\n' "$B" "$N"
-        _item "system scan timer"    "$(_file /etc/systemd/system/aur-malware-check.timer)" "sudo bash $installer --system" "path: /etc/systemd/system/aur-malware-check.timer"
-        _item "pacman-tx path unit"  "$(_file /etc/systemd/system/aur-malware-check.path)"  "sudo bash $installer --system" "path: /etc/systemd/system/aur-malware-check.path"
-        _item "user notifier (path)" "$(_file "$user_sd/aur-malware-check-notify.path")"    "bash $installer --system"      "path: $user_sd/aur-malware-check-notify.path"
+        # Checks enabled state (not just file presence) for the four units the
+        # installer enables: two system, two user.
+        _unit system "aur-malware-check.timer"        "system scan timer (weekly + boot)"
+        _unit system "aur-malware-check.path"         "pacman-tx trigger (scan after each install)"
+        _unit user   "aur-malware-check-user.timer"   "user scan timer (cache/autostart checks)"
+        _unit user   "aur-malware-check-notify.path"  "desktop notifier (watches last-scan.log)"
         printf '\n'
     fi
 
@@ -366,7 +411,7 @@ run_doctor() {
     if [[ $fail -eq 0 ]]; then
         printf ' %sRESULT: %s present.%s\n' "$G" "$scope" "$N"
     else
-        printf ' %sRESULT: %s — some missing, see fixes above.%s\n' "$Y" "$scope" "$N"
+        printf ' %sRESULT: %s checked — some need attention, see fixes above.%s\n' "$Y" "$scope" "$N"
     fi
     printf '%s============================================================%s\n' "$B" "$N"
     return $fail

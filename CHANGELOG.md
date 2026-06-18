@@ -7,6 +7,10 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.12.0 (2026-06-18) — personal fork
+- Change: `--doctor` Automation (systemd) section now checks **real unit state**, not just whether the unit file exists. It queries `systemctl is-enabled`/`is-active` (no root needed) for the four units the installer enables — system `aur-malware-check.timer` + `.path`, and **user** `aur-malware-check-user.timer` + `notify.path` (the user scan timer was previously not checked at all) — and gives a **state-appropriate fix**: not installed → re-run the installer; present but disabled → `systemctl enable --now`; enabled but failed/inactive → `systemctl restart` + a `status` hint. The user bus being unavailable (over SSH/sudo) is reported, not flagged as missing.
+- New: a third status marker **`[WARN]`** (yellow) for elements that are present but not functioning (e.g. a unit installed-but-disabled or enabled-but-failed), distinct from `[MISS]` (red, absent) and `[ OK ]` (green). WARN and MISS both feed the next-step pointer and set a non-zero exit.
+
 ## 2.11.1 (2026-06-18) — personal fork
 - Fix: `--doctor` section selection is now forgiving about input. Sections can be **space-separated** (`--doctor user system`) as well as comma-separated, and a stray space in a comma list (`--doctor=user, system`, which the shell splits into two arguments) no longer silently drops the trailing section. **Tool names** now map to their section too — `aurscan`/`syay`/`traur`/`yay` → `external`; `yad`/`bpftool`/`pkexec`/etc. → `deps` — so `--doctor=aurscan` works. The header shows the resolved sections (deduplicated, in order) instead of the raw input.
 
