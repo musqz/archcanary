@@ -55,6 +55,10 @@ CHAOS_END_DATE=${CHAOS_END_DATE:-2025-07-19}
 PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
 # Pulls the live package list from the official Arch Linux HedgeDoc note.
 LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
+# Supplementary lists — pulled from the repo on --refresh.
+MALICIOUS_NPM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/malicious_npm_packages.txt"
+CHAOS_RAT_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/chaos_rat_packages.txt"
+RUSSIAN_SPAM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/malicious_russian_spam_packages.txt"
 
 CHECK_SYSTEMD=false
 CHECK_EBPF=false
@@ -520,10 +524,10 @@ mkdir -p "$AUR_CONFIG_DIR"
 PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$AUR_CONFIG_DIR/package_list.txt}"
 INFECTED_PKGS=()
 
-CHAOS_RAT_LIST="${CHAOS_RAT_LIST:-$(dirname "$(realpath "$0")")/chaos_rat_packages.txt}"
+CHAOS_RAT_LIST="${CHAOS_RAT_LIST:-$AUR_CONFIG_DIR/chaos_rat_packages.txt}"
 CHAOS_RAT_PKGS=()
 
-RUSSIAN_SPAM_LIST="${RUSSIAN_SPAM_LIST:-$(dirname "$(realpath "$0")")/malicious_russian_spam_packages.txt}"
+RUSSIAN_SPAM_LIST="${RUSSIAN_SPAM_LIST:-$AUR_CONFIG_DIR/malicious_russian_spam_packages.txt}"
 RUSSIAN_SPAM_PKGS=()
 
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
@@ -553,6 +557,16 @@ if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
         echo >&2 "Copy malicious_npm_packages.txt from the repo to $AUR_CONFIG_DIR/"
         exit 1
     fi
+fi
+
+if [[ ! -f "$CHAOS_RAT_LIST" ]]; then
+    _bundled="$(dirname "$(realpath "$0")")/chaos_rat_packages.txt"
+    [[ -f "$_bundled" ]] && cp "$_bundled" "$CHAOS_RAT_LIST"
+fi
+
+if [[ ! -f "$RUSSIAN_SPAM_LIST" ]]; then
+    _bundled="$(dirname "$(realpath "$0")")/malicious_russian_spam_packages.txt"
+    [[ -f "$_bundled" ]] && cp "$_bundled" "$RUSSIAN_SPAM_LIST"
 fi
 
 MALICIOUS_NPM_PKGS=()
@@ -595,6 +609,30 @@ load_packages() {
         # Update compromised packages list
         echo "Updating $PACKAGE_LIST_FILE..."
         printf "%s\n" "${INFECTED_PKGS[@]}" >"$PACKAGE_LIST_FILE"
+
+        # Refresh supplementary lists from the repo (non-fatal on failure)
+        _refresh_list() {
+            local url="$1" dest="$2" label="$3" skip_opt="$4"
+            [[ -n "$skip_opt" ]] && return   # user supplied --*-list=PATH; don't overwrite
+            echo "Fetching $label..."
+            local tmp
+            tmp=$(curl -fsSL "$url" 2>/dev/null) || {
+                echo >&2 "WARNING: failed to fetch $url — keeping existing $label."
+                return
+            }
+            local n
+            n=$(printf '%s\n' "$tmp" | grep -c '^[^#[:space:]]' || true)
+            if [[ $n -eq 0 ]]; then
+                echo >&2 "WARNING: $label fetch returned 0 entries — keeping existing."
+                return
+            fi
+            printf '%s\n' "$tmp" > "$dest"
+            echo "Updated $dest ($n entries)"
+        }
+        _refresh_list "$MALICIOUS_NPM_LIST_URL"  "$MALICIOUS_NPM_LIST"  "malicious npm list"   "$MALICIOUS_NPM_LIST_OPT"
+        _refresh_list "$CHAOS_RAT_LIST_URL"       "$CHAOS_RAT_LIST"      "CHAOS RAT list"       "$CHAOS_RAT_LIST_OPT"
+        _refresh_list "$RUSSIAN_SPAM_LIST_URL"    "$RUSSIAN_SPAM_LIST"   "Russian spam list"    "$RUSSIAN_SPAM_LIST_OPT"
+        unset -f _refresh_list
     fi
 
     if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
