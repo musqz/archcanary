@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.3 (2026-06-18)
+
+- New: `--extra-list=PATH_OR_URL` — load an additional package list for a
+  one-shot scan; accepts a file path or a raw https:// URL. Repeatable.
+- New: `~/.config/archcanary/extra_lists.conf` — persistent subscription
+  file, one path or URL per line, loaded automatically on every run. URL
+  entries are cached locally and re-fetched on `--refresh`. Seeded with a
+  commented template on first run.
+- New: `--refresh` now updates all supplementary lists (`malicious_npm_
+  packages.txt`, `chaos_rat_packages.txt`, `malicious_russian_spam_
+  packages.txt`) from the repo's raw GitHub URLs in addition to the main
+  HedgeDoc AUR list. Non-fatal on failure. All lists now live in
+  `~/.config/archcanary/` and are seeded from the bundled copy on first run.
+
 ## v0.1.2 (2026-06-18)
 
 - New: **Russian Spam Campaign list** (`malicious_russian_spam_packages.txt`, 83
