@@ -47,7 +47,7 @@ archcanary integrates with and builds on the following:
 | [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) |
 | [traur](https://aur.archlinux.org/packages/traur) | Pre-install heuristic scanner — 279 signals across 5 weighted categories |
 | [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log |
-| [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui.sh` |
+| [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui` |
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection |
 | [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | `notify-send` — desktop critical alert on infected scan result |
 | [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI privilege escalation for root-requiring checks |
@@ -66,7 +66,7 @@ User types `yay -S pkg` or `yay -Syu`
                             └── PostInstall    — logs AUR installs
 
 systemd system timer (weekly + on boot + after each pacman tx)
-    └── archcanary.sh --full --all-time
+    └── archcanary --full --all-time
             ├── known-bad package list (1900+)
             ├── pacman.log history (compressed log support)
             ├── systemd persistence (services, drop-ins, timers)
@@ -81,7 +81,7 @@ systemd system timer (weekly + on boot + after each pacman tx)
 systemd user path unit
     └── watches last-scan.log → notify-send critical alert on INFECTED
 
-archcanary-gui.sh (on-demand)
+archcanary-gui (on-demand)
     └── yad grouped menu, per-session status, polkit for root checks
 ```
 

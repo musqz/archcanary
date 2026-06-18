@@ -253,7 +253,7 @@ EOF
 fi
 
 echo
-echo "Done. Run: archcanary.sh --refresh --full --all-time"
+echo "Done. Run: archcanary --refresh --full --all-time"
 
 # Warn if BIN_DIR is not in PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then

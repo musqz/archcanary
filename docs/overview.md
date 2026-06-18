@@ -22,14 +22,14 @@ flowchart TD
     end
 
     subgraph AFTER["3 · AFTER install / always — automatic, root"]
-        TIM["systemd timer<br/>weekly + on boot"] --> SCAN["archcanary.sh<br/>--full --all-time"]
+        TIM["systemd timer<br/>weekly + on boot"] --> SCAN["archcanary<br/>--full --all-time"]
         PTH[".path unit<br/>after each pacman tx"] --> SCAN
         SCAN --> LOG["last-scan.log"]
     end
 
     subgraph ALERT["4 · ON detection / review"]
         LOG -->|INFECTED| NOT["user .path → notify-send<br/>critical desktop alert"]
-        NOT --> GUI["archcanary-gui.sh<br/>review + root checks"]
+        NOT --> GUI["archcanary-gui<br/>review + root checks"]
     end
 
     T -.->|install if trusted| U
@@ -43,7 +43,7 @@ flowchart TD
 | 1 · Before | `traur scan <pkg>` | You run it before installing | ✗ manual | Maintainer reputation, PKGBUILD heuristics (279 signals) |
 | 2 · At install | `syay` / `aurscan` | Every `yay` call (`alias yay=syay`) | ✓ | Novel / obfuscated payloads — Claude reads the PKGBUILD |
 | 2 · At install | yay `init.lua` hooks | After aurscan clears the build | ✓ | Known campaign signatures, stale-rewrite upgrades (offline) |
-| 3 · After / always | `archcanary.sh` | systemd timer (weekly + boot) + `.path` (after each pacman tx) | ✓ root | Known-bad packages, systemd/eBPF/npm persistence, rootkit traces |
+| 3 · After / always | `archcanary` | systemd timer (weekly + boot) + `.path` (after each pacman tx) | ✓ root | Known-bad packages, systemd/eBPF/npm persistence, rootkit traces |
 | 4 · On detection | notifier → GUI | `last-scan.log` flips to INFECTED | ✓ | Surfaces a result; review is manual |
 
 ## Read this first

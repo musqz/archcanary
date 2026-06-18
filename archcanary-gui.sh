@@ -7,7 +7,7 @@ MAIN_SCRIPT=""
 for candidate in \
     "$SCRIPT_DIR/archcanary.sh" \
     "$(command -v archcanary 2>/dev/null || true)" \
-    "$(command -v archcanary.sh 2>/dev/null || true)"; do
+    "/usr/lib/archcanary/archcanary.sh"; do
     [[ -n "${candidate:-}" && -x "$candidate" ]] && { MAIN_SCRIPT="$candidate"; break; }
 done
 
@@ -15,7 +15,7 @@ if [[ -z "$MAIN_SCRIPT" ]]; then
     yad --error \
         --title="Archcanary" \
         --window-icon=security-high \
-        --text="<b>archcanary.sh not found.</b>\n\nRun <tt>./install.sh</tt> first." \
+        --text="<b>archcanary not found.</b>\n\nRun <tt>./install.sh</tt> first." \
         --width=400
     exit 1
 fi

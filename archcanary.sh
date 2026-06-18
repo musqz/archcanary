@@ -374,9 +374,9 @@ run_doctor() {
     # --- User install ------------------------------------------------------
     if [[ -n ${want[user]:-} ]]; then
         printf '%sUser install%s\n' "$B" "$N"
-        _item "main scanner (~/.local/bin)" "$(_file "$user_bin/archcanary.sh")" "bash $installer"           "path: $user_bin/archcanary.sh"
-        _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui.sh")"   "bash $installer"           "path: $user_bin/archcanary-gui.sh"
-        _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "archcanary.sh --refresh" "path: $cfg_dir/package_list.txt"
+        _item "main scanner (~/.local/bin)" "$(_file "$user_bin/archcanary")" "bash $installer"           "path: $user_bin/archcanary"
+        _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui")"   "bash $installer"           "path: $user_bin/archcanary-gui"
+        _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "archcanary --refresh" "path: $cfg_dir/package_list.txt"
         printf '\n'
     fi
 
@@ -876,7 +876,7 @@ check_ebpf() {
     if [[ ! -d /sys/fs/bpf ]]; then
         echo "  /sys/fs/bpf not accessible — BPF filesystem not mounted or insufficient privileges."
         echo "  → Requires root to scan for hidden BPF maps (e.g. hidden_pids, hidden_names)."
-        echo "  → Try: sudo ./archcanary.sh --check-ebpf"
+        echo "  → Try: sudo archcanary --check-ebpf"
         echo "  → Skip this check if eBPF rootkit detection is not needed for your threat model."
         return 77
     fi
