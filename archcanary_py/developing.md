@@ -1,4 +1,4 @@
-# Developing — aur_check_py
+# Developing — archcanary_py
 
 ## Tech Stack
 - Python ≥3.14, stdlib only
@@ -25,7 +25,7 @@
 
 ## Tests (Red/Green/Refactor)
 - `tests/test_<module>.py`, `from unittest import TestCase`
-- Jede Check-Funktion isoliert mocken: `@patch('aur_check_py.scanner.subprocess.run')`
+- Jede Check-Funktion isoliert mocken: `@patch('archcanary_py.scanner.subprocess.run')`
 - Assert Exit-Codes, Output-Strings, Date-Window-Edge-Cases
 - Laufen ohne Arch-System, `pacman`, `npm`, `bun`
 

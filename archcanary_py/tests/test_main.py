@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from aur_check_py.__main__ import create_parser, main
+from archcanary_py.__main__ import create_parser, main
 
 
 class TestMainCreateParser(unittest.TestCase):
@@ -71,9 +71,9 @@ class TestMainCreateParser(unittest.TestCase):
 
 
 class TestMainExitCodes(unittest.TestCase):
-    @patch('aur_check_py.__main__.setup_logging')
-    @patch('aur_check_py.__main__.read_file')
-    @patch('aur_check_py.__main__.AurScanner')
+    @patch('archcanary_py.__main__.setup_logging')
+    @patch('archcanary_py.__main__.read_file')
+    @patch('archcanary_py.__main__.AurScanner')
     def test_clean_exit(self, mock_scanner_cls, mock_read_file, mock_log):
         mock_read_file.side_effect = [
             ['package-a'],
@@ -96,9 +96,9 @@ class TestMainExitCodes(unittest.TestCase):
         ec = main([])
         self.assertEqual(ec, 0)
 
-    @patch('aur_check_py.__main__.setup_logging')
-    @patch('aur_check_py.__main__.read_file')
-    @patch('aur_check_py.__main__.AurScanner')
+    @patch('archcanary_py.__main__.setup_logging')
+    @patch('archcanary_py.__main__.read_file')
+    @patch('archcanary_py.__main__.AurScanner')
     def test_infected_exit(self, mock_scanner_cls, mock_read_file, mock_log):
         mock_read_file.side_effect = [
             ['package-a'],
@@ -121,9 +121,9 @@ class TestMainExitCodes(unittest.TestCase):
         ec = main([])
         self.assertEqual(ec, 2)
 
-    @patch('aur_check_py.__main__.setup_logging')
-    @patch('aur_check_py.__main__.read_file')
-    @patch('aur_check_py.__main__.AurScanner')
+    @patch('archcanary_py.__main__.setup_logging')
+    @patch('archcanary_py.__main__.read_file')
+    @patch('archcanary_py.__main__.AurScanner')
     def test_all_time_flag_passed(self, mock_scanner_cls, mock_read_file, mock_log):
         mock_read_file.side_effect = [
             ['package-a'],
@@ -147,9 +147,9 @@ class TestMainExitCodes(unittest.TestCase):
         self.assertEqual(ec, 0)
         self.assertEqual(mock_scanner_cls.call_args[1]['all_time'], True)
 
-    @patch('aur_check_py.__main__.setup_logging')
-    @patch('aur_check_py.__main__.merge_lists')
-    @patch('aur_check_py.__main__.AurScanner')
+    @patch('archcanary_py.__main__.setup_logging')
+    @patch('archcanary_py.__main__.merge_lists')
+    @patch('archcanary_py.__main__.AurScanner')
     def test_merge_mode(self, mock_scanner_cls, mock_merge, mock_log):
         mock_merge.return_value = ({'merged-pkg'}, {'merged-npm'})
         mock_scanner = MagicMock()

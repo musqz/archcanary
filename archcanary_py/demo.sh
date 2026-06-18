@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Demo: alle aur_check_py CLI-Fälle aus dem README
+# Demo: alle archcanary_py CLI-Fälle aus dem README
 set -euo pipefail
 cd "$(dirname "$0")"/..
 
-P="python -m aur_check_py"
+P="python -m archcanary_py"
 SEP="========================================"
 
 echo "$SEP"
@@ -14,7 +14,7 @@ echo
 
 echo "$SEP"
 echo " 2) Standard-Scan (v2-Äquivalent)"
-echo "    python -m aur_check_py"
+echo "    python -m archcanary_py"
 echo "$SEP"
 $P || true
 echo
@@ -45,7 +45,7 @@ echo
 
 echo "$SEP"
 echo " 6) Merge-Mode: HedgeDoc + lokale package_list.txt"
-echo "    python -m aur_check_py --merge -l ../package_list.txt"
+echo "    python -m archcanary_py --merge -l ../package_list.txt"
 echo "$SEP"
 $P --merge -l ../package_list.txt || true
 echo

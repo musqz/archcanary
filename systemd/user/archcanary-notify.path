@@ -8,8 +8,8 @@ StartLimitIntervalSec=0
 # PathChanged (IN_CLOSE_WRITE) fires once when the writer closes the file, not
 # on every write. The scan streams last-scan.log line-by-line via tee, so
 # PathModified would fire dozens of times per scan and trip the start limit.
-PathChanged=/var/lib/aur-malware-check/last-scan.log
-Unit=aur-malware-check-notify.service
+PathChanged=/var/lib/archcanary/last-scan.log
+Unit=archcanary-notify.service
 
 [Install]
 WantedBy=default.target

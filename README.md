@@ -1,6 +1,6 @@
-# AUR Malware Check - June 2026 Campaign
+# Archcanary - June 2026 Campaign
 
-> **WARNING: Ultra personal fork for Manjaro Openbox (Mabox).** Tuned for this specific setup — false-positive thresholds, paths, and defaults reflect a Mabox system. For a general-purpose Arch/AUR scanner use [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) instead.
+> **WARNING: Ultra personal fork for Manjaro Openbox (Mabox).** Tuned for this specific setup — false-positive thresholds, paths, and defaults reflect a Mabox system. For a general-purpose Arch/AUR scanner use [lenucksi/archcanary](https://github.com/lenucksi/archcanary) instead.
 >
 > **Read-only by design.** The scanner detects and reports, and never deletes, quarantines, or disables anything it flags — remediation is left to you. The only files it writes are its own logs and config lists. Installation (`install.sh`), the `--refresh` package-list download, and the DKMS allowlist editor are the exceptions that touch the system or network, and all are explicit.
 >
@@ -10,10 +10,10 @@
 
 | Patch | Description |
 |-------|-------------|
-| XDG config dir | Package lists live in `~/.config/aur-malware-check/` instead of alongside the script |
+| XDG config dir | Package lists live in `~/.config/archcanary/` instead of alongside the script |
 | Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
 | Desktop alert | Fires a critical notification (`notify-send` / libnotify) on exit code 2. Open the GUI from your app launcher to review. `--no-notify` suppresses it |
-| `aur_malware_gui.sh` | yad GUI with grouped checks, per-session status column (✅/⚠/❌/?), and polkit auth for root-requiring checks (eBPF, bpftool, kmod). Live streaming output window. Install root helper with `./install.sh --system` |
+| `archcanary-gui.sh` | yad GUI with grouped checks, per-session status column (✅/⚠/❌/?), and polkit auth for root-requiring checks (eBPF, bpftool, kmod). Live streaming output window. Install root helper with `./install.sh --system` |
 | `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages — catches quote-split, base64-decode-to-shell, `eval+$(...)`, `printf` hex/octal, and variable-split command reassembly |
 | `--check-yarn-cache` / `--check-pnpm-cache` | Extends npm/bun cache scanning to yarn and pnpm; includes fnm per-version Node installs |
 | `--check-bpftool` | Enumerates **all** loaded eBPF programs via `bpftool` — complements `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps) by catching unpinned or differently-named programs; warns on stealth hook types (kprobe/tracing/lsm/tracepoint); suppresses LSM false positives from systemd/AppArmor |
@@ -36,11 +36,11 @@ This is a collection of all the scattered resources, especially the ones in the 
 
 > [!TIP]
 > **Questions, support, or general discussion?** Head over to
-> [Discussions](https://github.com/lenucksi/aur-malware-check/discussions/).
+> [Discussions](https://github.com/lenucksi/archcanary/discussions/).
 > Issues are reserved for bug reports and feature requests only.
 
 > [!TIP]
-> **Python 3.14+ version available?** See `aur_check_py/` — stdlib-only, typed,
+> **Python 3.14+ version available?** See `archcanary_py/` — stdlib-only, typed,
 > testable, should be functionally identical, please test and report back.
 
 > **1600+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile`, `bun install js-digest`, or `lockfile-js` into PKGBUILD/install files. Two attack waves:
@@ -53,22 +53,22 @@ This is a collection of all the scattered resources, especially the ones in the 
 
 ```bash
 # Check if you have any infected packages
-./aur_check-v2.sh
+./archcanary.sh
 
 # Check bun cache specifically (for js-digest / atomic-lockfile)
-./aur_check-v2.sh --check-bun-cache
+./archcanary.sh --check-bun-cache
 
 # Safe one-liner (from quantenProjects) - just compare installed vs infected list
-comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/lenucksi/aur-malware-check/master/package_list.txt | sort)
+comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/lenucksi/archcanary/master/package_list.txt | sort)
 
 # Full scan with all optional checks
-./aur_check-v2.sh --full
+./archcanary.sh --full
 
 # Enumerate loaded eBPF programs (needs root) — flags stealth hook types
-sudo ./aur_check-v2.sh --check-bpftool
+sudo ./archcanary.sh --check-bpftool
 
 # Cross-campaign: scan all installed packages regardless of install date
-./aur_check-v2.sh --all-time
+./archcanary.sh --all-time
 
 # Merge multiple lists (HedgeDoc + historical + custom) and scan
 ./custom_list_merge_aur_scan.sh -l ./historical_packages.txt
@@ -77,19 +77,19 @@ sudo ./aur_check-v2.sh --check-bpftool
 ./custom_list_merge_aur_scan.sh -l ./historical_packages.txt -- --all-time
 
 # Refresh the package list from the official Arch Linux HedgeDoc, then scan
-./aur_check-v2.sh --refresh --full
+./archcanary.sh --refresh --full
 
 # Use custom package lists (also settable via env vars):
 #   PACKAGE_LIST_FILE=./my_list.txt
 #   MALICIOUS_NPM_LIST=./my_npm.txt
-./aur_check-v2.sh --package-list=my_list.txt --malicious-npm-list=my_npm.txt
+./archcanary.sh --package-list=my_list.txt --malicious-npm-list=my_npm.txt
 
 
 # Legacy scan (only use if v2 is broken)
-./archive/aur_check.sh
+./archive/archcanary.sh
 ```
 
-## Script: `aur_check.sh`
+## Script: `archcanary.sh`
 
 A consolidated detection script combining the best features from all community forks:
 
@@ -119,8 +119,8 @@ Two versions are maintained — v2 is optimized but functionally identical:
 
 | Version | File | Log Scanning | Speed (6.2 MB pacman.log) |
 |---------|------|-------------|--------------------------|
-| v1 | `aur_check.sh` | `echo \| sed` subprocesses + `grep -xF` tempfile | ~3-5 min |
-| v2 | `aur_check-v2.sh` | Bash regex (`[[ $line =~ $re ]]`) + O(1) assoc. array | ~1-2 s |
+| v1 | `archcanary.sh` | `echo \| sed` subprocesses + `grep -xF` tempfile | ~3-5 min |
+| v2 | `archcanary.sh` | Bash regex (`[[ $line =~ $re ]]`) + O(1) assoc. array | ~1-2 s |
 
 v2 verified against v1 by static analysis: **8/10 risk categories NONE, 2/10 LOW** (theoretical edge cases only, no real inputs affected). Use v2 for speed; v1 retained as reference for completeness.
 
@@ -133,10 +133,10 @@ v2 verified against v1 by static analysis: **8/10 risk categories NONE, 2/10 LOW
 ## Repository Structure
 
 ```
-aur-malware-check/
+archcanary/
 ├── README.md              # This file
-├── aur_check.sh           # v1: Consolidated detection script (sed+grep log scanner)
-├── aur_check-v2.sh        # v2: Optimized log scanner (bash regex + O(1) hash lookup)
+├── archcanary.sh           # v1: Consolidated detection script (sed+grep log scanner)
+├── archcanary.sh        # v2: Optimized log scanner (bash regex + O(1) hash lookup)
 ├── package_list.txt              # bundled compromised packages, same as --refresh one as of 6/17/26. (1619 via `--refresh`)
 ├── malicious_npm_packages.txt    # Malicious npm package names for cache checks
 ├── iocs.txt                      # Indicators of Compromise
@@ -165,7 +165,7 @@ This analysis aggregates information from the following sources:
 | Source | URL | Content Used |
 |--------|-----|-------------|
 | IFIN Discourse | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Attack summary, links, **bun/js-digest wave update (Jun 12)** |
-| ioctl.fail Analysis | https://ioctl.fail/preliminary-analysis-of-aur-malware/ | Detailed technical analysis, IOCs, eBPF rootkit details, C2 extraction |
+| ioctl.fail Analysis | https://ioctl.fail/preliminary-analysis-of-archcanary/ | Detailed technical analysis, IOCs, eBPF rootkit details, C2 extraction |
 | Arch ML: Main Thread | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/ | Master list of ~408 packages by Andre Herbst, additional reports by Rafal Lichwala, Nicolas Boichat, Damien |
 | Arch ML: HedgeDoc Package List | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/FCH7TT6IOVT7D477JKSVJALBKADAARSW/ | Jonathan Grotelüschen (Arch Staff) posts HedgeDoc link with updated affected package list |
 | Arch ML: ALVR Report | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/2LGBF2AZBPVCCY4VTN6DOVUNNBURFJ2J/ | First report of suspicious commit on alvr package |
@@ -221,9 +221,9 @@ This analysis aggregates information from the following sources:
 
 | Source | URL | Content Used |
 |--------|-----|-------------|
-| **drbbgh** (PR #8) | https://github.com/lenucksi/aur-malware-check/pull/8 | `--refresh` flag: live package list fetch from Arch Linux HedgeDoc |
-| **liphiwolf** (PR #7) | https://github.com/lenucksi/aur-malware-check/pull/7 | `lockfile-js` detection, expanded package list from CSCS paste |
-| **0xf836** (PR #4) | https://github.com/lenucksi/aur-malware-check/pull/4 | Package list expansion (superseded by PR #8) |
+| **drbbgh** (PR #8) | https://github.com/lenucksi/archcanary/pull/8 | `--refresh` flag: live package list fetch from Arch Linux HedgeDoc |
+| **liphiwolf** (PR #7) | https://github.com/lenucksi/archcanary/pull/7 | `lockfile-js` detection, expanded package list from CSCS paste |
+| **0xf836** (PR #4) | https://github.com/lenucksi/archcanary/pull/4 | Package list expansion (superseded by PR #8) |
 
 ### Additional Data
 
@@ -277,10 +277,10 @@ This analysis aggregates information from the following sources:
 1. **Preserve the system**: Do not power off - use forensic acquisition with trusted media
 2. **Rotate ALL credentials**: Discord, GitHub, npm, Slack, Teams, SSH keys, Vault tokens, cloud provider keys
 3. **Check for persistence**: `systemctl list-units --type=service --state=running` (check for unknown services); also check drop-ins and timers with `--check-systemd`
-4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`, and enumerate loaded programs with `sudo bpftool prog show` / `sudo bpftool link show` — look for `kprobe`/`tracing`/`lsm`/`tracepoint` hooks you didn't install (or run `sudo ./aur_check-v2.sh --check-bpftool`)
-4a. **Check for library injection**: `cat /etc/ld.so.preload` — any non-empty content means a `.so` is being injected into every process (or run `./aur_check-v2.sh --check-ldso`)
-4b. **Check for user-space persistence**: review `~/.config/autostart/`, `~/.config/systemd/user/`, and shell RC files for suspicious entries (or run `./aur_check-v2.sh --check-autostart`)
-4c. **Check for rogue kernel modules**: `lsmod` and `dkms status` — flag any module not from a known package (or run `sudo ./aur_check-v2.sh --check-kmod`)
+4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`, and enumerate loaded programs with `sudo bpftool prog show` / `sudo bpftool link show` — look for `kprobe`/`tracing`/`lsm`/`tracepoint` hooks you didn't install (or run `sudo ./archcanary.sh --check-bpftool`)
+4a. **Check for library injection**: `cat /etc/ld.so.preload` — any non-empty content means a `.so` is being injected into every process (or run `./archcanary.sh --check-ldso`)
+4b. **Check for user-space persistence**: review `~/.config/autostart/`, `~/.config/systemd/user/`, and shell RC files for suspicious entries (or run `./archcanary.sh --check-autostart`)
+4c. **Check for rogue kernel modules**: `lsmod` and `dkms status` — flag any module not from a known package (or run `sudo ./archcanary.sh --check-kmod`)
 5. **Clean with trusted media**: Boot from Arch ISO, mount filesystem, remove malicious systemd units
 6. **Consider reinstallation**: The rootkit makes the system untrustworthy
 7. **Report findings**: https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/
@@ -291,10 +291,10 @@ Community tools - no warranty. Use at your own risk.
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=lenucksi%2Faur-malware-check&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=lenucksi%2Farchcanary&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=lenucksi/aur-malware-check&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=lenucksi/archcanary&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=lenucksi/archcanary&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=lenucksi/archcanary&type=date&legend=top-left" />
  </picture>
 </a>

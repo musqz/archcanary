@@ -6,4 +6,4 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/aur-malware-check/last-scan.log && notify-send -u critical -i dialog-warning "AUR: malicious package detected" "Open AUR Malware Check to review." || true'
+ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/archcanary/last-scan.log && notify-send -u critical -i dialog-warning "AUR: malicious package detected" "Open Archcanary to review." || true'

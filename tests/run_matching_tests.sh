@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Matching test runner for aur_malware_check
+# Matching test runner for archcanary
 # Tests that package matching is exact (no prefix/suffix false positives)
 # and that list parsing handles edge cases correctly.
 #
@@ -24,7 +24,7 @@ pass()  { echo >&2 "  PASS: $1"; PASS_COUNT=$((PASS_COUNT + 1)); }
 fail()  { echo >&2 "  FAIL: $1"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 
 # ---------------------------------------------------------------------------
-# Helper: load a package list file the same way aur_check-v2.sh does
+# Helper: load a package list file the same way archcanary.sh does
 # Returns array via nameref
 # ---------------------------------------------------------------------------
 load_list() {
@@ -197,7 +197,7 @@ test_cli_flag() {
     # Run via env var (existing path)
     local result=0
     PACKAGE_LIST_FILE="$SCRIPT_DIR/fake_package_lists/simple.txt" \
-    "$REPO_DIR/aur_check-v2.sh" --log-file="$log_file" >/dev/null 2>&1 || true
+    "$REPO_DIR/archcanary.sh" --log-file="$log_file" >/dev/null 2>&1 || true
     grep -q "Packages checked: 10" "$log_file" || result=$?
 
     if [[ $result -eq 0 ]]; then
@@ -205,7 +205,7 @@ test_cli_flag() {
     else
         # Try with direct --package-list flag
         result=0
-        "$REPO_DIR/aur_check-v2.sh" \
+        "$REPO_DIR/archcanary.sh" \
             --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
             --log-file="$log_file" >/dev/null 2>&1 || true
         grep -q "Packages checked: 10" "$log_file" || result=$?
@@ -226,7 +226,7 @@ test_npm_cli_flag() {
     local log_file
     log_file=$(mktemp)
 
-    "$REPO_DIR/aur_check-v2.sh" \
+    "$REPO_DIR/archcanary.sh" \
         --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
         --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" \
         --log-file="$log_file" >/dev/null 2>&1 || true
@@ -271,7 +271,7 @@ test_check_ldso() {
     # Sub-test A: absent/empty preload, empty conf.d → clean
     rc=0
     out=$(LDSO_PRELOAD_FILE="$preload_file" LDSO_CONF_DIR="$conf_dir" \
-        "$REPO_DIR/aur_check-v2.sh" \
+        "$REPO_DIR/archcanary.sh" \
         --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
         --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" \
         --check-ldso --no-notify 2>&1) || rc=$?
@@ -285,7 +285,7 @@ test_check_ldso() {
     echo "/tmp/evil.so" > "$preload_file"
     rc=0
     out=$(LDSO_PRELOAD_FILE="$preload_file" LDSO_CONF_DIR="$conf_dir" \
-        "$REPO_DIR/aur_check-v2.sh" \
+        "$REPO_DIR/archcanary.sh" \
         --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
         --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" \
         --check-ldso --no-notify 2>&1) || rc=$?
@@ -313,7 +313,7 @@ test_check_systemd_hardened() {
 
     # Sub-test A: drop-in override with Restart=on-failure → WARNING
     out=$(SYSTEMD_SCAN_DIRS="$fixture_dir" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"WARNING"* && "$out" == *"on-failure"* ]]; then
         pass "check_systemd: drop-in Restart=on-failure → WARNING (exit 2)"
     else
@@ -332,7 +332,7 @@ test_check_systemd_hardened() {
     tmpdir=$(mktemp -d)
     rc=0
     out=$(SYSTEMD_SCAN_DIRS="$tmpdir" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
         pass "check_systemd: empty scan dir → clean"
     else
@@ -356,7 +356,7 @@ test_check_autostart() {
     # Sub-test A: fixture home with evil.desktop + malicious .bashrc → WARNING
     rc=0
     out=$(AUTOSTART_HOME="$fake_home" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"WARNING"* ]]; then
         pass "check_autostart: evil.desktop + malicious .bashrc → WARNING (exit 2)"
     else
@@ -383,7 +383,7 @@ test_check_autostart() {
     mkdir -p "$tmpdir/.config/autostart"
     rc=0
     out=$(AUTOSTART_HOME="$tmpdir" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
         pass "check_autostart: empty home → clean"
     else
@@ -407,7 +407,7 @@ test_pkgbuild_obfuscation() {
     # Sub-test A: base64 -d | bash → WARNING
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-base64" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"base64"* ]]; then
         pass "pkgbuild_obfuscation: base64-decode-to-shell detected"
     else
@@ -417,7 +417,7 @@ test_pkgbuild_obfuscation() {
     # Sub-test B: eval $(...) → WARNING
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-eval" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"eval"* ]]; then
         pass "pkgbuild_obfuscation: eval+subshell detected"
     else
@@ -427,7 +427,7 @@ test_pkgbuild_obfuscation() {
     # Sub-test C: printf hex → WARNING
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-printf" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"printf"* ]]; then
         pass "pkgbuild_obfuscation: printf hex/octal detected"
     else
@@ -437,7 +437,7 @@ test_pkgbuild_obfuscation() {
     # Sub-test D: variable-split reassembly → WARNING
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-varsplit" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"variable-split"* ]]; then
         pass "pkgbuild_obfuscation: variable-split reassembly detected"
     else
@@ -447,7 +447,7 @@ test_pkgbuild_obfuscation() {
     # Sub-test E: clean PKGBUILD → no WARNING
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-clean" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
         pass "pkgbuild_obfuscation: clean PKGBUILD → no false positive"
     else
@@ -483,7 +483,7 @@ test_check_kmod() {
 
     rc=0
     out=$(LSMOD_CMD="$lsmod_evil" DKMS_CMD="$null_dkms" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"WARNING"* && "$out" == *"evil_rootkit_kmod"* ]]; then
         pass "check_kmod: unknown module → WARNING (exit 2) with name listed"
     else
@@ -496,7 +496,7 @@ test_check_kmod() {
 
     rc=0
     out=$(LSMOD_CMD="$lsmod_empty" DKMS_CMD="$null_dkms" \
-        "$REPO_DIR/aur_check-v2.sh" "${base_args[@]}" 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
         pass "check_kmod: empty lsmod/dkms → clean"
     else

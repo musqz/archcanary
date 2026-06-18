@@ -9,12 +9,12 @@ Full overview of how this fork is deployed and how the pieces connect.
 
 | Component | Package / Source | Purpose |
 |-----------|-----------------|---------|
-| `aur_check-v2.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) (fork of [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
-| `aur_malware_gui.sh` | [musqz/aur-malware-check](https://github.com/musqz/aur-malware-check) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window |
+| `archcanary.sh` | [musqz/archcanary](https://github.com/musqz/archcanary) (fork of [lenucksi/archcanary](https://github.com/lenucksi/archcanary)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
+| `archcanary-gui.sh` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window |
 | `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Pre-install trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes) |
 | `aurscan` (`syay`) | [musqz/aurscan](https://github.com/musqz/aurscan) (fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan)) | LLM-based PKGBUILD scanner using Claude. Installed as `syay` and bound with `alias yay=syay` in `.bashrc`, so it runs **automatically** on every AUR install/upgrade — it reads the PKGBUILD with Claude (plus offline static rules) and only hands off to the real `/usr/bin/yay` on a CLEAN verdict |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — runs on every install/upgrade *after* aurscan clears it: upgrade-age warning (`UpgradeSelect`), offline malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
-| `yad` | official repos | GTK dialog toolkit used by `aur_malware_gui.sh` |
+| `yad` | official repos | GTK dialog toolkit used by `archcanary-gui.sh` |
 | `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
 | `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
 | `bpftool` | `bpf` — official repos | Enumerates loaded eBPF programs for `--check-bpftool` |
@@ -23,7 +23,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 
 ```
 systemd SYSTEM timer (weekly + on boot, runs as root)
-    └── aur-malware-check.sh --refresh --full --all-time --no-notify
+    └── archcanary.sh --refresh --full --all-time --no-notify
             ├── [1]  currently installed foreign packages
             ├── [2]  historical pacman logs
             ├── [3]  systemd persistence (services, drop-ins, timers)
@@ -38,13 +38,13 @@ systemd SYSTEM timer (weekly + on boot, runs as root)
             ├── [10] XDG autostart + shell RC persistence
             └── [11] kernel module / DKMS audit          (root → actually runs)
                     │
-                    └── writes /var/lib/aur-malware-check/last-scan.log
+                    └── writes /var/lib/archcanary/last-scan.log
                             │
    systemd USER path unit watches that file
             └── on "RESULT: INFECTED" → notify-send (libnotify) → critical desktop alert
-                    └── open AUR Malware Check from the app launcher to review
+                    └── open Archcanary from the app launcher to review
 
-aur_malware_gui.sh (on-demand — desktop shortcut or app launcher)
+archcanary-gui.sh (on-demand — desktop shortcut or app launcher)
     └── yad list menu with per-session status column
             ├── standard checks run as user
             └── root checks (eBPF, bpftool, kmod) → pkexec → polkit auth → root-helper
@@ -53,7 +53,7 @@ aur_malware_gui.sh (on-demand — desktop shortcut or app launcher)
 traur — two use cases:
     ├── GUI "Trust scan (traur)"  → traur scan  (no args)
     │       └── bulk audit of ALL installed AUR packages
-    │               └── useful as a periodic sweep alongside aur_check-v2.sh
+    │               └── useful as a periodic sweep alongside archcanary.sh
     │
     └── terminal: traur scan <pkg>  (before installing a specific package)
             └── 279 signals, 5 weighted categories
@@ -91,11 +91,11 @@ For the lifecycle map and the what-runs-when table, see
 [overview.md](overview.md). All layers are complementary — none replaces the
 others.
 
-### The yad GUI (`aur_malware_gui.sh`)
+### The yad GUI (`archcanary-gui.sh`)
 
 Run from a desktop shortcut or app launcher — grouped menu with a per-session status column, polkit auth for root-requiring checks, and a live streaming output window:
 
-![aur_malware_gui.sh yad GUI — status column and grouped checks](../images/gui.png)
+![archcanary-gui.sh yad GUI — status column and grouped checks](../images/gui.png)
 
 ### Headless / SSH
 
@@ -106,29 +106,29 @@ Run the scanner directly:
 # bpftool) need root; without it they are skipped and the run is reported as
 # INCOMPLETE (exit 1, WARNINGS) rather than CLEAN, so a partial scan is never
 # mistaken for an all-clear.
-sudo ~/.local/bin/aur-malware-check.sh --full --all-time
+sudo ~/.local/bin/archcanary.sh --full --all-time
 
 # User-level checks run fine without root:
-aur-malware-check.sh --check-systemd
-aur-malware-check.sh --check-pkgbuild
+archcanary.sh --check-systemd
+archcanary.sh --check-pkgbuild
 
 # A single root-requiring check:
-sudo ~/.local/bin/aur-malware-check.sh --check-kmod
+sudo ~/.local/bin/archcanary.sh --check-kmod
 
 # Setup health check — is every element installed and configured? (no root,
 # no scan; auto-detects distro/AUR helpers and prints a fix command per gap).
 # When something is missing it points to the next step to run.
-aur-malware-check.sh --doctor
+archcanary.sh --doctor
 
 # Check one section (with extra detail), or several — runs in install order:
 # platform, deps, user, system, systemd, external
-aur-malware-check.sh --doctor=deps
-aur-malware-check.sh --doctor=user,system
+archcanary.sh --doctor=deps
+archcanary.sh --doctor=user,system
 ```
 
 > Root checks use the **full path** under `sudo`. `sudo` resets `$PATH` to its
 > `secure_path` (set in `/etc/sudoers`), which does not include `~/.local/bin`, so a
-> bare `sudo aur-malware-check.sh` fails with *command not found*. The script then
+> bare `sudo archcanary.sh` fails with *command not found*. The script then
 > resolves your config from `$SUDO_USER`, so the lists are still found.
 
 The GUI is for interactive desktop use; the CLI covers everything else (SSH, cron, systemd, scripting).
@@ -141,10 +141,10 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 ## Install locations
 
 ```
-~/.local/bin/aur-malware-check.sh     # main script
-~/.local/bin/aur_malware_gui.sh       # yad GUI script
+~/.local/bin/archcanary.sh     # main script
+~/.local/bin/archcanary-gui.sh       # yad GUI script
 
-~/.config/aur-malware-check/
+~/.config/archcanary/
     ├── package_list.txt              # refreshed weekly via --refresh
     └── malicious_npm_packages.txt    # static list, auto-seeded on first run
 
@@ -155,30 +155,30 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 /usr/local/bin/aurscan                # = syay; alias yay=syay in ~/.bashrc
 
 ~/.config/systemd/user/                   # installed by ./install.sh --system
-    ├── aur-malware-check-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
-    ├── aur-malware-check-user.timer      # weekly + on boot
-    ├── aur-malware-check-notify.path     # watches the root scan's result file
-    └── aur-malware-check-notify.service  # greps INFECTED → notify-send
+    ├── archcanary-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
+    ├── archcanary-user.timer      # weekly + on boot
+    ├── archcanary-notify.path     # watches the root scan's result file
+    └── archcanary-notify.service  # greps INFECTED → notify-send
 
 # system components — installed by ./install.sh --system (requires sudo)
-/usr/lib/aur-malware-check/
-    ├── aur-malware-check.sh          # root-accessible copy of the main script
+/usr/lib/archcanary/
+    ├── archcanary.sh          # root-accessible copy of the main script
     ├── package_list.txt              # bundled lists, seeded so the root scan finds them
     ├── malicious_npm_packages.txt
     ├── chaos_rat_packages.txt
     └── root-helper                   # pkexec target (validates flags, restores XDG env)
-/etc/aur-malware-check/
+/etc/archcanary/
     └── dkms_allowlist.conf           # the single DKMS allowlist (edit via GUI/sudoedit)
 /usr/share/polkit-1/actions/
-    └── org.aur-malware-check.policy  # polkit policy allowing GUI to call root-helper
+    └── org.archcanary.policy  # polkit policy allowing GUI to call root-helper
 
 # automated scan — units installed by ./install.sh --system
 /etc/systemd/system/
-    ├── aur-malware-check.service     # system-level scan as root, writes last-scan.log
-    ├── aur-malware-check.timer       # weekly + on boot
-    ├── aur-malware-check-onchange.service
-    └── aur-malware-check.path        # triggers after each pacman transaction
-/var/lib/aur-malware-check/
+    ├── archcanary.service     # system-level scan as root, writes last-scan.log
+    ├── archcanary.timer       # weekly + on boot
+    ├── archcanary-onchange.service
+    └── archcanary.path        # triggers after each pacman transaction
+/var/lib/archcanary/
     └── last-scan.log                 # shared result the user notifier watches
 ```
 
@@ -226,7 +226,7 @@ See [systemd.md](systemd.md) for the full service and timer contents.
 
 ```bash
 # 1. Clone the fork
-git clone https://github.com/musqz/aur-malware-check.git ~/Github/aur-malware-check
+git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 
 # 2. Install dependencies (bpf provides bpftool for --check-bpftool; yad for GUI)
 sudo pacman -S libnotify bpf yad polkit
@@ -238,15 +238,15 @@ cd ~/Github/aurscan && ./install.sh
 echo 'alias yay=syay' >> ~/.bashrc
 
 # 3. Run install script (installs to ~/.local/bin by default)
-bash ~/Github/aur-malware-check/install.sh
+bash ~/Github/archcanary/install.sh
 
 # Also install root helper + polkit policy (enables eBPF/kmod checks in the GUI)
-bash ~/Github/aur-malware-check/install.sh --system
+bash ~/Github/archcanary/install.sh --system
 
 # 4. yay 13.0 Lua hooks (age warning, pattern block, install log)
 mkdir -p ~/.config/yay
-cp ~/Github/aur-malware-check/configs/yay-init.lua ~/.config/yay/init.lua
+cp ~/Github/archcanary/configs/yay-init.lua ~/.config/yay/init.lua
 
 # 5. Run a first scan with package list refresh
-aur-malware-check.sh --refresh --full --all-time
+archcanary.sh --refresh --full --all-time
 ```
