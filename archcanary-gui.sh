@@ -177,7 +177,9 @@ aurscan_settings() {
     local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aurscan"
     local env_file="$cfg_dir/env"
 
-    _env_get() { grep -E "^$1=" "$env_file" 2>/dev/null | tail -1 | cut -d= -f2-; }
+    # || true: grep exits non-zero on no match / missing file; pipefail would
+    # propagate that and set -e would kill the function before yad opens.
+    _env_get() { grep -E "^$1=" "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
     local cur_backend cur_url cur_fallback cur_model cur_timeout
     cur_backend=$(_env_get AURSCAN_BACKEND)
     cur_url=$(_env_get AURSCAN_OPENAI_URL)
@@ -202,6 +204,8 @@ aurscan_settings() {
 
     local result rc=0
     while true; do
+        # && rc=0 || rc=$? captures yad's exit code without triggering set -e
+        # (set -e exempts the left side of && from exit-on-error).
         result=$(yad --form \
             --title="LLM Settings — aurscan" \
             --window-icon=security-high \
@@ -216,8 +220,7 @@ aurscan_settings() {
             --button="Model guide:2" \
             --button="Save:0" \
             --button="Cancel:1" \
-            2>/dev/null)
-        rc=$?
+            2>/dev/null) && rc=0 || rc=$?
 
         if [[ $rc -eq 2 ]]; then
             yad --text-info \
