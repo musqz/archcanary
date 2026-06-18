@@ -335,9 +335,10 @@ extra_lists_manager() {
 CONF
     fi
 
-    local result rc=0
-    result=$(yad --text-info \
-        --title="Extra package lists" \
+    local tmpout
+    tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
+    if yad --text-info \
+        --title="Extra package lists — Archcanary" \
         --window-icon=security-high \
         --width=600 --height=360 \
         --fontname="Monospace 10" \
@@ -345,21 +346,18 @@ CONF
         --filename="$conf" \
         --button="Save:0" \
         --button="Cancel:1" \
-        2>/dev/null) && rc=0 || rc=$?
-
-    [[ $rc -ne 0 ]] && return
-
-    printf '%s' "$result" > "$conf"
-
-    # Count non-comment, non-blank entries for confirmation
-    local n
-    n=$(grep -c '^[^#[:space:]]' "$conf" 2>/dev/null || true)
-    yad --info \
-        --title="Extra lists" \
-        --window-icon=security-high \
-        --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Refresh package list</b> to fetch any new URLs." \
-        --width=400 \
-        --button="OK:0" 2>/dev/null || true
+        > "$tmpout" 2>/dev/null; then
+        cp "$tmpout" "$conf"
+        local n
+        n=$(grep -c '^[^#[:space:]]' "$conf" 2>/dev/null || true)
+        yad --info \
+            --title="Extra lists — Archcanary" \
+            --window-icon=security-high \
+            --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Refresh package list</b> to fetch any new URLs." \
+            --width=420 \
+            --button="OK:0" 2>/dev/null || true
+    fi
+    rm -f "$tmpout"
 }
 
 run_action() {
