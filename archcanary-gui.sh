@@ -51,6 +51,7 @@ LABELS=(
     "Edit DKMS allowlist"       # 13
     "Trust scan (traur)"        # 14
     "LLM settings (aurscan)"   # 15
+    "Extra lists"               # 16
 )
 
 FLAGS=(
@@ -70,12 +71,13 @@ FLAGS=(
     "__dkms_edit__"
     "__traur__"
     "__aurscan_settings__"
+    "__extra_lists__"
 )
 
 NEEDS_ROOT=(
     true false false false false false false false false false
     true true true
-    false false false
+    false false false false
 )
 
 # Per-session status for each check index.
@@ -86,6 +88,7 @@ STATUS[1]="   "   # Refresh package list — no scan verdict
 STATUS[13]="   "  # Edit DKMS allowlist
 STATUS[14]="   "  # traur — opens its own output window, no verdict here
 STATUS[15]="   "  # aurscan settings — config dialog, no scan verdict
+STATUS[16]="   "  # extra lists — config dialog, no scan verdict
 unset _i
 
 _update_status() {
@@ -314,6 +317,51 @@ show_output() {
     return $scan_exit
 }
 
+extra_lists_manager() {
+    local conf="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/extra_lists.conf"
+    mkdir -p "$(dirname "$conf")"
+
+    # Seed template if missing (matches what archcanary itself creates)
+    if [[ ! -f "$conf" ]]; then
+        cat > "$conf" <<'CONF'
+# archcanary extra package lists
+# One entry per line: a file path or an https:// raw URL.
+# Lines starting with # are ignored.
+# URL entries are re-fetched when you run --refresh.
+#
+# Examples:
+#   /home/user/my_custom_list.txt
+#   https://raw.githubusercontent.com/lenucksi/archcanary/main/package_list.txt
+CONF
+    fi
+
+    local result rc=0
+    result=$(yad --text-info \
+        --title="Extra package lists" \
+        --window-icon=security-high \
+        --width=600 --height=360 \
+        --fontname="Monospace 10" \
+        --editable \
+        --filename="$conf" \
+        --button="Save:0" \
+        --button="Cancel:1" \
+        2>/dev/null) && rc=0 || rc=$?
+
+    [[ $rc -ne 0 ]] && return
+
+    printf '%s' "$result" > "$conf"
+
+    # Count non-comment, non-blank entries for confirmation
+    local n
+    n=$(grep -c '^[^#[:space:]]' "$conf" 2>/dev/null || true)
+    yad --info \
+        --title="Extra lists" \
+        --window-icon=security-high \
+        --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Refresh package list</b> to fetch any new URLs." \
+        --width=400 \
+        --button="OK:0" 2>/dev/null || true
+}
+
 run_action() {
     local idx="$1"
     local label="${LABELS[$idx]}"
@@ -327,6 +375,11 @@ run_action() {
 
     if [[ "$flags" == "__aurscan_settings__" ]]; then
         aurscan_settings
+        return
+    fi
+
+    if [[ "$flags" == "__extra_lists__" ]]; then
+        extra_lists_manager
         return
     fi
 
@@ -436,6 +489,7 @@ build_list_args() {
     _row 13
     $HAS_TRAUR && _row 14
     $HAS_AURSCAN && _row 15
+    _row 16
 }
 
 # Main loop
