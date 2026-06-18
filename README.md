@@ -67,7 +67,7 @@ User types `yay -S pkg` or `yay -Syu`
 
 systemd system timer (weekly + on boot + after each pacman tx)
     └── archcanary --full --all-time
-            ├── known-bad package list (1900+)
+            ├── known-bad package list (1900+ JS campaign + 83 Russian spam)
             ├── pacman.log history (compressed log support)
             ├── systemd persistence (services, drop-ins, timers)
             ├── eBPF rootkit traces + bpftool program enumeration
@@ -181,9 +181,11 @@ The **Model guide** button in the dialog shows local model size recommendations 
 
 ---
 
-## The Attack (June 2026)
+## Campaigns Detected
 
-**June 9–12, 2026** — attackers used commit forgery to impersonate AUR maintainers, injecting malicious `npm`/`bun` install hooks into 1600+ package PKGBUILDs. Payload: an infostealer and eBPF rootkit.
+### JS Supply-Chain Attack (June 9–12, 2026)
+
+Attackers used commit forgery to impersonate AUR maintainers, injecting malicious `npm`/`bun` install hooks into 1600+ package PKGBUILDs. Payload: an infostealer and eBPF rootkit.
 
 **What it steals:** Discord tokens, GitHub PATs, npm/Slack/Teams sessions, SSH keys, Vault tokens, Docker credentials, browser cookies — exfiltrated via `temp.sh` and a Tor C2.
 
@@ -192,6 +194,12 @@ The **Model guide** button in the dialog shows local model size recommendations 
 Two waves:
 - **Wave 1 (npm)** — `atomic-lockfile` / `lockfile-js`; accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`. Note: `arojas` was impersonated via git commit forgery — he is a legitimate KDE maintainer ([clarification](https://chaos.social/@dvzrv/116736017948300691)).
 - **Wave 2 (bun)** — `js-digest`; accounts `custodiatovar`, `veramagalhaes`.
+
+### Russian Spam Campaign (June 14, 2026)
+
+A separate campaign ([reported by Sid Karunaratne](https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/2YQSHTC27MOKDDKHZTH2BJGTEN2CYC7W/)) in which 83 AUR package PKGBUILDs were modified to inject Russian-language spam `echo` statements into `~/.bashrc`, `~/.zshrc`, and other shell configs at install time. No credential theft or persistence — nuisance/propaganda payload. Reported to Arch DevOps; cleanup was in progress as of 2026-06-14.
+
+archcanary detects these via `malicious_russian_spam_packages.txt` (shown in the scan header alongside the JS campaign count).
 
 ---
 
