@@ -116,8 +116,14 @@ aur-malware-check.sh --check-pkgbuild
 sudo ~/.local/bin/aur-malware-check.sh --check-kmod
 
 # Setup health check — is every element installed and configured? (no root,
-# no scan; auto-detects distro/AUR helpers and prints a fix command per gap)
+# no scan; auto-detects distro/AUR helpers and prints a fix command per gap).
+# When something is missing it points to the next step to run.
 aur-malware-check.sh --doctor
+
+# Check one section (with extra detail), or several — runs in install order:
+# platform, deps, user, system, systemd, external
+aur-malware-check.sh --doctor=deps
+aur-malware-check.sh --doctor=user,system
 ```
 
 > Root checks use the **full path** under `sudo`. `sudo` resets `$PATH` to its

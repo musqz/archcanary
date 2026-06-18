@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.10.0"
+SCRIPT_VERSION="2.11.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -72,6 +72,7 @@ VERBOSE=false
 ALL_TIME=false
 NO_NOTIFY=false
 DOCTOR=false
+DOCTOR_SECTIONS=""
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -107,6 +108,7 @@ for arg in "$@"; do
         --all-time)              ALL_TIME=true ;;
         --no-notify)             NO_NOTIFY=true ;;
         --doctor)                DOCTOR=true ;;
+        --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -133,6 +135,9 @@ for arg in "$@"; do
             echo "  --no-notify               Suppress the desktop notification on detection"
             echo "  --doctor                  Report install/config status of every stack element"
             echo "                            (deps, install, systemd, aurscan, traur, yay hooks) and exit"
+            echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
+            echo "                            Sections: platform, deps, user, system, systemd, external"
+            echo "                            (e.g. --doctor=deps  or  --doctor=user,system)"
             echo "  --help, -h                Show this help"
             exit 0
             ;;
@@ -164,13 +169,43 @@ run_doctor() {
     [[ -f $installer ]] || installer="install.sh   # (run from the aur-malware-check repo)"
     [[ -f $luasrc    ]] || luasrc="configs/yay-init.lua   # (from the aur-malware-check repo)"
 
+    # --- Section selection -------------------------------------------------
+    # Sections are listed in install order (prerequisite chain) so a full run
+    # reads start-to-finish. --doctor=SECTION[,...] checks a subset, with extra
+    # per-item detail (drill-down). Bare --doctor checks all, compactly.
+    local ordered=(platform deps user system systemd external)
+    local -A want=()
+    local detail=0 s
+    if [[ -n $DOCTOR_SECTIONS ]]; then
+        detail=1
+        local _sel; IFS=',' read -ra _sel <<< "$DOCTOR_SECTIONS"
+        for s in "${_sel[@]}"; do
+            s="${s//[[:space:]]/}"; [[ -z $s ]] && continue
+            case "$s" in
+                dep|deps|dependencies)              want[deps]=1 ;;
+                user|user_install|user-install)     want[user]=1 ;;
+                system|system_install|system-install|root) want[system]=1 ;;
+                systemd|automation|timer|timers)    want[systemd]=1 ;;
+                external|external_tools|external-tools|tools|preinstall|pre-install) want[external]=1 ;;
+                platform|plat)                      want[platform]=1 ;;
+                all)                                for s in "${ordered[@]}"; do want[$s]=1; done ;;
+                *)
+                    printf 'Unknown --doctor section: %s\n' "$s" >&2
+                    printf 'Valid: platform, deps, user, system, systemd, external (or all)\n' >&2
+                    return 2 ;;
+            esac
+        done
+    else
+        for s in "${ordered[@]}"; do want[$s]=1; done
+    fi
+
     # Colours only on a real terminal; piped/GUI-captured output stays plain.
     local G='' Y='' B='' N=''
     if [[ -t 1 ]]; then
         G=$'\e[32m'; Y=$'\e[33m'; B=$'\e[1m'; N=$'\e[0m'
     fi
 
-    local fail=0
+    local fail=0 first_fix="" first_label=""
     _ok()   { printf '  %s[ OK ]%s  %s\n' "$G" "$N" "$1"; }
     _miss() {
         printf '  %s[MISS]%s  %s\n' "$Y" "$N" "$1"
@@ -178,91 +213,149 @@ run_doctor() {
             printf '           %s↳ fix:%s %s\n' "$B" "$N" "$2"
         fi
         fail=1
+        # Record the first gap (sections run in install order, so this is the
+        # earliest unmet prerequisite → the next step the user should take).
+        [[ -z $first_fix ]] && { first_fix="${2:-}"; first_label="$1"; }
+        return 0
     }
-    # _item LABEL TEST-EXIT [FIX]
-    _item() { if [[ $2 -eq 0 ]]; then _ok "$1"; else _miss "$1" "${3:-}"; fi; }
+    # _item LABEL TEST-EXIT [FIX] [DETAIL]
+    _item() {
+        if [[ $2 -eq 0 ]]; then _ok "$1"; else _miss "$1" "${3:-}"; fi
+        [[ $detail -eq 1 && -n ${4:-} ]] && printf '           %s\n' "$4"
+        return 0
+    }
     _have() { command -v "$1" >/dev/null 2>&1 && echo 0 || echo 1; }
     _file() { [[ -e $1 ]] && echo 0 || echo 1; }
+    # _dep LABEL CMD PKG PURPOSE FIX [VERSION_ARGS] — like _item but, in detail
+    # mode, also reports the resolved path and version of an installed dep.
+    # VERSION_ARGS is the EXACT version invocation (default "--version"); never
+    # guessed, because a wrong arg can make a GUI tool (yad) pop a dialog. Pass
+    # "" to skip running the tool entirely (use for GUI binaries).
+    _dep() {
+        local label=$1 cmd=$2 pkg=$3 purpose=$4 fix=$5 d=""
+        local vargs="--version"; [[ $# -ge 6 ]] && vargs="$6"
+        if [[ $detail -eq 1 ]]; then
+            if command -v "$cmd" >/dev/null 2>&1; then
+                local p="" v=""
+                p="$(command -v "$cmd")"
+                if [[ -n $vargs ]]; then
+                    # </dev/null so it can't block on input; timeout as a backstop.
+                    v="$(timeout 2 "$cmd" $vargs </dev/null 2>/dev/null | head -n1 || true)"
+                fi
+                d="path: $p${v:+  |  $v}  |  pkg: $pkg"
+            else
+                d="pkg: $pkg ($purpose)"
+            fi
+        fi
+        _item "$label" "$(_have "$cmd")" "$fix" "$d"
+    }
 
     printf '%s============================================================%s\n' "$B" "$N"
     printf '%s AUR Malware Check — setup doctor%s\n' "$B" "$N"
+    [[ -n $DOCTOR_SECTIONS ]] && printf ' sections: %s\n' "$DOCTOR_SECTIONS"
     printf '%s============================================================%s\n\n' "$B" "$N"
 
     # --- Platform ----------------------------------------------------------
-    local pretty="unknown"
-    if [[ -r /etc/os-release ]]; then
-        pretty="$(. /etc/os-release; echo "${PRETTY_NAME:-${ID:-unknown}}")"
+    if [[ -n ${want[platform]:-} ]]; then
+        local pretty="unknown"
+        if [[ -r /etc/os-release ]]; then
+            pretty="$(. /etc/os-release; echo "${PRETTY_NAME:-${ID:-unknown}}")"
+        fi
+        local helpers=() h
+        for h in yay paru pamac pikaur trizen aurutils; do
+            command -v "$h" >/dev/null 2>&1 && helpers+=("$h") || true
+        done
+        printf '%sPlatform%s\n' "$B" "$N"
+        printf '  detected:    %s\n' "$pretty"
+        printf '  AUR helpers: %s\n' "${helpers[*]:-none found}"
+        if command -v mhwd >/dev/null 2>&1; then
+            printf '  mhwd:        present (Manjaro driver manager — expect DKMS modules)\n'
+        fi
+        printf '\n'
     fi
-    local helpers=() h
-    for h in yay paru pamac pikaur trizen aurutils; do
-        command -v "$h" >/dev/null 2>&1 && helpers+=("$h") || true
-    done
-    printf '%sPlatform%s\n' "$B" "$N"
-    printf '  detected:    %s\n' "$pretty"
-    printf '  AUR helpers: %s\n' "${helpers[*]:-none found}"
-    if command -v mhwd >/dev/null 2>&1; then
-        printf '  mhwd:        present (Manjaro driver manager — expect DKMS modules)\n'
-    fi
-    printf '\n'
 
     # --- Dependencies ------------------------------------------------------
-    printf '%sDependencies (official repos)%s\n' "$B" "$N"
-    _item "yad (GUI toolkit)"            "$(_have yad)"          "sudo pacman -S yad"
-    _item "bpftool (eBPF enumeration)"   "$(_have bpftool)"      "sudo pacman -S bpf"
-    _item "notify-send (desktop alerts)" "$(_have notify-send)"  "sudo pacman -S libnotify"
-    _item "pkexec (GUI root checks)"     "$(_have pkexec)"       "sudo pacman -S polkit"
-    printf '\n'
+    if [[ -n ${want[deps]:-} ]]; then
+        printf '%sDependencies (official repos)%s\n' "$B" "$N"
+        # yad is a GUI binary — never run it to probe a version (a bad arg opens
+        # a dialog); pass "" to skip the probe and just report path + pkg.
+        _dep "yad (GUI toolkit)"            yad         yad       "GTK dialog toolkit"          "sudo pacman -S yad"        ""
+        _dep "bpftool (eBPF enumeration)"  bpftool      bpf       "loaded-eBPF enumeration"     "sudo pacman -S bpf"        version
+        _dep "notify-send (desktop alerts)" notify-send libnotify "desktop notifications"       "sudo pacman -S libnotify"
+        _dep "pkexec (GUI root checks)"    pkexec       polkit    "GUI privilege escalation"    "sudo pacman -S polkit"
+        printf '\n'
+    fi
 
     # --- User install ------------------------------------------------------
-    printf '%sUser install%s\n' "$B" "$N"
-    _item "main scanner (~/.local/bin)" "$(_file "$user_bin/aur-malware-check.sh")" "bash $installer"
-    _item "GUI (~/.local/bin)"          "$(_file "$user_bin/aur_malware_gui.sh")"   "bash $installer"
-    _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "aur-malware-check.sh --refresh"
-    printf '\n'
+    if [[ -n ${want[user]:-} ]]; then
+        printf '%sUser install%s\n' "$B" "$N"
+        _item "main scanner (~/.local/bin)" "$(_file "$user_bin/aur-malware-check.sh")" "bash $installer"           "path: $user_bin/aur-malware-check.sh"
+        _item "GUI (~/.local/bin)"          "$(_file "$user_bin/aur_malware_gui.sh")"   "bash $installer"           "path: $user_bin/aur_malware_gui.sh"
+        _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "aur-malware-check.sh --refresh" "path: $cfg_dir/package_list.txt"
+        printf '\n'
+    fi
 
     # --- System install (root) --------------------------------------------
-    printf '%sSystem install (root)%s\n' "$B" "$N"
-    _item "system scanner copy" "$(_file /usr/lib/aur-malware-check/aur-malware-check.sh)"          "sudo bash $installer --system"
-    _item "root-helper (pkexec)" "$(_file /usr/lib/aur-malware-check/root-helper)"                  "sudo bash $installer --system"
-    _item "polkit policy"        "$(_file /usr/share/polkit-1/actions/org.aur-malware-check.policy)" "sudo bash $installer --system"
-    _item "DKMS allowlist"       "$(_file /etc/aur-malware-check/dkms_allowlist.conf)"              "sudo bash $installer --system"
-    printf '\n'
+    if [[ -n ${want[system]:-} ]]; then
+        printf '%sSystem install (root)%s\n' "$B" "$N"
+        _item "system scanner copy" "$(_file /usr/lib/aur-malware-check/aur-malware-check.sh)"          "sudo bash $installer --system" "path: /usr/lib/aur-malware-check/aur-malware-check.sh"
+        _item "root-helper (pkexec)" "$(_file /usr/lib/aur-malware-check/root-helper)"                  "sudo bash $installer --system" "path: /usr/lib/aur-malware-check/root-helper"
+        _item "polkit policy"        "$(_file /usr/share/polkit-1/actions/org.aur-malware-check.policy)" "sudo bash $installer --system" "path: /usr/share/polkit-1/actions/org.aur-malware-check.policy"
+        _item "DKMS allowlist"       "$(_file /etc/aur-malware-check/dkms_allowlist.conf)"              "sudo bash $installer --system" "path: /etc/aur-malware-check/dkms_allowlist.conf"
+        printf '\n'
+    fi
 
     # --- Automation (systemd) ---------------------------------------------
-    printf '%sAutomation (systemd)%s\n' "$B" "$N"
-    _item "system scan timer"    "$(_file /etc/systemd/system/aur-malware-check.timer)" "sudo bash $installer --system"
-    _item "pacman-tx path unit"  "$(_file /etc/systemd/system/aur-malware-check.path)"  "sudo bash $installer --system"
-    _item "user notifier (path)" "$(_file "$user_sd/aur-malware-check-notify.path")"    "bash $installer --system"
-    printf '\n'
+    if [[ -n ${want[systemd]:-} ]]; then
+        printf '%sAutomation (systemd)%s\n' "$B" "$N"
+        _item "system scan timer"    "$(_file /etc/systemd/system/aur-malware-check.timer)" "sudo bash $installer --system" "path: /etc/systemd/system/aur-malware-check.timer"
+        _item "pacman-tx path unit"  "$(_file /etc/systemd/system/aur-malware-check.path)"  "sudo bash $installer --system" "path: /etc/systemd/system/aur-malware-check.path"
+        _item "user notifier (path)" "$(_file "$user_sd/aur-malware-check-notify.path")"    "bash $installer --system"      "path: $user_sd/aur-malware-check-notify.path"
+        printf '\n'
+    fi
 
     # --- Pre-install layer (external) -------------------------------------
-    printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
-    _item "aurscan / syay wrapper" \
-        "$( { command -v syay || command -v aurscan; } >/dev/null 2>&1 && echo 0 || echo 1)" \
-        "install from https://github.com/musqz/aurscan"
-    # Check the resolved alias in an interactive shell rather than grepping a
-    # specific file — distros source aliases from varying places and may quote
-    # the value (alias yay='syay'). End-state detection, not file guessing.
-    _item "alias yay=syay (active)" \
-        "$(bash -ic 'alias yay' 2>/dev/null | grep -q "syay" && echo 0 || echo 1)" \
-        "echo \"alias yay=syay\" >> ~/.bashrc   # (or your distro's aliases file)"
-    _item "traur (heuristic scanner)" "$(_have traur)" "yay -S traur"
-    _item "yay init.lua hooks"        "$(_file "$HOME/.config/yay/init.lua")" "cp $luasrc ~/.config/yay/init.lua"
-    printf '\n'
+    if [[ -n ${want[external]:-} ]]; then
+        printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
+        _item "aurscan / syay wrapper" \
+            "$( { command -v syay || command -v aurscan; } >/dev/null 2>&1 && echo 0 || echo 1)" \
+            "install from https://github.com/musqz/aurscan" \
+            "binary: $(command -v syay 2>/dev/null || command -v aurscan 2>/dev/null || echo 'not found')"
+        # Check the resolved alias in an interactive shell rather than grepping a
+        # specific file — distros source aliases from varying places and may quote
+        # the value (alias yay='syay'). End-state detection, not file guessing.
+        _item "alias yay=syay (active)" \
+            "$(bash -ic 'alias yay' 2>/dev/null | grep -q "syay" && echo 0 || echo 1)" \
+            "echo \"alias yay=syay\" >> ~/.bashrc   # (or your distro's aliases file)" \
+            "resolved: $(bash -ic 'alias yay' 2>/dev/null | head -n1 || echo 'no alias')"
+        _dep "traur (heuristic scanner)" traur traur "279-signal pre-install scanner" "yay -S traur"
+        _item "yay init.lua hooks" "$(_file "$HOME/.config/yay/init.lua")" "cp $luasrc ~/.config/yay/init.lua" "path: $HOME/.config/yay/init.lua"
+        printf '\n'
+    fi
+
+    # --- Next step (first unmet prerequisite) ------------------------------
+    if [[ $fail -ne 0 && -n $first_fix ]]; then
+        printf '%sNEXT STEP%s → %s\n' "$B" "$N" "$first_label"
+        printf '  run: %s\n' "$first_fix"
+        printf '  then re-run --doctor to advance to the next step.\n\n'
+    fi
 
     # --- Summary -----------------------------------------------------------
+    local scope="all elements"
+    [[ -n $DOCTOR_SECTIONS ]] && scope="selected section(s)"
     printf '%s============================================================%s\n' "$B" "$N"
     if [[ $fail -eq 0 ]]; then
-        printf ' %sRESULT: all elements present.%s\n' "$G" "$N"
+        printf ' %sRESULT: %s present.%s\n' "$G" "$scope" "$N"
     else
-        printf ' %sRESULT: some elements missing — see the fix commands above.%s\n' "$Y" "$N"
+        printf ' %sRESULT: %s — some missing, see fixes above.%s\n' "$Y" "$scope" "$N"
     fi
     printf '%s============================================================%s\n' "$B" "$N"
     return $fail
 }
 
 if $DOCTOR; then
-    if run_doctor; then exit 0; else exit 1; fi
+    _doctor_rc=0; run_doctor || _doctor_rc=$?
+    exit $_doctor_rc
 fi
 
 # ---------------------------------------------------------------------------

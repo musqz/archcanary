@@ -7,6 +7,10 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.11.0 (2026-06-18) — personal fork
+- New: `--doctor=SECTION[,...]` — check only the named section(s) instead of the whole stack. Sections (in install order): `platform`, `deps`, `user`, `system`, `systemd`, `external`; comma-separate for several (`--doctor=user,system`). Filtered runs show **drill-down detail** per item — resolved path, version, and package for dependencies; the checked path for files; the resolved alias/binary for the external layer.
+- New: **next-step pointer** — when something is missing, `--doctor` now names the first unmet prerequisite (sections run in install order) and prints the single command to run next, so the check reads start-to-finish: fix it, re-run, advance. Bare `--doctor` is unchanged (compact, all sections). Unknown section names exit 2; missing elements exit 1; all-present exits 0. The interactive click-to-fix version is left for the GUI phase.
+
 ## 2.10.0 (2026-06-18) — personal fork
 - New: `--doctor` — a standalone setup health check that reports the install/config status of every element of the stack (dependencies, user install, system/root install, systemd automation, and the pre-install layer: aurscan/syay, the `yay=syay` alias, traur, yay `init.lua` hooks). Each missing item prints the exact command to fix it. It runs before the scan machinery (no log tee, no list loading) so it never errors on the very state it reports, and it auto-detects the platform (distro, AUR helpers present, `mhwd`). Exit 0 = all present, 1 = something missing. The alias check reads the resolved interactive alias rather than grepping a fixed file, so it works regardless of which file defines it or whether the value is quoted. The GUI will surface these fix commands as copyable / open-terminal actions (it never auto-runs installs).
 
