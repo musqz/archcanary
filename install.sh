@@ -53,7 +53,7 @@ if $UNINSTALL; then
     echo
 
     removed=0
-    for f in archcanary.sh archcanary-gui.sh; do
+    for f in archcanary archcanary-gui; do
         if [[ -f "$BIN_DIR/$f" ]]; then
             rm "$BIN_DIR/$f"
             echo "  removed: $BIN_DIR/$f"
@@ -122,14 +122,14 @@ echo
 mkdir -p "$BIN_DIR" "$CONFIG_DIR"
 
 # Install main script
-cp "$REPO_DIR/archcanary.sh" "$BIN_DIR/archcanary.sh"
-chmod +x "$BIN_DIR/archcanary.sh"
-echo "  installed: $BIN_DIR/archcanary.sh"
+cp "$REPO_DIR/archcanary.sh" "$BIN_DIR/archcanary"
+chmod +x "$BIN_DIR/archcanary"
+echo "  installed: $BIN_DIR/archcanary"
 
 # Install GUI script
-cp "$REPO_DIR/archcanary-gui.sh" "$BIN_DIR/archcanary-gui.sh"
-chmod +x "$BIN_DIR/archcanary-gui.sh"
-echo "  installed: $BIN_DIR/archcanary-gui.sh"
+cp "$REPO_DIR/archcanary-gui.sh" "$BIN_DIR/archcanary-gui"
+chmod +x "$BIN_DIR/archcanary-gui"
+echo "  installed: $BIN_DIR/archcanary-gui"
 
 # Install desktop entry
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"

@@ -6,4 +6,4 @@ Type=oneshot
 # Runs as your user, so it scans your real ~/.cache and ~/.config and resolves
 # autostart Exec= names against your PATH. No --no-notify: in the user session
 # it can raise the desktop alert itself on a detection.
-ExecStart=%h/.local/bin/archcanary.sh --all-time --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log
+ExecStart=%h/.local/bin/archcanary --all-time --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log

@@ -1,300 +1,204 @@
-# Archcanary - June 2026 Campaign
+# archcanary
 
-> **WARNING: Ultra personal fork for Manjaro Openbox (Mabox).** Tuned for this specific setup — false-positive thresholds, paths, and defaults reflect a Mabox system. For a general-purpose Arch/AUR scanner use [lenucksi/archcanary](https://github.com/lenucksi/archcanary) instead.
->
-> **Read-only by design.** The scanner detects and reports, and never deletes, quarantines, or disables anything it flags — remediation is left to you. The only files it writes are its own logs and config lists. Installation (`install.sh`), the `--refresh` package-list download, and the DKMS allowlist editor are the exceptions that touch the system or network, and all are explicit.
->
-> **Developed with the assistance of Claude AI (Anthropic).** Review AI-assisted code and documentation before relying on it, and treat all detections as advisory rather than authoritative.
+> **BETA — under heavy development.** Expect breaking changes, rough edges, and incomplete docs. Designed and tested on Mabox Linux (Arch-based, Openbox). Use on other Arch derivatives at your own risk.
 
-### Fork changes
+> **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything. Remediation is left to you. The only writes are its own logs and config lists. `install.sh`, `--refresh`, and the DKMS allowlist editor are the exceptions — all explicit.
 
-| Patch | Description |
-|-------|-------------|
-| XDG config dir | Package lists live in `~/.config/archcanary/` instead of alongside the script |
-| Auto-seed config | Config dir is populated from bundled txt files on first run — no manual copy needed |
-| Desktop alert | Fires a critical notification (`notify-send` / libnotify) on exit code 2. Open the GUI from your app launcher to review. `--no-notify` suppresses it |
-| `archcanary-gui.sh` | yad GUI with grouped checks, per-session status column (✅/⚠/❌/?), and polkit auth for root-requiring checks (eBPF, bpftool, kmod). Live streaming output window. Install root helper with `./install.sh --system` |
-| `--check-pkgbuild` | Obfuscation-aware scan of AUR helper caches for `bun add` / `npm install` of malicious packages — catches quote-split, base64-decode-to-shell, `eval+$(...)`, `printf` hex/octal, and variable-split command reassembly |
-| `--check-yarn-cache` / `--check-pnpm-cache` | Extends npm/bun cache scanning to yarn and pnpm; includes fnm per-version Node installs |
-| `--check-bpftool` | Enumerates **all** loaded eBPF programs via `bpftool` — complements `--check-ebpf` (which only globs pinned `/sys/fs/bpf/hidden_*` maps) by catching unpinned or differently-named programs; warns on stealth hook types (kprobe/tracing/lsm/tracepoint); suppresses LSM false positives from systemd/AppArmor |
-| Hardened systemd check | `--check-systemd` now covers drop-in override dirs (`*.service.d/*.conf`), wider `Restart=` policy match (`always\|on-failure\|on-abnormal\|on-abort`), and `.timer` units with `OnBootSec=` + `Persistent=true` |
-| `--check-ldso` | Detects shared library injection via `/etc/ld.so.preload` — any non-empty content causes the dynamic linker to load the listed `.so` into every process; also flags `/etc/ld.so.conf.d/` entries modified within the campaign window |
-| `--check-autostart` | Scans `~/.config/autostart/*.desktop` for suspicious `Exec=` paths, user systemd services with unowned binaries, and shell RCs (`.bashrc`/`.zshrc`/`.profile`) for download-and-execute or `eval+subshell` patterns |
-| `--check-kmod` | Audits loaded kernel modules against pacman-owned `.ko` files; flags unowned modules and DKMS builds from untracked source packages (needs root). `DKMS_ALLOWLIST` env var to acknowledge known-good proprietary modules |
-| CHAOS RAT detection | Separate date window (2025-07-16..19) for the July 2025 CHAOS RAT campaign packages — does not interfere with the June 2026 campaign date window |
-| Updated lists | `nextfile-js`, `rakudo-star` added; package list refreshed to 1936+ entries |
-
-See [docs/overview.md](docs/overview.md) for a one-screen visual map — the lifecycle diagram and an at-a-glance table of what runs when.
-See [docs/systemd.md](docs/systemd.md) for running automatically via systemd — a root system timer for the full scan plus a user notifier for desktop alerts.
-See [docs/my-setup.md](docs/my-setup.md) for the full personal setup — all components, how they connect, and reinstall steps.
+> **Developed with Claude AI (Anthropic).** All AI-assisted code and documentation is reviewed by the developer before commit. Treat all detections as advisory, not authoritative.
 
 ---
 
-Detection and analysis tools for the **atomic-lockfile** supply-chain attack on the Arch User Repository (AUR).
+## What is archcanary?
 
-This is a collection of all the scattered resources, especially the ones in the detection scripts Gist - they made this, I just collected this to a repo so I have it all in one place and possibly people could put up PR's instead of Gist links across multiple posts. Certainly see the source section for details on the sources!
+archcanary is a layered security detection stack for Arch Linux — scanning for malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering, library injection, and more.
 
-> [!TIP]
-> **Questions, support, or general discussion?** Head over to
-> [Discussions](https://github.com/lenucksi/archcanary/discussions/).
-> Issues are reserved for bug reports and feature requests only.
+It started as a personal fork of [lenucksi/archcanary](https://github.com/lenucksi/archcanary) under the name **aur-malware-check**, originally focused on the June 2026 AUR supply-chain attack. As the tool grew to cover a much broader set of system checks — integrating a GUI frontend, LLM-based pre-install scanning, automated systemd timers, and multiple detection layers — the scope outgrew the original name. It was renamed **archcanary** to reflect what it has become: a multi-tool for a complete Arch system security check.
 
-> [!TIP]
-> **Python 3.14+ version available?** See `archcanary_py/` — stdlib-only, typed,
-> testable, should be functionally identical, please test and report back.
+The adaptations to the original are extensive enough that this is effectively a new tool that shares its roots with lenucksi/archcanary rather than a simple patch set on top of it.
 
-> **1600+ AUR packages compromised** by attackers who injected `npm install atomic-lockfile`, `bun install js-digest`, or `lockfile-js` into PKGBUILD/install files. Two attack waves:
-> 1. **atomic-lockfile / lockfile-js** (npm) — accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`; `arojas` (impersonated legitimate maintainer — see Impersonation Clarification)
-> 2. **js-digest** (bun) — accounts `custodiatovar`, `veramagalhaes`
->
-> Both deliver an **infostealer** and **eBPF rootkit** targeting developer credentials, browser data, and CI/CD secrets.
+---
+
+## Projects Used
+
+archcanary integrates with and builds on the following:
+
+| Project | Role |
+|---------|------|
+| [lenucksi/archcanary](https://github.com/lenucksi/archcanary) | Upstream origin — community consolidation of the June 2026 AUR attack detection scripts |
+| [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) |
+| [traur](https://aur.archlinux.org/packages/traur) | Pre-install heuristic scanner — 279 signals across 5 weighted categories |
+| [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log |
+| [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui.sh` |
+| [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection |
+| [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | `notify-send` — desktop critical alert on infected scan result |
+| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI privilege escalation for root-requiring checks |
+
+### Detection Layers
+
+```
+User types `yay -S pkg` or `yay -Syu`
+    └── aurscan wrapper (alias yay=syay)
+            ├── static rules (offline) — known campaign signatures
+            ├── Claude LLM reads PKGBUILD — novel/obfuscated patterns
+            └── on CLEAN → calls /usr/bin/yay
+                    └── yay init.lua hooks
+                            ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
+                            ├── AURPreInstall  — offline pattern check
+                            └── PostInstall    — logs AUR installs
+
+systemd system timer (weekly + on boot + after each pacman tx)
+    └── archcanary.sh --full --all-time
+            ├── known-bad package list (1900+)
+            ├── pacman.log history (compressed log support)
+            ├── systemd persistence (services, drop-ins, timers)
+            ├── eBPF rootkit traces + bpftool program enumeration
+            ├── npm/bun/yarn/pnpm cache scan
+            ├── PKGBUILD obfuscation patterns
+            ├── ld.so.preload injection
+            ├── XDG autostart + shell RC persistence
+            └── kernel module / DKMS audit
+                    └── writes /var/lib/archcanary/last-scan.log
+
+systemd user path unit
+    └── watches last-scan.log → notify-send critical alert on INFECTED
+
+archcanary-gui.sh (on-demand)
+    └── yad grouped menu, per-session status, polkit for root checks
+```
+
+---
 
 ## Quick Start
 
 ```bash
-# Check if you have any infected packages
-./archcanary.sh
+# Check if you installed any compromised packages
+archcanary
 
-# Check bun cache specifically (for js-digest / atomic-lockfile)
-./archcanary.sh --check-bun-cache
+# Full scan — all checks (some require root)
+sudo archcanary --full --all-time
 
-# Safe one-liner (from quantenProjects) - just compare installed vs infected list
-comm -1 -2 <(pacman -Qq | sort) <(curl -s https://raw.githubusercontent.com/lenucksi/archcanary/master/package_list.txt | sort)
+# Check setup health
+archcanary --doctor
 
-# Full scan with all optional checks
-./archcanary.sh --full
+# Refresh package list from the live HedgeDoc, then scan
+archcanary --refresh --full --all-time
 
-# Enumerate loaded eBPF programs (needs root) — flags stealth hook types
-sudo ./archcanary.sh --check-bpftool
-
-# Cross-campaign: scan all installed packages regardless of install date
-./archcanary.sh --all-time
-
-# Merge multiple lists (HedgeDoc + historical + custom) and scan
-./custom_list_merge_aur_scan.sh -l ./historical_packages.txt
-
-# Merge custom lists and disable date window for cross-campaign scan
-./custom_list_merge_aur_scan.sh -l ./historical_packages.txt -- --all-time
-
-# Refresh the package list from the official Arch Linux HedgeDoc, then scan
-./archcanary.sh --refresh --full
-
-# Use custom package lists (also settable via env vars):
-#   PACKAGE_LIST_FILE=./my_list.txt
-#   MALICIOUS_NPM_LIST=./my_npm.txt
-./archcanary.sh --package-list=my_list.txt --malicious-npm-list=my_npm.txt
-
-
-# Legacy scan (only use if v2 is broken)
-./archive/archcanary.sh
+# GUI frontend (requires yad)
+archcanary-gui
 ```
 
-## Script: `archcanary.sh`
+---
 
-A consolidated detection script combining the best features from all community forks:
+## Checks
 
-| Feature | Source |
-|---------|--------|
-| Batch `pacman -Qmq` query | commonsourcecs fork |
-| Date window filtering (Jun 9-12) | commonsourcecs fork |
-| Historical pacman.log scanning | Kacper-Kondracki fork |
-| Compressed log support (.gz/.xz/.zst/.bz2) | Kacper-Kondracki fork |
-| ~1600 known compromised packages (live via `--refresh`) | Consolidated from all sources + HedgeDoc |
-| systemd persistence check (drop-ins, timers, wider Restart= match) | Original addition + hardened |
-| eBPF rootkit check (`/sys/fs/bpf/hidden_*` maps) | Original addition |
-| eBPF program enumeration (`--check-bpftool`, via `bpftool prog/link show`) | Original addition |
-| npm cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
-| bun cache check (atomic-lockfile / js-digest / lockfile-js) | Original addition |
-| `ld.so.preload` injection check (`--check-ldso`) | Original addition |
-| XDG autostart + shell RC persistence (`--check-autostart`) | Original addition |
-| Kernel module / DKMS audit (`--check-kmod`) | Original addition |
-| `--refresh` flag (live package list) | PR #8 (drbbgh) |
-| `--package-list=PATH` CLI flag | Original addition |
-| `--malicious-npm-list=PATH` CLI flag | Original addition |
-| Configurable date window via env vars | Kacper-Kondracki fork |
-
-### Script Versions
-
-Two versions are maintained — v2 is optimized but functionally identical:
-
-| Version | File | Log Scanning | Speed (6.2 MB pacman.log) |
-|---------|------|-------------|--------------------------|
-| v1 | `archcanary.sh` | `echo \| sed` subprocesses + `grep -xF` tempfile | ~3-5 min |
-| v2 | `archcanary.sh` | Bash regex (`[[ $line =~ $re ]]`) + O(1) assoc. array | ~1-2 s |
-
-v2 verified against v1 by static analysis: **8/10 risk categories NONE, 2/10 LOW** (theoretical edge cases only, no real inputs affected). Use v2 for speed; v1 retained as reference for completeness.
+| Flag | What it does | Root? |
+|------|-------------|-------|
+| *(default)* | Package list match against installed AUR packages | No |
+| `--check-systemd` | Systemd persistence: unknown services, drop-ins, Restart= timers | No |
+| `--check-ebpf` | eBPF rootkit traces (`/sys/fs/bpf/hidden_*`) | No |
+| `--check-npm-cache` | npm cache for malicious package names | No |
+| `--check-bun-cache` | bun cache for malicious package names | No |
+| `--check-yarn-cache` | yarn cache scan | No |
+| `--check-pnpm-cache` | pnpm cache + fnm per-version Node installs | No |
+| `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex) | No |
+| `--check-bpftool` | Enumerate all loaded eBPF programs via `bpftool`; flags stealth hook types | Yes |
+| `--check-ldso` | `/etc/ld.so.preload` injection + recent `/etc/ld.so.conf.d/` changes | No |
+| `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns | No |
+| `--check-kmod` | Kernel modules not owned by pacman; untracked DKMS builds | Yes |
+| `--full` | All of the above | Partial |
+| `--all-time` | Skip the June 9-12 install-date window — scan all history | — |
+| `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc | — |
+| `--doctor` | Health check: binary deps, systemd units, install paths | — |
 
 ### Exit Codes
 
-- **0**: Clean - no indicators found
-- **1**: Warnings (log scan issues, missing files)
-- **2**: Infected packages or artifacts detected
+| Code | Meaning |
+|------|---------|
+| 0 | Clean — no indicators found |
+| 1 | Warnings (log scan issues, missing files) |
+| 2 | Infected packages or artifacts detected |
 
-## Repository Structure
+---
 
-```
-archcanary/
-├── README.md              # This file
-├── archcanary.sh           # v1: Consolidated detection script (sed+grep log scanner)
-├── archcanary.sh        # v2: Optimized log scanner (bash regex + O(1) hash lookup)
-├── package_list.txt              # bundled compromised packages, same as --refresh one as of 6/17/26. (1619 via `--refresh`)
-├── malicious_npm_packages.txt    # Malicious npm package names for cache checks
-├── iocs.txt                      # Indicators of Compromise
-├── CHANGELOG.md           # Version history
-├── sources/               # Original community scripts
-│   ├── 01_kidev_original.sh
-│   ├── 02_briancarnold_fork.sh
-│   ├── 03_kacper-kondracki_fork.sh
-│   └── 04_quantenprojects_list.txt
-├── fetches/               # Raw fetched content (for verification)
-├── SOURCES.md             # Numbered, sectioned source references
-├── at_risk_accounts.json  # All identified attacker/monitoring accounts with status
-├── tests/
-│   ├── run_matching_tests.sh           # Matching test runner
-│   ├── fake_package_lists/             # Fake infected AUR package lists for tests
-│   └── fake_npm_lists/                 # Fake malicious npm package name lists for tests
-└── subagent-reports/      # Extracted subagent analysis reports
+## Installation
+
+```bash
+# User install — scripts, config seeding, desktop entry
+./install.sh
+
+# System install — adds root helper, polkit policy, systemd automated scan
+./install.sh --system
+
+# Uninstall
+./install.sh uninstall --system
 ```
 
-## Sources
+`--system` sets up:
+- Root system timer: weekly + on boot + after each pacman transaction
+- User notifier: watches `/var/lib/archcanary/last-scan.log`, fires a desktop alert on `INFECTED`
+- pkexec root helper for GUI-triggered root checks (eBPF, bpftool, kmod)
 
-This analysis aggregates information from the following sources:
+See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.md](docs/my-setup.md) for the full personal stack and reinstall steps.
 
-### Primary Reports
+---
 
-| Source | URL | Content Used |
-|--------|-----|-------------|
-| IFIN Discourse | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Attack summary, links, **bun/js-digest wave update (Jun 12)** |
-| ioctl.fail Analysis | https://ioctl.fail/preliminary-analysis-of-archcanary/ | Detailed technical analysis, IOCs, eBPF rootkit details, C2 extraction |
-| Arch ML: Main Thread | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/FGXPCB3ZVCJIV7FX323SBAX2JHYB7ZS4/ | Master list of ~408 packages by Andre Herbst, additional reports by Rafal Lichwala, Nicolas Boichat, Damien |
-| Arch ML: HedgeDoc Package List | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/FCH7TT6IOVT7D477JKSVJALBKADAARSW/ | Jonathan Grotelüschen (Arch Staff) posts HedgeDoc link with updated affected package list |
-| Arch ML: ALVR Report | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/2LGBF2AZBPVCCY4VTN6DOVUNNBURFJ2J/ | First report of suspicious commit on alvr package |
-| ALVR AUR Page | https://aur.archlinux.org/packages/alvr | User comments detailing compromise analysis |
+## The Attack (June 2026)
 
-### Community Detection Scripts
+**June 9–12, 2026** — attackers used commit forgery to impersonate AUR maintainers, injecting malicious `npm`/`bun` install hooks into 1600+ package PKGBUILDs. Payload: an infostealer and eBPF rootkit.
 
-| Source | URL | Contribution |
-|--------|-----|-------------|
-| **Kidev (Original)** | https://gist.github.com/Kidev/59bf9f5fb53ab5eee99f19a6a2fc3992 | Foundation: initial package list (~446), basic `pacman -Qi` check loop |
-| **BrianCArnold (Fork)** | https://gist.github.com/BrianCArnold/beb514ffc95a9a251b0dc2f767471fca | Efficiency improvement: `pacman -Qm` piped through grep |
-| **commonsourcecs (Fork)** | https://cscs.pastes.sh/aurvulntest20260611.sh | Batch `pacman -Qmq` query, install date window (Jun 9-12), expanded package list (~1620) |
-| **Kacper-Kondracki (Fork)** | https://gist.github.com/Kacper-Kondracki/88c5b313f79cc1f9c347e7ed61a36d10 | Historical pacman.log scanning with compressed file support, configurable date window via env vars |
-| **quantenProjects (Fork)** | https://gist.github.com/quantenProjects/3f768dce7331618310f016d975bf8547 | Safe non-executable package list, `comm -1 -2` one-liner approach |
+**What it steals:** Discord tokens, GitHub PATs, npm/Slack/Teams sessions, SSH keys, Vault tokens, Docker credentials, browser cookies — exfiltrated via `temp.sh` and a Tor C2.
 
-### bun/js-digest Wave Reports (June 12)
+**Persistence:** systemd services with `Restart=always`; eBPF rootkit hides processes, files, and socket inodes when run as root with CAP_BPF.
 
-| Source | URL | Content Used |
-|--------|-----|-------------|
-| **Cedric Girard** (aur-general) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/ | First report of bun/js-digest wave (guiscrcpy, netmon-git) |
-| **ValdikSS** (aur-general) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/ | Identification of custodiatovar account (13 malicious packages) |
-| **Marcin Wieczorek / Thorsten Wißmann** (aur-general) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/LB6TBHDXLQRPR4UVIQULCI6MZ77XYLL2/ | Report of inadyn-mt, veramagalhaes account (13 packages), commit forgery proof for nodejs-elm |
-| **IFIN Discourse (Update)** | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | js-digest SHA256, bun variant documentation, keepassx2 example |
-| **Socket.dev** | https://socket.dev/npm/package/js-digest | js-digest metadata, pulled from NPM confirmation |
+Two waves:
+- **Wave 1 (npm)** — `atomic-lockfile` / `lockfile-js`; accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`. Note: `arojas` was impersonated via git commit forgery — he is a legitimate KDE maintainer ([clarification](https://chaos.social/@dvzrv/116736017948300691)).
+- **Wave 2 (bun)** — `js-digest`; accounts `custodiatovar`, `veramagalhaes`.
 
-### Mailing List — Attack Reports & Account Identification
-
-| Source | URL | Content Used |
-|--------|-----|-------------|
-| **Fabio Loli** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/ | Reports **franziskaweber**, **tobiaswesterburg**, **ellenmyklebust** as malicious (npm shenanigans) |
-| **Sasha Moak** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/CIKQJQI3AREXIR6IQVWPBYFJPYLM45EF/ | Additional suspicious packages (android-support-repository, monochrome, blinkenlib, perl-set-object) |
-| **Joom** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/NCLGU23LSLOFXMBGG7HH67EWDZC2TJB3/ | **ivonahruskova** — account created Jun 11, 16 adoptions, under monitoring |
-| **Paul** | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/K2ZO3U4WPV7BBT2WAP5P54F23A37RUPH/ | **simongeisler** — 3-day-old account, 16 orphan adoptions, under monitoring |
-
-### Mailing List — Proposals & Community Discussion
-
-| Source | URL | Content Used |
-|--------|-----|-------------|
-| Proposal: Commit Hashes | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/WJ5CH64QMWSFGIJYFSRVEFLSNI7JSKPR/ | Compile per-package affected commit hashes + date ranges |
-| Proposal: AUR Read Only | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/WS2K2XGMLPBFZ3WGOPLF2UP32HZJ6ZSP/ | 16-participant discussion about making AUR read-only |
-| Idea: Prevent Malicious Pkgs | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/7QZREKFQX3P3UOQNUYJOXANPK4PFH733/ | Long-term mitigation ideas |
-| AURSCAN (LLM Scanner) | https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/E26JEFVSR6YG4GBQUZYDMWYCXD7S7N5V/ | Andreas Reichel: YAY wrapper scanning PKGBUILD with Claude LLM. Local alternatives discussed (Qwen2.5-Coder-7B, Haiku POC) |
-
-### Impersonation Clarification
-
-| Source | URL | Content Used |
-|--------|-----|-------------|
-| **mttaggart** (IFIN) | https://infosec.exchange/@mttaggart/116735530761603752 | Initial report raising arojas question; later corrected to note impersonation after dvzrv clarification |
-| **David Runge** (Arch Linux TU) | https://chaos.social/@dvzrv/116736017948300691 | Confirms arojas is legitimate KDE maintainer, attacker reused his identity via git commit forgery; requests corrections |
-| **IFIN Discourse (Updated)** | https://discourse.ifin.network/t/400-aur-packages-compromised-with-infostealer-and-rootkit/577 | Post corrected — now explicitly notes arojas was impersonated |
-
-### Community Contributions
-
-| Source | URL | Content Used |
-|--------|-----|-------------|
-| **drbbgh** (PR #8) | https://github.com/lenucksi/archcanary/pull/8 | `--refresh` flag: live package list fetch from Arch Linux HedgeDoc |
-| **liphiwolf** (PR #7) | https://github.com/lenucksi/archcanary/pull/7 | `lockfile-js` detection, expanded package list from CSCS paste |
-| **0xf836** (PR #4) | https://github.com/lenucksi/archcanary/pull/4 | Package list expansion (superseded by PR #8) |
-
-### Additional Data
-
-| Source | URL | Content Used |
-|--------|-----|-------------|
-| IRC Package List | https://gr.ht/aur_pkg_list.txt | Additional compromised packages from IRC |
-| Malicious npm Package | https://socket.dev/npm/package/atomic-lockfile | Package metadata, download count (134) |
-| Attacker GitHub Container | https://github.com/fardewoak/nodejs-argo/pkgs/container/herbsobering430 | Reverse shell/proxy tool tied to attacker |
-| AUR Example Commit | https://aur.archlinux.org/cgit/aur.git/commit/?h=premake-git&id=232b22dd0aaedfa9fde1800710e0d52e4f4b542d | Example of malicious commit |
-
-## Incident Overview
-
-### Timeline
-
-- **June 9-12, 2026**: Malicious commits pushed to 408+ AUR packages
-- **June 11**: First report on aur-general mailing list (Kusoneko about alvr)
-- **June 11**: Andre Herbst discovers scope by grepping AUR git mirror
-- **June 11**: ioctl.fail publishes technical analysis
-- **June 12**: Community detection scripts published; AUR maintainers cleaning up
-- **June 12**: David Runge clarifies `arojas` was impersonated via git commit forgery, not a malicious maintainer
-- **June 12, 17:33**: Jonathan Grotelüschen posts HedgeDoc with updated affected package list
-- **June 13**: New monitoring accounts identified (ivonahruskova, simongeisler); proposals for commit hash tracking, AUR read-only, and LLM-based scanning discussed
-- **June 13**: PR #8 (drbbgh) merged — `--refresh` flag for live HedgeDoc package list
-- **June 13**: PR #7 (liphiwolf) merged — `lockfile-js` detection, expanded package list
-
-### Attack Vector — Wave 1: atomic-lockfile / lockfile-js (npm)
-
-1. Attacker used commit forgery to impersonate maintainer `arojas` (see Impersonation Clarification below)
-2. Took over orphaned AUR packages via the forged identity
-3. Injected `npm install atomic-lockfile` or `npm install lockfile-js` into `.install` and `.hook` files
-4. The npm packages `atomic-lockfile@1.4.2` / `lockfile-js` contained a `preinstall` hook executing `./src/hooks/deps`
-5. The ELF binary `deps` (SHA256: `6144D4...`) is a Rust-based credential stealer
-
-### Attack Vector — Wave 2: js-digest (bun)
-
-1. Additional attacker accounts `custodiatovar` and `veramagalhaes` took over orphaned packages
-2. Injected `bun install js-digest` into PKGBUILD/`.install` files (same NPM publisher `herbsobering`)
-3. The npm package `js-digest` contained an embedded ELF payload (SHA256: `7883BD...`)
-4. Affected packages include guiscrcpy, netmon-git, inadyn-mt, nodejs-elm, keepassx2, and 26+ more
-
-### Malware Capabilities
-
-- **Credential theft**: Discord tokens, GitHub PATs, npm tokens, Slack sessions, Teams/M365 sessions, SSH keys, Vault tokens, Docker/Podman credentials, browser cookies
-- **Data exfiltration**: Uploads to `temp.sh`, C2 via Tor onion service
-- **Persistence**: systemd services (root or user mode) with `Restart=always`
-- **eBPF rootkit**: When run as root with CAP_BPF, hides processes, files, and socket inodes
-- **Cryptominer staging**: References `/usr/bin/monero-wallet-gui` for potential crypto mining payload
+---
 
 ## What to Do If Infected
 
-1. **Preserve the system**: Do not power off - use forensic acquisition with trusted media
-2. **Rotate ALL credentials**: Discord, GitHub, npm, Slack, Teams, SSH keys, Vault tokens, cloud provider keys
-3. **Check for persistence**: `systemctl list-units --type=service --state=running` (check for unknown services); also check drop-ins and timers with `--check-systemd`
-4. **Check for eBPF rootkit**: `ls -la /sys/fs/bpf/hidden_*`, and enumerate loaded programs with `sudo bpftool prog show` / `sudo bpftool link show` — look for `kprobe`/`tracing`/`lsm`/`tracepoint` hooks you didn't install (or run `sudo ./archcanary.sh --check-bpftool`)
-4a. **Check for library injection**: `cat /etc/ld.so.preload` — any non-empty content means a `.so` is being injected into every process (or run `./archcanary.sh --check-ldso`)
-4b. **Check for user-space persistence**: review `~/.config/autostart/`, `~/.config/systemd/user/`, and shell RC files for suspicious entries (or run `./archcanary.sh --check-autostart`)
-4c. **Check for rogue kernel modules**: `lsmod` and `dkms status` — flag any module not from a known package (or run `sudo ./archcanary.sh --check-kmod`)
-5. **Clean with trusted media**: Boot from Arch ISO, mount filesystem, remove malicious systemd units
-6. **Consider reinstallation**: The rootkit makes the system untrustworthy
-7. **Report findings**: https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/
+1. **Preserve the system** — do not power off; use forensic acquisition from trusted media
+2. **Rotate all credentials** — Discord, GitHub, npm, Slack, Teams, SSH keys, Vault tokens, cloud keys
+3. **Check for persistence** — `systemctl list-units --type=service --state=running`; run `--check-systemd`
+4. **Check for eBPF rootkit** — `ls -la /sys/fs/bpf/hidden_*`; run `sudo archcanary --check-bpftool`
+5. **Check for library injection** — `cat /etc/ld.so.preload`; run `archcanary --check-ldso`
+6. **Check for user-space persistence** — run `archcanary --check-autostart`
+7. **Check for rogue kernel modules** — run `sudo archcanary --check-kmod`
+8. **Clean from trusted media** — boot from Arch ISO, mount filesystem, remove malicious units
+9. **Consider reinstallation** — the rootkit makes the system untrustworthy once active
+10. **Report** — https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/
+
+---
+
+## Documentation
+
+- [docs/overview.md](docs/overview.md) — lifecycle diagram, at-a-glance table
+- [docs/systemd.md](docs/systemd.md) — systemd unit files and automated scan setup
+- [docs/my-setup.md](docs/my-setup.md) — full personal stack, component connections, reinstall steps
+- [docs/false-positives.md](docs/false-positives.md) — documented benign signals and how to verify
+- [SOURCES.md](SOURCES.md) — full numbered source references
+
+---
+
+## Attribution
+
+Community detection scripts this consolidates:
+
+| Author | Contribution |
+|--------|-------------|
+| [Kidev](https://gist.github.com/Kidev/59bf9f5fb53ab5eee99f19a6a2fc3992) | Original foundation: package list (~446 entries), basic `pacman -Qi` loop |
+| [BrianCArnold](https://gist.github.com/BrianCArnold/beb514ffc95a9a251b0dc2f767471fca) | Efficiency: `pacman -Qm` piped through grep |
+| [commonsourcecs](https://cscs.pastes.sh/aurvulntest20260611.sh) | Batch `pacman -Qmq`, date window filtering, expanded list |
+| [Kacper-Kondracki](https://gist.github.com/Kacper-Kondracki/88c5b313f79cc1f9c347e7ed61a36d10) | `pacman.log` historical scanning, compressed log support, configurable date window |
+| [quantenProjects](https://gist.github.com/quantenProjects/3f768dce7331618310f016d975bf8547) | Safe `comm -1 -2` one-liner approach |
+| drbbgh (upstream PR #8) | `--refresh` flag — live package list from Arch Linux HedgeDoc |
+| liphiwolf (upstream PR #7) | `lockfile-js` detection, expanded package list |
+
+Full source list with URLs: [SOURCES.md](SOURCES.md).
+
+---
 
 ## License
 
-Community tools - no warranty. Use at your own risk.
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=lenucksi%2Farchcanary&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=lenucksi/archcanary&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=lenucksi/archcanary&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=lenucksi/archcanary&type=date&legend=top-left" />
- </picture>
-</a>
+Community tools — no warranty. Use at your own risk.
