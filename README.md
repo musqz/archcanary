@@ -159,6 +159,26 @@ See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.
 
 ---
 
+## LLM Settings (aurscan)
+
+[aurscan](https://github.com/musqz/aurscan) scans PKGBUILDs with an LLM before `yay` builds them. The GUI exposes its backend configuration under **Utilities → LLM settings**.
+
+<img src="images/llm.png" alt="LLM Settings dialog" width="400"/>
+
+| Field | Description |
+|-------|-------------|
+| Backend | `auto` — Claude if `ANTHROPIC_API_KEY` is set, else static rules only<br>`claude` — Claude API<br>`openai` — any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM) |
+| Endpoint URL | URL for the `openai` backend, e.g. `http://localhost:11434/v1` |
+| Fallback URL | Optional second endpoint — aurscan fails over automatically |
+| Model | Model name sent to the endpoint |
+| Timeout | Per-request budget in seconds — raise for slow CPU-only local models (default 180 s) |
+
+Settings are saved to `~/.config/aurscan/env` and loaded by aurscan at startup. Explicit environment variables always override the file.
+
+The **Model guide** button in the dialog shows local model size recommendations and the critical Ollama `num_ctx` warning (Ollama defaults to 2048 which silently truncates the PKGBUILD — set ≥ 8192).
+
+---
+
 ## The Attack (June 2026)
 
 **June 9–12, 2026** — attackers used commit forgery to impersonate AUR maintainers, injecting malicious `npm`/`bun` install hooks into 1600+ package PKGBUILDs. Payload: an infostealer and eBPF rootkit.
