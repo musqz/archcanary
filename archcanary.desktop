@@ -2,7 +2,7 @@
 Type=Application
 Name=Archcanary
 Comment=Scan for compromised AUR packages
-Exec=archcanary-gui.sh
+Exec=archcanary-gui
 Icon=security-high
 Categories=System;Security;
 Terminal=false
