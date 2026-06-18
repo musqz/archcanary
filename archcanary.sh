@@ -83,6 +83,7 @@ PACKAGE_LIST_FILE_OPT=""
 MALICIOUS_NPM_LIST_OPT=""
 CHAOS_RAT_LIST_OPT=""
 RUSSIAN_SPAM_LIST_OPT=""
+EXTRA_LIST_OPTS=()
 
 # Temp file cleanup on exit/interrupt
 CLEANUP_FILES=()
@@ -111,6 +112,7 @@ for arg in "$@"; do
         --malicious-npm-list=*)  MALICIOUS_NPM_LIST_OPT="${arg#*=}" ;;
         --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
         --russian-spam-list=*)   RUSSIAN_SPAM_LIST_OPT="${arg#*=}" ;;
+        --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
         --all-time)              ALL_TIME=true ;;
         --no-notify)             NO_NOTIFY=true ;;
         --doctor)                DOCTOR=true ;;
@@ -136,7 +138,8 @@ for arg in "$@"; do
             echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
             echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
             echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)
-  --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)"
+  --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)
+  --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
             echo "  --all-time                Disable recency window — flag any installed infected"
             echo "                            package regardless of install date (for cross-campaign checks)"
             echo "  --no-notify               Suppress the desktop notification on detection"
@@ -530,6 +533,9 @@ CHAOS_RAT_PKGS=()
 RUSSIAN_SPAM_LIST="${RUSSIAN_SPAM_LIST:-$AUR_CONFIG_DIR/malicious_russian_spam_packages.txt}"
 RUSSIAN_SPAM_PKGS=()
 
+EXTRA_LISTS_CONF="${EXTRA_LISTS_CONF:-$AUR_CONFIG_DIR/extra_lists.conf}"
+EXTRA_PKGS=()
+
 MALICIOUS_NPM_LIST="${MALICIOUS_NPM_LIST:-$AUR_CONFIG_DIR/malicious_npm_packages.txt}"
 
 # Merge the DKMS allowlist into DKMS_ALLOWLIST (colon-separated; the env var, if
@@ -567,6 +573,19 @@ fi
 if [[ ! -f "$RUSSIAN_SPAM_LIST" ]]; then
     _bundled="$(dirname "$(realpath "$0")")/malicious_russian_spam_packages.txt"
     [[ -f "$_bundled" ]] && cp "$_bundled" "$RUSSIAN_SPAM_LIST"
+fi
+
+if [[ ! -f "$EXTRA_LISTS_CONF" ]]; then
+    cat > "$EXTRA_LISTS_CONF" <<'CONF'
+# archcanary extra package lists
+# One entry per line: a file path or an https:// raw URL.
+# Lines starting with # are ignored.
+# URL entries are re-fetched when you run --refresh.
+#
+# Examples:
+#   /home/user/my_custom_list.txt
+#   https://raw.githubusercontent.com/lenucksi/archcanary/main/package_list.txt
+CONF
 fi
 
 MALICIOUS_NPM_PKGS=()
@@ -670,6 +689,55 @@ load_packages() {
             RUSSIAN_SPAM_PKGS+=("$line")
         done <"$RUSSIAN_SPAM_LIST"
     fi
+
+    # Extra lists — from extra_lists.conf and --extra-list= flags
+    EXTRA_PKGS=()
+    _load_extra() {
+        local src="$1"
+        if [[ "$src" =~ ^https?:// ]]; then
+            local cached="$AUR_CONFIG_DIR/extra_$(printf '%s' "$src" | md5sum | cut -c1-8).txt"
+            if [[ ! -f "$cached" ]] || $REFRESH_PACKAGE_LIST; then
+                echo "Fetching extra list: $src"
+                local tmp
+                tmp=$(curl -fsSL "$src" 2>/dev/null) || {
+                    echo >&2 "WARNING: failed to fetch extra list: $src — keeping existing."
+                    return
+                }
+                local n
+                n=$(printf '%s\n' "$tmp" | grep -c '^[^#[:space:]]' || true)
+                if [[ $n -eq 0 ]]; then
+                    echo >&2 "WARNING: extra list $src returned 0 entries — skipping."
+                    return
+                fi
+                printf '%s\n' "$tmp" > "$cached"
+                echo "Cached $src → $cached ($n entries)"
+            fi
+            src="$cached"
+        fi
+        if [[ ! -f "$src" ]]; then
+            echo >&2 "WARNING: extra list not found: $src"
+            return
+        fi
+        local _n=0
+        while IFS= read -r line; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            EXTRA_PKGS+=("$line")
+            _n=$(( _n + 1 ))
+        done < "$src"
+        log_info "Extra list $src: $_n entries"
+    }
+    if [[ -f "$EXTRA_LISTS_CONF" ]]; then
+        while IFS= read -r _entry || [[ -n "$_entry" ]]; do
+            _entry="${_entry%%#*}"
+            _entry="${_entry//[[:space:]]/}"
+            [[ -z "$_entry" ]] && continue
+            _load_extra "$_entry"
+        done < "$EXTRA_LISTS_CONF"
+    fi
+    for _opt in "${EXTRA_LIST_OPTS[@]}"; do
+        _load_extra "$_opt"
+    done
+    unset -f _load_extra
 }
 
 log_info() {
@@ -1578,6 +1646,11 @@ for p in "${RUSSIAN_SPAM_PKGS[@]}"; do
     INFECTED_PKGS+=("$p")
 done
 
+# Extra lists — merged last so they appear in INFECTED_LOOKUP
+for p in "${EXTRA_PKGS[@]}"; do
+    INFECTED_PKGS+=("$p")
+done
+
 # Build exact-match lookup table from INFECTED_PKGS
 # (pacman -Qmq does prefix matching; this prevents false positives)
 declare -A INFECTED_LOOKUP
@@ -1603,6 +1676,9 @@ if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
 fi
 if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
     echo "   (incl. ${#RUSSIAN_SPAM_PKGS[@]} Russian Spam Campaign pkgs, 2026-06-14)"
+fi
+if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
+    echo "   (incl. ${#EXTRA_PKGS[@]} extra pkgs from extra_lists.conf / --extra-list)"
 fi
 echo "============================================================"
 echo
