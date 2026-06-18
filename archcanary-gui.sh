@@ -78,6 +78,7 @@ declare -A STATUS
 for _i in "${!LABELS[@]}"; do STATUS[$_i]="  ?"; done
 STATUS[1]="   "   # Refresh package list — no scan verdict
 STATUS[13]="   "  # Edit DKMS allowlist
+STATUS[14]="   "  # traur — opens its own output window, no verdict here
 unset _i
 
 _update_status() {
