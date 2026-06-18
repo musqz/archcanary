@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.1.0 (2026-06-18) — first tagged release
+
+### Project
+- Renamed from `aur-malware-check` to **archcanary**. The tool had grown into a
+  multi-layer Arch system security stack; the old name no longer reflected its
+  scope. All files, strings, and system paths updated.
+- Complete README rewrite: BETA notice, rename history, projects-used table,
+  detection layer diagram, checks reference, screenshots (GUI, scan output, LLM
+  settings dialog).
+- First git tag `v0.1.0`.
+
+### GUI (`archcanary-gui.sh`)
+- New: **LLM settings dialog** — Utilities → LLM settings. Configures aurscan's
+  LLM backend (backend, endpoint URL, fallback URL, model, timeout) and writes
+  `~/.config/aurscan/env`. Includes a looping Model guide with local model
+  size/quality table and Ollama `num_ctx` warning.
+- Fix: `aurscan_settings()` silently exited under `set -euo pipefail`. Two bugs:
+  `_env_get` grep exiting non-zero on a missing env file propagated through
+  `pipefail` and killed the function before yad opened; and `result=$(yad ...)`
+  triggered `set -e` when yay exited non-zero (cancel / model guide). Fixed with
+  `|| true` on the pipeline and the `&& rc=0 || rc=$?` capture pattern.
+- Fix: `traur` status column cleared — it opens its own output window so the
+  `?` marker added no information.
+- Fix: duplicate `archcanary.sh` candidate in the startup script-finder (left
+  over from the rename); now also searches for `archcanary` (no extension) in PATH.
+- Detect aurscan with `command -v aurscan`; LLM settings item only shown when
+  aurscan is installed.
+
+### Install / system
+- Installed binaries are now named `archcanary` and `archcanary-gui` (no `.sh`
+  extension). Uninstall and the user systemd service updated to match.
+- Fix: `archcanary-root-helper` had a hardcoded
+  `/usr/lib/aur-malware-check/aur-malware-check.sh` path left from the rename.
+  Updated to `/usr/lib/archcanary/archcanary.sh`.
+- Fix: root-helper and GUI dialogs told users to run `sudo ./install.sh --system`.
+  `install.sh` must never be run as root — it calls sudo internally. Removed
+  `sudo` from all user-facing install prompts.
+
 ## 3.0 (2026-06-16)
 - New: `archcanary_py/` — Python 3.14+ port of `archcanary.sh`, stdlib only
 - All 6 checks preserved, `--merge` mode, compressed log support (gzip/xz/bz2/zstd)
