@@ -213,14 +213,14 @@ run_doctor() {
     fi
 
     # Colours only on a real terminal; piped/GUI-captured output stays plain.
-    local G='' Y='' R='' B='' N=''
+    local G='' Y='' R='' B='' N='' C=''
     if [[ -t 1 ]]; then
-        G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; B=$'\e[1m'; N=$'\e[0m'
+        G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; B=$'\e[1m'; N=$'\e[0m'; C=$'\e[36m'
     fi
 
-    # Three states: OK (present + working), WARN (present but not functioning —
-    # e.g. installed-but-disabled), MISS (absent). WARN and MISS both need
-    # action, so both set fail and feed the next-step pointer.
+    # Four states: OK (present + working), WARN (present but not functioning),
+    # MISS (required, absent), OPT (optional addon — absent is fine). WARN and
+    # MISS set fail and feed the next-step pointer; OPT never does.
     local fail=0 first_fix="" first_label=""
     _mark() {  # COLOR TAG LABEL [FIX] [DETAIL]
         printf '  %s%s%s  %s\n' "$1" "$2" "$N" "$3"
@@ -232,9 +232,30 @@ run_doctor() {
     _ok()   { _mark "$G" "[ OK ]" "$1" "" "${2:-}"; }
     _warn() { _mark "$Y" "[WARN]" "$1" "${2:-}" "${3:-}"; fail=1; _record "$1" "${2:-}"; }
     _miss() { _mark "$R" "[MISS]" "$1" "${2:-}" "${3:-}"; fail=1; _record "$1" "${2:-}"; }
+    _opt()  { _mark "$C" "[OPT ]" "$1" "" "${2:-}"; }  # optional addon — absent is not a failure
     # _item LABEL TEST-EXIT [FIX] [DETAIL]  — binary present/absent helper
     _item() {
         if [[ $2 -eq 0 ]]; then _ok "$1" "${4:-}"; else _miss "$1" "${3:-}" "${4:-}"; fi
+        return 0
+    }
+    # _opt_item / _opt_dep — like _item/_dep but missing → [OPT ] not [MISS]; never sets fail
+    _opt_item() {
+        if [[ $2 -eq 0 ]]; then _ok "$1" "${4:-}"; else _opt "$1" "${4:-}"; fi
+        return 0
+    }
+    _opt_dep() {
+        local label=$1 cmd=$2 pkg=$3 purpose=$4 d=""
+        if [[ $detail -eq 1 ]]; then
+            if command -v "$cmd" >/dev/null 2>&1; then
+                local p="" v=""
+                p="$(command -v "$cmd")"
+                v="$(timeout 2 "$cmd" --version </dev/null 2>/dev/null | head -n1 || true)"
+                d="path: $p${v:+  |  $v}  |  pkg: $pkg"
+            else
+                d="pkg: $pkg ($purpose)"
+            fi
+        fi
+        if command -v "$cmd" >/dev/null 2>&1; then _ok "$label" "$d"; else _opt "$label" "$d"; fi
         return 0
     }
     _have() { command -v "$1" >/dev/null 2>&1 && echo 0 || echo 1; }
@@ -381,19 +402,19 @@ run_doctor() {
     # --- Pre-install layer (external) -------------------------------------
     if [[ -n ${want[external]:-} ]]; then
         printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
-        _item "aurscan / syay wrapper" \
+        _opt_item "aurscan / syay wrapper" \
             "$( { command -v syay || command -v aurscan; } >/dev/null 2>&1 && echo 0 || echo 1)" \
-            "install from https://github.com/musqz/aurscan" \
-            "binary: $(command -v syay 2>/dev/null || command -v aurscan 2>/dev/null || echo 'not found')"
+            "" \
+            "binary: $(command -v syay 2>/dev/null || command -v aurscan 2>/dev/null || echo 'not found — https://github.com/musqz/aurscan')"
         # Check the resolved alias in an interactive shell rather than grepping a
         # specific file — distros source aliases from varying places and may quote
         # the value (alias yay='syay'). End-state detection, not file guessing.
-        _item "alias yay=syay (active)" \
+        _opt_item "alias yay=syay (active)" \
             "$(bash -ic 'alias yay' 2>/dev/null | grep -q "syay" && echo 0 || echo 1)" \
-            "echo \"alias yay=syay\" >> ~/.bashrc   # (or your distro's aliases file)" \
-            "resolved: $(bash -ic 'alias yay' 2>/dev/null | head -n1 || echo 'no alias')"
-        _dep "traur (heuristic scanner)" traur traur "279-signal pre-install scanner" "yay -S traur"
-        _item "yay init.lua hooks" "$(_file "$HOME/.config/yay/init.lua")" "cp $luasrc ~/.config/yay/init.lua" "path: $HOME/.config/yay/init.lua"
+            "" \
+            "resolved: $(bash -ic 'alias yay' 2>/dev/null | head -n1 || echo 'no alias — add: echo "alias yay=syay" >> ~/.bashrc')"
+        _opt_dep "traur (heuristic scanner)" traur traur "279-signal pre-install scanner"
+        _opt_item "yay init.lua hooks" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"
         printf '\n'
     fi
 
