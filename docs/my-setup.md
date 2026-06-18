@@ -2,6 +2,9 @@
 
 Full overview of how this fork is deployed and how the pieces connect.
 
+> For a one-screen visual map (lifecycle diagram + at-a-glance table) start with
+> [overview.md](overview.md). This page is the deep reference.
+
 ## Components
 
 | Component | Package / Source | Purpose |
@@ -84,15 +87,9 @@ standalone aurscan (manual — audit without installing)
 
 ### Scanner comparison
 
-| Tool | When | How | Catches |
-|------|------|-----|---------|
-| `traur scan <pkg>` | Before install (terminal) | 279 heuristic signals | Unknown suspicious packages |
-| `traur scan` (GUI) | On demand — periodic audit | Same signals, all installed AUR pkgs | Suspicious packages already on system |
-| `aurscan` / `syay` | Every AUR install (automatic via alias) | LLM reads PKGBUILD + offline static rules | Novel / obfuscated patterns |
-| yay `init.lua` hooks | Every AUR install / upgrade (automatic) | Offline Lua pattern match + age warning | Known campaign signatures, stale-rewrite upgrades |
-| `aur_check-v2.sh` | After install (automated) | IOC list matching | Known-compromised packages |
-
-All are complementary — none replaces the others.
+For the lifecycle map and the what-runs-when table, see
+[overview.md](overview.md). All layers are complementary — none replaces the
+others.
 
 ### The yad GUI (`aur_malware_gui.sh`)
 
@@ -128,15 +125,8 @@ The GUI is for interactive desktop use; the CLI covers everything else (SSH, cro
 
 ## When each tool runs
 
-| Tool | When | Trigger |
-|------|------|---------|
-| `aur-malware-check.sh` (root scan) | Weekly + on boot, and after each pacman transaction | systemd **system** timer (`Persistent=true`) + `.path` unit — see [systemd.md](systemd.md) |
-| notifier | When a root scan records a detection | systemd **user** `.path` unit watching `last-scan.log` → `notify-send` |
-| `aur_malware_gui.sh` | On demand | Desktop shortcut / app launcher |
-| `aur-malware-check.sh` (manual) | On demand (SSH / no display) | Run directly with `--full` (sudo) or a single `--check-*` flag |
-| `traur` | Before each AUR install | Manual — check maintainer reputation |
-| `aurscan` / `syay` | Every AUR install / upgrade | Automatic — `alias yay=syay` wraps every `yay` call |
-| yay `init.lua` hooks | Every AUR install / upgrade | Automatic — yay 13.0 runs them after aurscan clears the build |
+See the at-a-glance table in [overview.md](overview.md). The exact systemd
+triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 
 ## Install locations
 

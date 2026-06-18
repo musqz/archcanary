@@ -26,6 +26,7 @@
 | CHAOS RAT detection | Separate date window (2025-07-16..19) for the July 2025 CHAOS RAT campaign packages — does not interfere with the June 2026 campaign date window |
 | Updated lists | `nextfile-js`, `rakudo-star` added; package list refreshed to 1936+ entries |
 
+See [docs/overview.md](docs/overview.md) for a one-screen visual map — the lifecycle diagram and an at-a-glance table of what runs when.
 See [docs/systemd.md](docs/systemd.md) for running automatically via systemd — a root system timer for the full scan plus a user notifier for desktop alerts.
 See [docs/my-setup.md](docs/my-setup.md) for the full personal setup — all components, how they connect, and reinstall steps.
 
