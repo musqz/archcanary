@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="2.11.0"
+SCRIPT_VERSION="2.11.1"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -137,9 +137,20 @@ for arg in "$@"; do
             echo "                            (deps, install, systemd, aurscan, traur, yay hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
             echo "                            Sections: platform, deps, user, system, systemd, external"
-            echo "                            (e.g. --doctor=deps  or  --doctor=user,system)"
+            echo "                            (tool names like aurscan/traur/yad also map to a section)"
+            echo "                            Comma- or space-separated, e.g.:"
+            echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
             echo "  --help, -h                Show this help"
             exit 0
+            ;;
+        *)
+            # Bare words after --doctor are treated as section names. This makes
+            # space-separated forms work (--doctor user system) and tolerates a
+            # stray space in a comma list (--doctor=user, system), where the
+            # shell splits "system" off into its own argument.
+            if $DOCTOR && [[ "$arg" != -* ]]; then
+                DOCTOR_SECTIONS+="${DOCTOR_SECTIONS:+,}$arg"
+            fi
             ;;
     esac
 done
@@ -182,16 +193,18 @@ run_doctor() {
         for s in "${_sel[@]}"; do
             s="${s//[[:space:]]/}"; [[ -z $s ]] && continue
             case "$s" in
-                dep|deps|dependencies)              want[deps]=1 ;;
+                dep|deps|dependencies|yad|bpftool|bpf|notify-send|libnotify|pkexec|polkit) want[deps]=1 ;;
                 user|user_install|user-install)     want[user]=1 ;;
                 system|system_install|system-install|root) want[system]=1 ;;
                 systemd|automation|timer|timers)    want[systemd]=1 ;;
                 external|external_tools|external-tools|tools|preinstall|pre-install) want[external]=1 ;;
-                platform|plat)                      want[platform]=1 ;;
+                aurscan|syay|traur|yay|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
+                platform|plat|distro)               want[platform]=1 ;;
                 all)                                for s in "${ordered[@]}"; do want[$s]=1; done ;;
                 *)
                     printf 'Unknown --doctor section: %s\n' "$s" >&2
-                    printf 'Valid: platform, deps, user, system, systemd, external (or all)\n' >&2
+                    printf 'Valid: platform, deps, user, system, systemd, external (or all).\n' >&2
+                    printf 'Tool names (aurscan, traur, yad, …) also map to a section.\n' >&2
                     return 2 ;;
             esac
         done
@@ -252,7 +265,13 @@ run_doctor() {
 
     printf '%s============================================================%s\n' "$B" "$N"
     printf '%s AUR Malware Check — setup doctor%s\n' "$B" "$N"
-    [[ -n $DOCTOR_SECTIONS ]] && printf ' sections: %s\n' "$DOCTOR_SECTIONS"
+    if [[ -n $DOCTOR_SECTIONS ]]; then
+        # Show the resolved sections (in order), not the raw input — keeps the
+        # header clean when tool-name aliases or stray spaces were used.
+        local _shown=()
+        for s in "${ordered[@]}"; do [[ -n ${want[$s]:-} ]] && _shown+=("$s"); done
+        printf ' sections: %s\n' "$(IFS=,; echo "${_shown[*]}")"
+    fi
     printf '%s============================================================%s\n\n' "$B" "$N"
 
     # --- Platform ----------------------------------------------------------

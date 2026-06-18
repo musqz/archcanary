@@ -7,6 +7,9 @@
 - `developing.md` — coding conventions, `README.md` — use-case map
 - Bash scripts remain at 2.3.x for legacy use
 
+## 2.11.1 (2026-06-18) — personal fork
+- Fix: `--doctor` section selection is now forgiving about input. Sections can be **space-separated** (`--doctor user system`) as well as comma-separated, and a stray space in a comma list (`--doctor=user, system`, which the shell splits into two arguments) no longer silently drops the trailing section. **Tool names** now map to their section too — `aurscan`/`syay`/`traur`/`yay` → `external`; `yad`/`bpftool`/`pkexec`/etc. → `deps` — so `--doctor=aurscan` works. The header shows the resolved sections (deduplicated, in order) instead of the raw input.
+
 ## 2.11.0 (2026-06-18) — personal fork
 - New: `--doctor=SECTION[,...]` — check only the named section(s) instead of the whole stack. Sections (in install order): `platform`, `deps`, `user`, `system`, `systemd`, `external`; comma-separate for several (`--doctor=user,system`). Filtered runs show **drill-down detail** per item — resolved path, version, and package for dependencies; the checked path for files; the resolved alias/binary for the external layer.
 - New: **next-step pointer** — when something is missing, `--doctor` now names the first unmet prerequisite (sections run in install order) and prints the single command to run next, so the check reads start-to-finish: fix it, re-run, advance. Bare `--doctor` is unchanged (compact, all sections). Unknown section names exit 2; missing elements exit 1; all-present exits 0. The interactive click-to-fix version is left for the GUI phase.
