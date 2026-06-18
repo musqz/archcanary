@@ -5,8 +5,6 @@
 > **Read-only by design.** The scanner detects and reports, and never deletes, quarantines, or disables anything it flags — remediation is left to you. The only files it writes are its own logs and config lists. Installation (`install.sh`), the `--refresh` package-list download, and the DKMS allowlist editor are the exceptions that touch the system or network, and all are explicit.
 >
 > **Developed with the assistance of Claude AI (Anthropic).** Review AI-assisted code and documentation before relying on it, and treat all detections as advisory rather than authoritative.
->
-> **This project is developed with the assistance of Claude AI (Anthropic).** Review AI-assisted code and documentation before relying on it, and treat all detections as advisory rather than authoritative.
 
 ### Fork changes
 
