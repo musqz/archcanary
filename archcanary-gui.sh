@@ -155,7 +155,7 @@ edit_allowlist() {
         return
     fi
     local tmpout
-    tmpout="$(mktemp /tmp/aur-mc-XXXXXX.txt)"
+    tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
     if yad --text-info \
         --title="DKMS Allowlist (system) — Archcanary" \
         --window-icon=security-high \
@@ -300,7 +300,7 @@ show_output() {
     local title="$1" scan_exit=0
     shift
     local tmpout
-    tmpout=$(mktemp /tmp/aur-mc-XXXXXX.txt)
+    tmpout=$(mktemp /tmp/archcanary-XXXXXX.txt)
     "$@" > "$tmpout" 2>&1 &
     local scan_pid=$!
     (tail --pid="$scan_pid" -f -n +1 "$tmpout" 2>/dev/null
@@ -408,7 +408,7 @@ run_action() {
             return
         fi
         local tmpout pkexec_exit=0
-        tmpout="$(mktemp /tmp/aur-mc-XXXXXX.txt)"
+        tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
 
         # Background pkexec: polkit dialog is the only window during auth
         # so it gets focus on its own. Output window opens only after auth.

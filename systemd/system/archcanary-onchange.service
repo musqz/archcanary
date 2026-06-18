@@ -1,5 +1,5 @@
 [Unit]
-Description=AUR malware check (system-level scan, after pacman transaction)
+Description=archcanary system scan (after pacman transaction)
 
 [Service]
 Type=oneshot

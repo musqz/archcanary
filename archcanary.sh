@@ -1640,9 +1640,7 @@ for p in "${CHAOS_RAT_PKGS[@]}"; do
 done
 
 # Russian Spam Campaign — packages injecting spam into shell configs
-declare -A RUSSIAN_SPAM_LOOKUP
 for p in "${RUSSIAN_SPAM_PKGS[@]}"; do
-    RUSSIAN_SPAM_LOOKUP["$p"]=1
     INFECTED_PKGS+=("$p")
 done
 
@@ -1810,7 +1808,7 @@ echo "============================================================"
 if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
     if command -v notify-send &>/dev/null; then
         notify-send -u critical -i dialog-warning \
-            "AUR: malicious package detected" \
+            "archcanary: malicious package detected" \
             "Indicators found. Open Archcanary to review."
     fi
 fi

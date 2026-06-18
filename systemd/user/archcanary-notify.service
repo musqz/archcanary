@@ -1,9 +1,9 @@
 [Unit]
-Description=Notify on AUR malware detection
+Description=Notify on archcanary malware detection
 # Don't rate-limit: the path unit may trigger this oneshot a few times around a
 # scan; a burst must not leave it stuck 'failed' (start-limit-hit).
 StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/archcanary/last-scan.log && notify-send -u critical -i dialog-warning "AUR: malicious package detected" "Open Archcanary to review." || true'
+ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/archcanary/last-scan.log && notify-send -u critical -i dialog-warning "archcanary: malicious package detected" "Open Archcanary to review." || true'

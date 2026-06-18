@@ -1,5 +1,5 @@
 [Unit]
-Description=Watch for AUR malware scan results
+Description=Watch for archcanary scan results
 # A transient trigger burst must never wedge the watcher into a permanent
 # 'failed' (start-limit-hit) state and silence detections.
 StartLimitIntervalSec=0

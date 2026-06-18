@@ -1,5 +1,5 @@
 [Unit]
-Description=AUR malware check (user-level scan)
+Description=archcanary user-level scan
 
 [Service]
 Type=oneshot

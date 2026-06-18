@@ -1,5 +1,5 @@
 [Unit]
-Description=Trigger AUR malware check after pacman transactions
+Description=Trigger archcanary scan after pacman transactions
 
 [Path]
 PathChanged=/var/log/pacman.log

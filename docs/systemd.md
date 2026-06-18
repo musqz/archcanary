@@ -48,7 +48,7 @@ The rest of this document describes the units it installs, for reference or manu
 **`/etc/systemd/system/archcanary.service`**
 ```ini
 [Unit]
-Description=AUR malware check (system-level scan, root)
+Description=archcanary system scan (root)
 Wants=network-online.target
 After=network-online.target
 
@@ -63,7 +63,7 @@ ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --all-time --check-systemd
 **`/etc/systemd/system/archcanary.timer`**
 ```ini
 [Unit]
-Description=Run AUR malware check weekly and on boot
+Description=Run archcanary system scan weekly and on boot
 
 [Timer]
 OnBootSec=5min
@@ -85,7 +85,7 @@ sudo systemctl enable --now archcanary.timer
 **`~/.config/systemd/user/archcanary-notify.path`**
 ```ini
 [Unit]
-Description=Watch for AUR malware scan results
+Description=Watch for archcanary scan results
 
 [Path]
 PathModified=/var/lib/archcanary/last-scan.log
@@ -98,11 +98,11 @@ WantedBy=default.target
 **`~/.config/systemd/user/archcanary-notify.service`**
 ```ini
 [Unit]
-Description=Notify on AUR malware detection
+Description=Notify on archcanary malware detection
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/archcanary/last-scan.log && notify-send -u critical -i dialog-warning "AUR: malicious package detected" "Open Archcanary to review." || true'
+ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/archcanary/last-scan.log && notify-send -u critical -i dialog-warning "archcanary: malicious package detected" "Open Archcanary to review." || true'
 ```
 
 Enable and start:
@@ -120,17 +120,17 @@ Runs the user-level checks **as you**, so they scan your real `~/.cache` and `~/
 **`~/.config/systemd/user/archcanary-user.service`**
 ```ini
 [Unit]
-Description=AUR malware check (user-level scan)
+Description=archcanary user-level scan
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/archcanary.sh --all-time --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log
+ExecStart=%h/.local/bin/archcanary --all-time --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log
 ```
 
 **`~/.config/systemd/user/archcanary-user.timer`**
 ```ini
 [Unit]
-Description=Run AUR malware user-level check weekly and on boot
+Description=Run archcanary user-level scan weekly and on boot
 
 [Timer]
 OnBootSec=5min
@@ -154,7 +154,7 @@ A **system** path unit watches `/var/log/pacman.log` and runs an offline (no `--
 **`/etc/systemd/system/archcanary-onchange.service`**
 ```ini
 [Unit]
-Description=AUR malware check (system-level scan, after pacman transaction)
+Description=archcanary system scan (after pacman transaction)
 
 [Service]
 Type=oneshot
@@ -165,7 +165,7 @@ ExecStart=/usr/lib/archcanary/archcanary.sh --all-time --check-systemd --check-e
 **`/etc/systemd/system/archcanary.path`**
 ```ini
 [Unit]
-Description=Trigger AUR malware check after pacman transactions
+Description=Trigger archcanary scan after pacman transactions
 
 [Path]
 PathChanged=/var/log/pacman.log

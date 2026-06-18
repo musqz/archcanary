@@ -1,5 +1,5 @@
 [Unit]
-Description=AUR malware check (system-level scan, root)
+Description=archcanary system scan (root)
 Wants=network-online.target
 After=network-online.target
 

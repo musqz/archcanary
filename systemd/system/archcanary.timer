@@ -1,5 +1,5 @@
 [Unit]
-Description=Run AUR malware check weekly and on boot
+Description=Run archcanary system scan weekly and on boot
 
 [Timer]
 OnBootSec=5min
