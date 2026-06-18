@@ -3,11 +3,11 @@
 # Accepts exactly one flag; rejects everything else.
 set -euo pipefail
 
-MAIN_SCRIPT="/usr/lib/aur-malware-check/aur-malware-check.sh"
+MAIN_SCRIPT="/usr/lib/archcanary/archcanary.sh"
 
 if [[ ! -x "$MAIN_SCRIPT" ]]; then
     echo "Error: main script not found at $MAIN_SCRIPT" >&2
-    echo "Re-run: sudo ./install.sh --system" >&2
+    echo "Re-run: ./install.sh --system" >&2
     exit 1
 fi
 

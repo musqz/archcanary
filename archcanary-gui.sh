@@ -139,7 +139,7 @@ edit_allowlist() {
         yad --warning \
             --title="DKMS Allowlist — Archcanary" \
             --window-icon=security-high \
-            --text="<b>$cfg</b> does not exist.\n\nRun <tt>sudo ./install.sh --system</tt> first to create it." \
+            --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> first to create it." \
             --width=440 2>/dev/null || true
         return
     fi
@@ -220,7 +220,7 @@ run_action() {
             yad --warning \
                 --title="Root helper not installed" \
                 --window-icon=security-high \
-                --text="The system root helper is not installed.\n\nRun:\n  <b>sudo ./install.sh --system</b>\n\nto enable root-requiring checks." \
+                --text="The system root helper is not installed.\n\nRun:\n  <b>./install.sh --system</b>\n\nto enable root-requiring checks." \
                 --width=440
             return
         fi
