@@ -6,3 +6,7 @@ subagent-reports/
 aur-check-*.log
 # claude resume
 claude.txt
+
+# Claude Code local instructions
+CLAUDE.md
+claude.md
