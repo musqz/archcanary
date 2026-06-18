@@ -18,6 +18,23 @@ The adaptations to the original are extensive enough that this is effectively a 
 
 ---
 
+## Screenshots
+
+<table>
+<tr>
+<td align="center" width="40%">
+<img src="images/gui.png" alt="Archcanary GUI — main menu" width="320"/><br/>
+<sub>Main menu — all checks passed</sub>
+</td>
+<td align="center" width="60%">
+<img src="images/log.png" alt="Archcanary scan output — RESULT: CLEAN" width="480"/><br/>
+<sub>Full scan output — 1943 packages checked, RESULT: CLEAN</sub>
+</td>
+</tr>
+</table>
+
+---
+
 ## Projects Used
 
 archcanary integrates with and builds on the following:
