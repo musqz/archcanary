@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.1 (2026-06-18) — post-release fix
+
+- Fix: `--doctor` treated missing aurscan, traur, `alias yay=syay`, and yay
+  `init.lua` as failures (`[MISS]`), contributing to the fail count and driving
+  the NEXT STEP pointer toward installing AI tools. These are optional addons —
+  archcanary works fully without any LLM or AI tooling. They now show `[OPT ]`
+  (cyan), never set fail, and never block the next-step pointer. A system
+  without any AI layer gets a clean `--doctor` summary.
+
 ## v0.1.0 (2026-06-18) — first tagged release
 
 ### Project
