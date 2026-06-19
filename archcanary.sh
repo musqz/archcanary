@@ -420,7 +420,7 @@ run_doctor() {
             _opt_item "claude CLI (aurscan LLM backend)" \
                 "$(command -v claude >/dev/null 2>&1 && echo 0 || echo 1)" \
                 "" \
-                "$(command -v claude 2>/dev/null || echo 'not found — npm install -g @anthropic-ai/claude-code')"
+                "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
         fi
         _opt_dep "traur (heuristic scanner)" traur traur "279-signal pre-install scanner"
         _opt_item "yay init.lua hooks" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"

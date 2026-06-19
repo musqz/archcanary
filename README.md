@@ -45,6 +45,7 @@ archcanary integrates with and builds on the following:
 |---------|------|
 | [lenucksi/archcanary](https://github.com/lenucksi/archcanary) | Upstream origin — community consolidation of the June 2026 AUR attack detection scripts |
 | [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) |
+| [claude-code](https://claude.ai/download) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs (`curl -fsSL https://claude.ai/install.sh | bash`) |
 | [traur](https://aur.archlinux.org/packages/traur) | Pre-install heuristic scanner — 279 signals across 5 weighted categories |
 | [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log |
 | [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui` |
