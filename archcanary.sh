@@ -208,7 +208,7 @@ run_doctor() {
                 system|system_install|system-install|root) want[system]=1 ;;
                 systemd|automation|timer|timers)    want[systemd]=1 ;;
                 external|external_tools|external-tools|tools|preinstall|pre-install) want[external]=1 ;;
-                aurscan|syay|traur|yay|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
+                aurscan|traur|yay|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
                 platform|plat|distro)               want[platform]=1 ;;
                 all)                                for s in "${ordered[@]}"; do want[$s]=1; done ;;
                 *)
@@ -412,17 +412,10 @@ run_doctor() {
     # --- Pre-install layer (external) -------------------------------------
     if [[ -n ${want[external]:-} ]]; then
         printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
-        _opt_item "aurscan / syay wrapper" \
-            "$( { command -v syay || command -v aurscan; } >/dev/null 2>&1 && echo 0 || echo 1)" \
+        _opt_item "aurscan wrapper" \
+            "$(command -v aurscan >/dev/null 2>&1 && echo 0 || echo 1)" \
             "" \
-            "binary: $(command -v syay 2>/dev/null || command -v aurscan 2>/dev/null || echo 'not found — https://github.com/musqz/aurscan')"
-        # Check the resolved alias in an interactive shell rather than grepping a
-        # specific file — distros source aliases from varying places and may quote
-        # the value (alias yay='syay'). End-state detection, not file guessing.
-        _opt_item "alias yay=syay (active)" \
-            "$(bash -ic 'alias yay' 2>/dev/null | grep -q "syay" && echo 0 || echo 1)" \
-            "" \
-            "resolved: $(bash -ic 'alias yay' 2>/dev/null | head -n1 || echo 'no alias — add: echo "alias yay=syay" >> ~/.bashrc')"
+            "binary: $(command -v aurscan 2>/dev/null || echo 'not found — https://github.com/musqz/aurscan')"
         _opt_dep "traur (heuristic scanner)" traur traur "279-signal pre-install scanner"
         _opt_item "yay init.lua hooks" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"
         printf '\n'

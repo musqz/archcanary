@@ -55,12 +55,11 @@ archcanary integrates with and builds on the following:
 ### Detection Layers
 
 ```
-User types `yay -S pkg` or `yay -Syu`
-    └── aurscan wrapper (alias yay=syay)
-            ├── static rules (offline) — known campaign signatures
-            ├── Claude LLM reads PKGBUILD — novel/obfuscated patterns
-            └── on CLEAN → calls /usr/bin/yay
-                    └── yay init.lua hooks
+User runs `aurscan <pkg>` before installing
+    ├── static rules (offline) — known campaign signatures
+    ├── Claude LLM reads PKGBUILD — novel/obfuscated patterns
+    └── on CLEAN → user runs `yay -S pkg` / `yay -Syu`
+            └── yay init.lua hooks
                             ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
                             ├── AURPreInstall  — offline pattern check
                             └── PostInstall    — logs AUR installs

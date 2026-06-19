@@ -1,13 +1,13 @@
 -- ~/.config/yay/init.lua
 --
 -- yay 13.0 Lua hooks for the AUR security stack.
--- Copy this file to ~/.config/yay/init.lua. These hooks run on every AUR
--- install/upgrade, AFTER the aurscan wrapper (syay) has cleared the build.
+-- Seeded to ~/.config/yay/init.lua by install.sh if not already present.
+-- These hooks run on every AUR install/upgrade alongside aurscan pre-checks.
 -- See docs/my-setup.md, "yay 13.0 integration".
 
 -- Options
 yay.opt.diff_menu   = true
-yay.opt.edit_menu   = true    -- required: yay runs the aurscan-gate editor here
+yay.opt.edit_menu   = true    -- prompt to review PKGBUILD before build
 yay.opt.clean_menu  = true
 yay.opt.clean_after = false
 yay.opt.sort_by     = "votes"

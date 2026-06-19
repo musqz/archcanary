@@ -12,7 +12,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 | `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (fork of [lenucksi/archcanary](https://github.com/lenucksi/archcanary)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
 | `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window |
 | `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Pre-install trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes) |
-| `aurscan` (`syay`) | [musqz/aurscan](https://github.com/musqz/aurscan) (fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan)) | LLM-based PKGBUILD scanner using Claude. Installed as `syay` and bound with `alias yay=syay` in `.bashrc`, so it runs **automatically** on every AUR install/upgrade — it reads the PKGBUILD with Claude (plus offline static rules) and only hands off to the real `/usr/bin/yay` on a CLEAN verdict |
+| `aurscan` | [musqz/aurscan](https://github.com/musqz/aurscan) (fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan)) | LLM-based PKGBUILD scanner using Claude. Run manually before installing (`aurscan <pkg>`) — reads the PKGBUILD with Claude (plus offline static rules) and only proceed to install on a CLEAN verdict |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — runs on every install/upgrade *after* aurscan clears it: upgrade-age warning (`UpgradeSelect`), offline malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
 | `yad` | official repos | GTK dialog toolkit used by `archcanary-gui` |
 | `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
@@ -66,18 +66,17 @@ traur — two use cases:
     note: pre-install scan of a specific package requires the terminal —
           the GUI has no package name input
 
-every AUR install / upgrade (automatic — `alias yay=syay`)
-    └── syay  (aurscan wrapper)
+pre-install (manual — run before each yay install/upgrade)
+    └── aurscan <pkg>  (or aurscan --update-check for pending upgrades)
             ├── offline static rules  — known campaign signatures
             ├── Claude LLM reads the PKGBUILD — novel / obfuscated patterns
-            └── on CLEAN → hands off to /usr/bin/yay
+            └── on suspicious → blocks; on CLEAN → run yay normally
                     └── yay 13.0 init.lua hooks (~/.config/yay/init.lua)
                             ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
                             ├── AURPreInstall  — abort on malicious patterns
                             │                    (npm atomic-lockfile, bun js-digest,
                             │                     curl|bash / wget|sh download-exec)
                             └── PostInstall    — log AUR installs (name + version)
-            └── on suspicious → aurscan blocks the build, yay never runs
 
 standalone aurscan (manual — audit without installing)
     ├── aurscan <pkg>            — scan a single package
@@ -152,7 +151,7 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── init.lua                      # Lua hooks (age warning, pattern block, install log)
     └── config.json                   # yay config — "version": "13.0.0", editmenu off (aurscan owns review)
 
-/usr/local/bin/aurscan                # = syay; alias yay=syay in ~/.bashrc
+/usr/local/bin/aurscan                # manual pre-install scanner
 
 ~/.config/systemd/user/                   # installed by ./install.sh --system
     ├── archcanary-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
@@ -194,15 +193,13 @@ sudo pacman -S libnotify bpf yad polkit
 yay -S traur
 
 # aurscan — GitHub only, no AUR package
-# clone the fork, install as syay, then alias yay to it
 git clone https://github.com/musqz/aurscan.git ~/Github/aurscan
 cd ~/Github/aurscan && ./install.sh
-echo 'alias yay=syay' >> ~/.bashrc
 ```
 
 ## yay 13.0 integration
 
-yay 13.0 added a Lua config (`~/.config/yay/init.lua`) — a ready-to-copy version lives in this repo at [`configs/yay-init.lua`](../configs/yay-init.lua). The aurscan wrapper (`syay`) runs *first* — it reads the PKGBUILD with Claude and applies offline static rules, aborting the build on a suspicious verdict. Only on CLEAN does it call the real `/usr/bin/yay`, which then runs these hooks:
+yay 13.0 added a Lua config (`~/.config/yay/init.lua`) — seeded automatically to `~/.config/yay/init.lua` by `install.sh` if not already present (source: [`configs/yay-init.lua`](../configs/yay-init.lua)). Run `aurscan <pkg>` before installing — it reads the PKGBUILD with Claude and applies offline static rules, aborting on a suspicious verdict. Once cleared, `yay` runs normally and these hooks fire:
 
 | Hook | Event | What it does |
 |------|-------|--------------|
@@ -210,7 +207,7 @@ yay 13.0 added a Lua config (`~/.config/yay/init.lua`) — a ready-to-copy versi
 | Pattern block | `AURPreInstall` | Aborts the build if the PKGBUILD matches a known-malicious pattern: `npm install atomic-lockfile` (Atomic Arch wave 1), `bun install js-digest` (wave 2), or `curl`/`wget` piped to `bash`/`sh` |
 | Install log | `PostInstall` | Logs every installed AUR package (name + version) via `yay.log.info` |
 
-Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and **`edit_menu = false`** — PKGBUILD review is delegated to aurscan, so yay's own edit prompt is disabled to avoid a redundant second review. `config.json` mirrors this (`"editmenu": false`).
+Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and **`edit_menu = true`** — keeping yay's edit prompt active since aurscan is now a manual pre-install step rather than an intercepting wrapper. `config.json` mirrors the rest of the options.
 
 > The two layers are complementary: aurscan/Claude catches novel or obfuscated payloads; the Lua hooks are a fast offline backstop for known campaign signatures and stale-rewrite upgrades, and run even if the LLM call is unavailable.
 
@@ -232,21 +229,17 @@ git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 sudo pacman -S libnotify bpf yad polkit
 yay -S traur
 
-# aurscan — GitHub only, no AUR package (fork installs as syay)
+# aurscan — GitHub only, no AUR package
 git clone https://github.com/musqz/aurscan.git ~/Github/aurscan
 cd ~/Github/aurscan && ./install.sh
-echo 'alias yay=syay' >> ~/.bashrc
 
 # 3. Run install script (installs to ~/.local/bin by default)
+#    Also seeds ~/.config/yay/init.lua if not already present
 bash ~/Github/archcanary/install.sh
 
 # Also install root helper + polkit policy (enables eBPF/kmod checks in the GUI)
 bash ~/Github/archcanary/install.sh --system
 
-# 4. yay 13.0 Lua hooks (age warning, pattern block, install log)
-mkdir -p ~/.config/yay
-cp ~/Github/archcanary/configs/yay-init.lua ~/.config/yay/init.lua
-
-# 5. Run a first scan with package list refresh
+# 4. Run a first scan with package list refresh
 archcanary --refresh --full --all-time
 ```

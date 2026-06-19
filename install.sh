@@ -147,6 +147,16 @@ for f in package_list.txt malicious_npm_packages.txt; do
     fi
 done
 
+# Seed yay Lua hooks if not already present
+YAY_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/yay"
+if [[ ! -f "$YAY_CONFIG_DIR/init.lua" ]]; then
+    mkdir -p "$YAY_CONFIG_DIR"
+    cp "$REPO_DIR/configs/yay-init.lua" "$YAY_CONFIG_DIR/init.lua"
+    echo "  seeded:    $YAY_CONFIG_DIR/init.lua"
+else
+    echo "  kept:      $YAY_CONFIG_DIR/init.lua (already exists)"
+fi
+
 # The DKMS allowlist is a single system-wide file at /etc/archcanary/
 # (the kmod audit only runs as root). It is seeded by --system below, not here.
 
