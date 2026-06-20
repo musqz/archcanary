@@ -2,9 +2,11 @@
 
 [![Release](https://img.shields.io/github/v/release/musqz/archcanary?sort=semver)](https://github.com/musqz/archcanary/releases)
 
-> **BETA — under heavy development.** Expect breaking changes, rough edges, and incomplete docs. Designed and tested on Mabox Linux (Arch-based, Openbox). Use on other Arch derivatives at your own risk.
+> **BETA — under heavy development.** Expect breaking changes, rough edges, and incomplete docs.
+> Designed and tested on Mabox Linux (Arch-based, Openbox). Use on other Arch derivatives at your own risk.
 
-> **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything. Remediation is left to you. The only writes are its own logs and config lists. `install.sh`, `--refresh`, and the DKMS allowlist editor are the exceptions — all explicit.
+> **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything.
+> Remediation is left to you. The only writes are its own logs and config lists. `install.sh`, `--refresh`, and the DKMS allowlist editor are the exceptions — all explicit.
 
 > **Developed with Claude AI (Anthropic).** All AI-assisted code and documentation is reviewed by the developer before commit. Treat all detections as advisory, not authoritative.
 
@@ -14,7 +16,10 @@
 
 archcanary is a layered security detection stack for Arch Linux — scanning for malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering, library injection, and more.
 
-It started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) under the name **aur-malware-check**, originally focused on the June 2026 AUR supply-chain attack. As the tool grew to cover a much broader set of system checks — integrating a GUI frontend, automated systemd timers, and multiple detection layers — the scope outgrew the original name. [aurscan](https://github.com/musqz/aurscan), an LLM-based PKGBUILD scanner, is an optional add-on; archcanary works fully without it. It was renamed **archcanary** to reflect what it has become: a multi-tool for a complete Arch system security check.
+It started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) under the name **aur-malware-check**, originally focused on the June 2026 AUR supply-chain attack. 
+As the tool grew to cover a much broader set of system checks — integrating a GUI frontend, automated systemd timers, and multiple detection layers — the scope outgrew the original name. 
+
+[aurscan](https://github.com/musqz/aurscan), an LLM-based PKGBUILD scanner, is an optional add-on; archcanary works fully without it. It was renamed **archcanary** to reflect what it has become: a multi-tool for a complete Arch system security check.
 
 The adaptations to the original are extensive enough that this is effectively a new tool that shares its roots with lenucksi/aur-malware-check rather than a simple patch set on top of it.
 
