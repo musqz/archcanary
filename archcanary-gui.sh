@@ -457,18 +457,13 @@ run_action() {
             return 0
         fi
 
-        # Sentinel: wait for pkexec to finish, give tee 0.5 s to flush its
-        # buffer to tmpout, then append the done marker so tail exits cleanly.
-        # (Without this, tail --pid stops at pkexec exit before tee flushes,
-        # causing the output window to show only the first few checks.)
-        { wait "$pkexec_pid" 2>/dev/null || true
-          sleep 0.5
-          printf '\n─── done ───\n' >> "$tmpout"; } &
-        local sentinel_pid=$!
-
-        # Output window streams live; tail -f stays open until sentinel fires.
-        # When user clicks Close, yad exits → pipe breaks → tail exits.
-        tail -f -n +1 "$tmpout" 2>/dev/null \
+        # Stream output live. tail --pid exits when pkexec finishes; the done
+        # marker is printed; then sleep infinity holds the write end of the pipe
+        # open so yad stays alive until the user clicks Close. When Close is
+        # clicked, yad exits → SIGPIPE → sleep exits → subshell exits.
+        (tail --pid="$pkexec_pid" -f -n +1 "$tmpout" 2>/dev/null
+         printf '\n─── done ───\n'
+         sleep infinity 2>/dev/null) \
             | yad --text-info \
                 --title="$label — Archcanary" \
                 --window-icon=security-high \
@@ -479,7 +474,6 @@ run_action() {
 
         local scan_exit=0
         wait "$pkexec_pid" 2>/dev/null || scan_exit=$?
-        wait "$sentinel_pid" 2>/dev/null || true
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit" "$tmpout"; fi
         rm -f "$tmpout"
