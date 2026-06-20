@@ -65,27 +65,25 @@ HAS_AURSCAN=false
 # Action data — order here is the canonical index used by run_action
 LABELS=(
     "Refresh + full scan"       # 0  root
-    "Refresh package list"      # 1
-    "Systemd persistence"       # 2
-    "npm cache"                 # 3
-    "bun cache"                 # 4
-    "yarn cache"                # 5
-    "pnpm cache"                # 6
-    "PKGBUILD / .install files" # 7
-    "ld.so.preload injection"   # 8
-    "XDG autostart + shell RCs" # 9
-    "eBPF rootkit traces"       # 10 root
-    "eBPF programs – bpftool"   # 11 root
-    "Kernel modules"            # 12 root
-    "Edit DKMS allowlist"       # 13
-    "Trust scan (traur)"        # 14
-    "LLM settings (aurscan)"   # 15
-    "Extra lists"               # 16
+    "Systemd persistence"       # 1
+    "npm cache"                 # 2
+    "bun cache"                 # 3
+    "yarn cache"                # 4
+    "pnpm cache"                # 5
+    "PKGBUILD / .install files" # 6
+    "ld.so.preload injection"   # 7
+    "XDG autostart + shell RCs" # 8
+    "eBPF rootkit traces"       # 9  root
+    "eBPF programs – bpftool"   # 10 root
+    "Kernel modules"            # 11 root
+    "Edit DKMS allowlist"       # 12
+    "Trust scan (traur)"        # 13
+    "LLM settings (aurscan)"   # 14
+    "Extra lists"               # 15
 )
 
 FLAGS=(
     "--refresh --full --no-notify"
-    "--refresh --no-notify"
     "--check-systemd --no-notify"
     "--check-npm-cache --no-notify"
     "--check-bun-cache --no-notify"
@@ -104,20 +102,19 @@ FLAGS=(
 )
 
 NEEDS_ROOT=(
-    true false false false false false false false false false
+    true false false false false false false false false
     true true true
     false false false false
 )
 
 # Per-session status for each check index.
-# Indices without a meaningful pass/fail (refresh, dkms) stay blank.
+# Indices without a meaningful pass/fail (dkms, dialogs) stay blank.
 declare -A STATUS
 for _i in "${!LABELS[@]}"; do STATUS[$_i]="  ?"; done
-STATUS[1]="   "   # Refresh package list — no scan verdict
-STATUS[13]="   "  # Edit DKMS allowlist
-STATUS[14]="   "  # traur — opens its own output window, no verdict here
-STATUS[15]="   "  # aurscan settings — config dialog, no scan verdict
-STATUS[16]="   "  # extra lists — config dialog, no scan verdict
+STATUS[12]="   "  # Edit DKMS allowlist
+STATUS[13]="   "  # traur — opens its own output window, no verdict here
+STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
+STATUS[15]="   "  # extra lists — config dialog, no scan verdict
 unset _i
 
 _update_status() {
@@ -131,8 +128,8 @@ _update_status() {
 
 # Map each GUI check row to its section number in the scan output ("--- [N] ---").
 declare -A _SCAN_TAG=(
-    [2]='3'  [3]='5'  [4]='6'  [5]='6b' [6]='6c'
-    [7]='7'  [8]='9'  [9]='10' [10]='4' [11]='8' [12]='11'
+    [1]='3'  [2]='5'  [3]='6'  [4]='6b' [5]='6c'
+    [6]='7'  [7]='9'  [8]='10' [9]='4'  [10]='8' [11]='11'
 )
 
 # After a full scan (idx 0), set each check row from ITS OWN section in the
@@ -140,7 +137,7 @@ declare -A _SCAN_TAG=(
 # whole list. $1 = overall exit code (fallback), $2 = scan output file.
 _propagate_full_scan() {
     local code=$1 out="${2:-}" i tag block
-    for i in 2 3 4 5 6 7 8 9 10 11 12; do
+    for i in 1 2 3 4 5 6 7 8 9 10 11; do
         tag="${_SCAN_TAG[$i]:-}"
         block=""
         [[ -n "$out" && -r "$out" && -n "$tag" ]] && block=$(awk -v t="$tag" '
@@ -382,7 +379,7 @@ CONF
         yad --info \
             --title="Extra lists — Archcanary" \
             --window-icon=security-high \
-            --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Refresh package list</b> to fetch any new URLs." \
+            --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Refresh + full scan</b> to fetch any new URLs." \
             --width=420 \
             --button="OK:0" 2>/dev/null || true
     fi
@@ -504,19 +501,18 @@ build_list_args() {
     _row() { local i=$1; local lbl="${2:-${LABELS[$i]}}"; _out+=("${STATUS[$i]}" "$lbl"); }
 
     _row 0 "🔐  ${LABELS[0]}"
-    _row 1
 
     _sep "Standard checks"
-    for i in 2 3 4 5 6 7 8 9; do _row "$i"; done
+    for i in 1 2 3 4 5 6 7 8; do _row "$i"; done
 
     _sep "Root checks"
-    for i in 10 11 12; do _row "$i" "🔐  ${LABELS[$i]}"; done
+    for i in 9 10 11; do _row "$i" "🔐  ${LABELS[$i]}"; done
 
     _sep "Utilities"
-    _row 13
-    $HAS_TRAUR && _row 14
-    $HAS_AURSCAN && _row 15
-    _row 16
+    _row 12
+    $HAS_TRAUR && _row 13
+    $HAS_AURSCAN && _row 14
+    _row 15
 }
 
 # Main loop
