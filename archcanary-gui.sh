@@ -52,7 +52,6 @@ LABELS=(
     "Trust scan (traur)"        # 14
     "LLM settings (aurscan)"   # 15
     "Extra lists"               # 16
-    "ClamAV antivirus scan"    # 17
 )
 
 FLAGS=(
@@ -73,14 +72,12 @@ FLAGS=(
     "__traur__"
     "__aurscan_settings__"
     "__extra_lists__"
-    "--check-clamav --no-notify"
 )
 
 NEEDS_ROOT=(
     true false false false false false false false false false
     true true true
     false false false false
-    false
 )
 
 # Per-session status for each check index.
@@ -107,7 +104,6 @@ _update_status() {
 declare -A _SCAN_TAG=(
     [2]='3'  [3]='5'  [4]='6'  [5]='6b' [6]='6c'
     [7]='7'  [8]='9'  [9]='10' [10]='4' [11]='8' [12]='11'
-    [17]='12'
 )
 
 # After a full scan (idx 0), set each check row from ITS OWN section in the
@@ -115,7 +111,7 @@ declare -A _SCAN_TAG=(
 # whole list. $1 = overall exit code (fallback), $2 = scan output file.
 _propagate_full_scan() {
     local code=$1 out="${2:-}" i tag block
-    for i in 2 3 4 5 6 7 8 9 10 11 12 17; do
+    for i in 2 3 4 5 6 7 8 9 10 11 12; do
         tag="${_SCAN_TAG[$i]:-}"
         block=""
         [[ -n "$out" && -r "$out" && -n "$tag" ]] && block=$(awk -v t="$tag" '
@@ -492,7 +488,6 @@ build_list_args() {
     $HAS_TRAUR && _row 14
     $HAS_AURSCAN && _row 15
     _row 16
-    _row 17
 }
 
 # Main loop

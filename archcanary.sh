@@ -71,7 +71,6 @@ CHECK_BPFTOOL=false
 CHECK_LDSO=false
 CHECK_AUTOSTART=false
 CHECK_KMOD=false
-CHECK_CLAMAV=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
@@ -104,7 +103,6 @@ for arg in "$@"; do
         --check-ldso)       CHECK_LDSO=true ;;
         --check-autostart)  CHECK_AUTOSTART=true ;;
         --check-kmod)       CHECK_KMOD=true ;;
-        --check-clamav)     CHECK_CLAMAV=true ;;
         --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
@@ -132,8 +130,7 @@ for arg in "$@"; do
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links (needs root); flags stealth hook types"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
             echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
-            echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)
-  --check-clamav     Scan high-risk paths with ClamAV (requires clamav package)"
+            echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
@@ -426,7 +423,6 @@ run_doctor() {
                 "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
         fi
         _opt_dep "traur (heuristic scanner)" traur traur "279-signal pre-install scanner"
-        _opt_dep "clamscan (antivirus)"     clamscan clamav "ClamAV file scanner — sudo pacman -S clamav"
         _opt_item "yay init.lua hooks" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"
         printf '\n'
     fi
@@ -1614,68 +1610,6 @@ check_kmod() {
     return $found
 }
 
-check_clamav() {
-    if ! command -v clamscan &>/dev/null; then
-        echo "  ClamAV not installed."
-        echo "  → Install:        sudo pacman -S clamav"
-        echo "  → Init signatures: sudo freshclam"
-        echo "  → Enable updates:  sudo systemctl enable --now clamav-freshclam.service"
-        return 1
-    fi
-
-    # Require signature database before scanning.
-    local has_db=0
-    for _f in /var/lib/clamav/main.cvd /var/lib/clamav/main.cld; do
-        [[ -f "$_f" ]] && has_db=1 && break
-    done
-    unset _f
-    if [[ $has_db -eq 0 ]]; then
-        echo "  ClamAV signature database missing — run: sudo freshclam"
-        echo "  → Enable auto-updates: sudo systemctl enable --now clamav-freshclam.service"
-        return 1
-    fi
-
-    # Warn if daily signatures are stale (> 7 days old).
-    for _f in /var/lib/clamav/daily.cvd /var/lib/clamav/daily.cld; do
-        if [[ -f "$_f" ]]; then
-            local age_days=$(( ( $(date +%s) - $(stat -c %Y "$_f") ) / 86400 ))
-            if [[ $age_days -gt 7 ]]; then
-                echo "  WARNING: ClamAV signatures are ${age_days} days old — run: sudo freshclam"
-            fi
-            break
-        fi
-    done
-    unset _f
-
-    local scan_paths=()
-    for _p in "$HOME/.cache/yay" "$HOME/Downloads" "/tmp" "$HOME/.local/bin"; do
-        [[ -e "$_p" ]] && scan_paths+=("$_p")
-    done
-    unset _p
-
-    if [[ ${#scan_paths[@]} -eq 0 ]]; then
-        echo "  No scan paths found."
-        return 0
-    fi
-
-    local found_count=0
-    for p in "${scan_paths[@]}"; do
-        echo "  Scanning $p ..."
-        local infected
-        infected=$(clamscan -r -i --no-summary "$p" 2>/dev/null || true)
-        if [[ -n "$infected" ]]; then
-            echo "  WARNING: ClamAV detections in $p:"
-            while IFS= read -r line; do echo "    $line"; done <<< "$infected"
-            found_count=2
-        fi
-    done
-
-    if [[ $found_count -eq 0 ]]; then
-        echo "  Clean: no malware detected by ClamAV in scanned paths."
-    fi
-    return $found_count
-}
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1849,13 +1783,6 @@ if $CHECK_KMOD; then
     echo "--- [11] Kernel module / DKMS audit ---"
     check_kmod && ret=$? || ret=$?
     _apply_ret "$ret" kmod
-    echo
-fi
-
-if $CHECK_CLAMAV; then
-    echo "--- [12] ClamAV antivirus scan ---"
-    check_clamav && ret=$? || ret=$?
-    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     echo
 fi
 
