@@ -495,6 +495,13 @@ if [[ $EUID -eq 0 ]]; then
     unset _invoker_home
 fi
 
+# When running under sudo, chown a written file back to the invoking user so
+# that user-space config files are not left owned by root.
+_chown_to_invoker() {
+    [[ $EUID -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]] \
+        && chown "$SUDO_USER" "$1" 2>/dev/null || true
+}
+
 # systemd *system* services (and some cron contexts) start with no $HOME, which
 # would make the ${XDG_*:-$HOME/...} fallbacks below fatal under `set -u`.
 # Default it to the running user's home (root → /root for the system scan).
@@ -627,6 +634,7 @@ load_packages() {
         # Update compromised packages list
         echo "Updating $PACKAGE_LIST_FILE..."
         printf "%s\n" "${INFECTED_PKGS[@]}" >"$PACKAGE_LIST_FILE"
+        _chown_to_invoker "$PACKAGE_LIST_FILE"
 
         # Refresh supplementary lists from the repo (non-fatal on failure)
         _refresh_list() {
@@ -645,6 +653,7 @@ load_packages() {
                 return
             fi
             printf '%s\n' "$tmp" > "$dest"
+            _chown_to_invoker "$dest"
             echo "Updated $dest ($n entries)"
         }
         _refresh_list "$MALICIOUS_NPM_LIST_URL"  "$MALICIOUS_NPM_LIST"  "malicious npm list"   "$MALICIOUS_NPM_LIST_OPT"
