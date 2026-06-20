@@ -25,6 +25,24 @@ if [[ "${1:-}" == "--no-gui" ]]; then
     exec "$MAIN_SCRIPT" --full --no-notify "${@:2}"
 fi
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    echo "Usage: archcanary-gui [--no-gui [OPTIONS]]"
+    echo
+    echo "Without arguments: open the interactive GUI (yad). Run as your regular user."
+    echo "Root-requiring checks are elevated via pkexec (polkit) — do not use sudo."
+    echo
+    echo "  --no-gui [OPTIONS]  Skip the GUI; run a full terminal scan instead."
+    echo "                      Passes --full --no-notify plus any extra OPTIONS to archcanary."
+    echo "                      Run with sudo to include root-requiring checks:"
+    echo "                        sudo archcanary-gui --no-gui --refresh --full --all-time"
+    echo
+    echo "  --help, -h          Show this help"
+    echo
+    echo "All other flags (--refresh, --full, --all-time, etc.) are archcanary flags"
+    echo "and are only meaningful after --no-gui. Run 'archcanary --help' for the full list."
+    exit 0
+fi
+
 if [[ $EUID -eq 0 ]]; then
     echo "ERROR: do not run archcanary-gui as root or with sudo." >&2
     echo "Run it as your regular user — root checks are handled via pkexec (polkit)." >&2
