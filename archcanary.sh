@@ -186,6 +186,8 @@ run_doctor() {
     cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
     user_bin="$HOME/.local/bin"
     user_sd="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    local system_installed=false
+    [[ -f /usr/lib/archcanary/archcanary.sh ]] && system_installed=true
 
     # The repo-relative fix sources only exist when run from a clone; degrade
     # gracefully to a hint when run from an installed copy.
@@ -384,9 +386,11 @@ run_doctor() {
     # --- User install ------------------------------------------------------
     if [[ -n ${want[user]:-} ]]; then
         printf '%sUser install%s\n' "$B" "$N"
-        _item "main scanner (~/.local/bin)" "$(_file "$user_bin/archcanary")" "bash $installer"           "path: $user_bin/archcanary"
-        _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui")"   "bash $installer"           "path: $user_bin/archcanary-gui"
-        _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")"      "archcanary --refresh" "path: $cfg_dir/package_list.txt"
+        if ! $system_installed; then
+            _item "main scanner (~/.local/bin)" "$(_file "$user_bin/archcanary")"    "bash $installer" "path: $user_bin/archcanary"
+            _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui")" "bash $installer" "path: $user_bin/archcanary-gui"
+        fi
+        _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")" "archcanary --refresh" "path: $cfg_dir/package_list.txt"
         printf '\n'
     fi
 
