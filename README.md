@@ -21,10 +21,6 @@ As the tool grew to cover a much broader set of system checks — integrating a 
 
 [aurscan](https://github.com/musqz/aurscan), an LLM-based PKGBUILD scanner, is an optional add-on; archcanary works fully without it. 
 
-It was renamed **archcanary** to reflect what it has become: a multi-tool for a complete Arch system security check.
-
-The adaptations to the original are extensive enough that this is effectively a new tool that shares its roots with lenucksi/aur-malware-check rather than a simple patch set on top of it.
-
 ---
 
 ## Screenshots
