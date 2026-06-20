@@ -6,7 +6,8 @@ set -euo pipefail
 #   Usage: ./install.sh [--system] [bin-dir]
 #          ./install.sh uninstall [--system]
 #
-#   --system  also install the pkexec root helper + polkit policy (requires sudo)
+#   (no flag)  user install  → ~/.local/bin  (removes /usr/local/bin copies)
+#   --system   system install → /usr/local/bin (sudo; removes ~/.local/bin copies)
 # ---------------------------------------------------------------------------
 
 if [[ $EUID -eq 0 ]]; then
@@ -38,13 +39,15 @@ for arg in "$@"; do
     esac
 done
 
-BIN_DIR="${DEFAULT_BIN}"
+USER_BIN="${DEFAULT_BIN}"
 for arg in "$@"; do
     case "$arg" in
         uninstall|--system) ;;
-        *) BIN_DIR="$arg" ;;
+        *) USER_BIN="$arg" ;;
     esac
 done
+SYSTEM_BIN="/usr/local/bin"
+if $SYSTEM; then BIN_DIR="$SYSTEM_BIN"; else BIN_DIR="$USER_BIN"; fi
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
 
 if $UNINSTALL; then
@@ -54,12 +57,22 @@ if $UNINSTALL; then
 
     removed=0
     for f in archcanary archcanary-gui; do
-        if [[ -f "$BIN_DIR/$f" ]]; then
-            rm "$BIN_DIR/$f"
-            echo "  removed: $BIN_DIR/$f"
-            removed=$((removed + 1))
+        if $SYSTEM; then
+            if [[ -f "$BIN_DIR/$f" ]]; then
+                sudo rm -f "$BIN_DIR/$f"
+                echo "  removed: $BIN_DIR/$f"
+                removed=$((removed + 1))
+            else
+                echo "  not found: $BIN_DIR/$f"
+            fi
         else
-            echo "  not found: $BIN_DIR/$f"
+            if [[ -f "$BIN_DIR/$f" ]]; then
+                rm "$BIN_DIR/$f"
+                echo "  removed: $BIN_DIR/$f"
+                removed=$((removed + 1))
+            else
+                echo "  not found: $BIN_DIR/$f"
+            fi
         fi
     done
 
@@ -118,18 +131,35 @@ echo "Installing to: $BIN_DIR"
 echo "Config dir:    $CONFIG_DIR"
 echo
 
-# Create dirs
-mkdir -p "$BIN_DIR" "$CONFIG_DIR"
+mkdir -p "$CONFIG_DIR"
 
-# Install main script
-cp "$REPO_DIR/archcanary.sh" "$BIN_DIR/archcanary"
-chmod +x "$BIN_DIR/archcanary"
-echo "  installed: $BIN_DIR/archcanary"
-
-# Install GUI script
-cp "$REPO_DIR/archcanary-gui.sh" "$BIN_DIR/archcanary-gui"
-chmod +x "$BIN_DIR/archcanary-gui"
-echo "  installed: $BIN_DIR/archcanary-gui"
+# Install binaries — system install goes to /usr/local/bin (sudo),
+# user install goes to ~/.local/bin. Clean up the other location to avoid
+# two competing versions on PATH.
+if $SYSTEM; then
+    sudo install -m 755 "$REPO_DIR/archcanary.sh"    "$SYSTEM_BIN/archcanary"
+    sudo install -m 755 "$REPO_DIR/archcanary-gui.sh" "$SYSTEM_BIN/archcanary-gui"
+    echo "  installed: $SYSTEM_BIN/archcanary"
+    echo "  installed: $SYSTEM_BIN/archcanary-gui"
+    for f in archcanary archcanary-gui; do
+        if [[ -f "$USER_BIN/$f" ]]; then
+            rm -f "$USER_BIN/$f"
+            echo "  removed:   $USER_BIN/$f (superseded by system install)"
+        fi
+    done
+else
+    mkdir -p "$USER_BIN"
+    install -m 755 "$REPO_DIR/archcanary.sh"    "$USER_BIN/archcanary"
+    install -m 755 "$REPO_DIR/archcanary-gui.sh" "$USER_BIN/archcanary-gui"
+    echo "  installed: $USER_BIN/archcanary"
+    echo "  installed: $USER_BIN/archcanary-gui"
+    for f in archcanary archcanary-gui; do
+        if [[ -f "$SYSTEM_BIN/$f" ]]; then
+            sudo rm -f "$SYSTEM_BIN/$f"
+            echo "  removed:   $SYSTEM_BIN/$f (superseded by user install)"
+        fi
+    done
+fi
 
 # Install desktop entry
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
@@ -265,10 +295,10 @@ fi
 echo
 echo "Done. Run: archcanary --refresh --full --all-time"
 
-# Warn if BIN_DIR is not in PATH
-if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+# Warn if the install dir is not in PATH (only relevant for user install)
+if ! $SYSTEM && [[ ":$PATH:" != *":$USER_BIN:"* ]]; then
     echo
-    echo "WARNING: $BIN_DIR is not in your PATH."
+    echo "WARNING: $USER_BIN is not in your PATH."
     echo "Add this to your shell profile:"
-    echo "  export PATH=\"\$PATH:$BIN_DIR\""
+    echo "  export PATH=\"\$PATH:$USER_BIN\""
 fi
