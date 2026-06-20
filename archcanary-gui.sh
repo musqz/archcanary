@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $EUID -eq 0 ]]; then
-    echo "ERROR: do not run archcanary-gui as root or with sudo." >&2
-    echo "Run it as your regular user — root checks are handled via pkexec (polkit)." >&2
-    exit 1
-fi
-
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 MAIN_SCRIPT=""
 
@@ -29,6 +23,12 @@ fi
 # --no-gui: bypass yad, run a full scan in the terminal with structured output.
 if [[ "${1:-}" == "--no-gui" ]]; then
     exec "$MAIN_SCRIPT" --full --no-notify "${@:2}"
+fi
+
+if [[ $EUID -eq 0 ]]; then
+    echo "ERROR: do not run archcanary-gui as root or with sudo." >&2
+    echo "Run it as your regular user — root checks are handled via pkexec (polkit)." >&2
+    exit 1
 fi
 
 ROOT_HELPER="/usr/lib/archcanary/root-helper"
