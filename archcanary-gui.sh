@@ -457,23 +457,31 @@ run_action() {
             return 0
         fi
 
-        # Stream output live. tail --pid exits when pkexec finishes; the done
-        # marker is printed; then sleep infinity holds the write end of the pipe
-        # open so yad stays alive until the user clicks Close. When Close is
-        # clicked, yad exits → SIGPIPE → sleep exits → subshell exits.
-        (tail --pid="$pkexec_pid" -f -n +1 "$tmpout" 2>/dev/null
-         printf '\n─── done ───\n'
-         sleep infinity 2>/dev/null) \
-            | yad --text-info \
-                --title="$label — Archcanary" \
-                --window-icon=security-high \
-                --width=1000 --height=660 \
-                --fontname="Monospace 10" \
-                --wrap --tail --editable \
-                --button="Close:0" 2>/dev/null || true
+        # Use a FIFO so yad stays alive until the user clicks Close.
+        # We hold the write end (fd 8) open ourselves; yad never sees EOF until
+        # we close it, which we only do after wait returns (user closed the window).
+        local fifo
+        fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
+        mkfifo "$fifo"
+        yad --text-info \
+            --title="$label — Archcanary" \
+            --window-icon=security-high \
+            --width=1000 --height=660 \
+            --fontname="Monospace 10" \
+            --wrap --tail --editable \
+            --button="Close:0" \
+            < "$fifo" 2>/dev/null &
+        local yad_pid=$!
+        exec 8>"$fifo"
+        rm -f "$fifo"
 
+        tail --pid="$pkexec_pid" -f -n +1 "$tmpout" >&8 2>/dev/null || true
         local scan_exit=0
         wait "$pkexec_pid" 2>/dev/null || scan_exit=$?
+        printf '\n─── done ───\n' >&8
+
+        wait "$yad_pid" 2>/dev/null || true
+        exec 8>&-
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit" "$tmpout"; fi
         rm -f "$tmpout"
