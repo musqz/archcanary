@@ -484,9 +484,17 @@ run_action() {
         exec 8>"$fifo"
         rm -f "$fifo"
 
-        tail --pid="$pkexec_pid" -f -n +1 "$tmpout" >&8 2>/dev/null || true
+        # tail -f (no --pid) avoids the race where tail exits as pkexec exits,
+        # dropping content that was written just before pkexec closed its stdout.
+        tail -f -n +1 "$tmpout" >&8 2>/dev/null &
+        local tail_pid=$!
         local scan_exit=0
         wait "$pkexec_pid" 2>/dev/null || scan_exit=$?
+        # pkexec done — give tail ~300 ms to flush any final bytes to the FIFO,
+        # then stop it before writing the sentinel so it doesn't race the marker.
+        sleep 0.3
+        kill "$tail_pid" 2>/dev/null || true
+        wait "$tail_pid" 2>/dev/null || true
         printf '\n─── done ───\n' >&8
 
         wait "$yad_pid" 2>/dev/null || true
