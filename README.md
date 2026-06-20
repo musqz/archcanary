@@ -104,6 +104,33 @@ archcanary --refresh --full --all-time
 
 # GUI frontend (requires yad)
 archcanary-gui
+
+# Full scan in terminal — no GUI, structured summary output
+archcanary-gui --no-gui
+```
+
+Every scan prints a per-check summary before the final verdict:
+
+```
+ Check summary
+ ───────────────────────────────────────────────────────
+ Package list (1943 pkgs)            ✅  clean
+ pacman.log history                  ✅  clean
+ Systemd persistence                 ✅  clean
+ eBPF rootkit traces                 ✅  clean
+ npm cache                           ✅  clean
+ bun cache                           ✅  clean
+ yarn cache                          ✅  clean
+ pnpm cache                          ✅  clean
+ PKGBUILD obfuscation scan           ✅  clean
+ eBPF programs (bpftool)             ⚠   skipped (needs root)
+ ld.so.preload injection             ✅  clean
+ XDG autostart + shell RCs           ✅  clean
+ Kernel modules (DKMS)               ⚠   skipped (needs root)
+ ───────────────────────────────────────────────────────
+============================================================
+ RESULT: CLEAN - No indicators found.
+============================================================
 ```
 
 ---

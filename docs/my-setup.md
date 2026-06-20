@@ -9,8 +9,8 @@ Full overview of how this fork is deployed and how the pieces connect.
 
 | Component | Package / Source | Purpose |
 |-----------|-----------------|---------|
-| `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (fork of [lenucksi/archcanary](https://github.com/lenucksi/archcanary)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit |
-| `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window |
+| `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
+| `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window. `--no-gui` bypasses yad and runs a full scan in the terminal with the structured summary. |
 | `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Pre-install trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes) |
 | `aurscan` | [musqz/aurscan](https://github.com/musqz/aurscan) (fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan)) | LLM-based PKGBUILD scanner using Claude. Run manually before installing (`aurscan <pkg>`) — reads the PKGBUILD with Claude (plus offline static rules) and only proceed to install on a CLEAN verdict. Requires the `claude` CLI (`@anthropic-ai/claude-code`) as its LLM backend |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — runs on every install/upgrade *after* aurscan clears it: upgrade-age warning (`UpgradeSelect`), offline malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
@@ -113,6 +113,11 @@ archcanary --check-pkgbuild
 
 # A single root-requiring check:
 sudo ~/.local/bin/archcanary --check-kmod
+
+# Full scan without the GUI — terminal output with structured summary table.
+# Extra flags pass through (e.g. --all-time, --refresh).
+archcanary-gui --no-gui
+archcanary-gui --no-gui --all-time
 
 # Setup health check — is every element installed and configured? (no root,
 # no scan; auto-detects distro/AUR helpers and prints a fix command per gap).
