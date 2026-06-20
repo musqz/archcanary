@@ -325,12 +325,12 @@ GUIDE
         --button="OK:0" 2>/dev/null || true
 }
 
-# Stream infile through Claude and show the response in a yad window.
 # Run a command, stream output live to a text-info window, return its exit code.
 show_output() {
     local title="$1" scan_exit=0
     shift
-    local fifo yad_pid
+    local tmpout fifo yad_pid
+    tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
     fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
     mkfifo "$fifo"
 
@@ -346,13 +346,19 @@ show_output() {
     exec 8>"$fifo"
     rm -f "$fifo"
 
-    "$@" >&8 2>&1 &
+    "$@" > "$tmpout" 2>&1 &
     local scan_pid=$!
+    tail -f -n +1 "$tmpout" >&8 2>/dev/null &
+    local tail_pid=$!
     wait "$scan_pid" && scan_exit=0 || scan_exit=$?
+    sleep 0.3
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
     printf '\n─── done ───\n' >&8
 
     wait "$yad_pid" 2>/dev/null || true
     exec 8>&-
+    rm -f "$tmpout"
     return $scan_exit
 }
 
@@ -453,7 +459,7 @@ run_action() {
                 --width=440 2>/dev/null || true
             return
         fi
-        local tmpout pkexec_exit=0
+        local tmpout pkexec_exit=0 pkexec_done=false
         tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
 
         # Background pkexec: polkit dialog is the only window during auth
@@ -466,8 +472,14 @@ run_action() {
             sleep 0.1
         done
 
-        if [[ ! -s "$tmpout" ]]; then
+        # If pkexec already exited (fast check), reap it now so all writes are
+        # guaranteed flushed to tmpout before we inspect the file.
+        if ! kill -0 "$pkexec_pid" 2>/dev/null; then
             wait "$pkexec_pid" 2>/dev/null || pkexec_exit=$?
+            pkexec_done=true
+        fi
+
+        if [[ ! -s "$tmpout" ]]; then
             rm -f "$tmpout"
             [[ $pkexec_exit -ne 0 && $pkexec_exit -ne 126 ]] && \
                 yad --error --title="Archcanary" \
@@ -499,8 +511,10 @@ run_action() {
         # dropping content that was written just before pkexec closed its stdout.
         tail -f -n +1 "$tmpout" >&8 2>/dev/null &
         local tail_pid=$!
-        local scan_exit=0
-        wait "$pkexec_pid" 2>/dev/null || scan_exit=$?
+        local scan_exit=$pkexec_exit
+        if ! $pkexec_done; then
+            wait "$pkexec_pid" 2>/dev/null || scan_exit=$?
+        fi
         # pkexec done — give tail ~300 ms to flush any final bytes to the FIFO,
         # then stop it before writing the sentinel so it doesn't race the marker.
         sleep 0.3
