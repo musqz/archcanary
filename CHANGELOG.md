@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.1.4 (2026-06-20)
+
+- Fix: `archcanary-gui` now rejects `sudo`/root invocation with a clear error;
+  root checks are handled via pkexec (polkit). `--no-gui` mode is exempt since
+  it runs a terminal scan where root is legitimate.
+- Fix: root output window (pkexec scans) no longer auto-closes when the scan
+  finishes; it stays open until the user clicks Close. Implemented via a named
+  FIFO — the write end is held open until `wait` returns, preventing yad from
+  seeing EOF prematurely.
+- Fix: closing the root output window no longer exits the entire GUI. Previous
+  `sleep infinity` approach blocked bash indefinitely; replaced with FIFO.
+- New: `--no-summary` flag suppresses the check summary table at the end of a
+  scan. Passed automatically by the GUI (the status column already shows
+  per-check results). CLI and `--no-gui` are unaffected.
+- Refactor: removed standalone "Refresh package list" action from the GUI.
+  Users always start with "Refresh + full scan"; a bare refresh row had no
+  real use case.
+- Fix: `--doctor` user-install section now correctly shows/hides `~/.local/bin`
+  entries based on whether `/usr/local/bin/archcanary` exists, not whether the
+  system lib dir exists (which persists after switching to a user install).
+- Fix: `--doctor` dependencies section is hidden when all four deps are present;
+  still shown when any is missing or when `--doctor=deps` is used.
+- Fix: `install.sh` now warns to run `hash -r` (or open a new terminal) when
+  switching between user and system installs, since bash caches the old path.
+- Docs: clarified `--doctor` labels — "system scanner copy" → "scanner script
+  (/usr/lib/archcanary)", "root-helper (pkexec)" → "root helper (enables root
+  checks in GUI)", "polkit policy" → "polkit policy (authorizes the root
+  helper)", "aurscan wrapper" → "aurscan (pre-install PKGBUILD scanner)",
+  "traur (heuristic scanner)" → "traur (pre-install behavioral scanner)",
+  "yay init.lua hooks" → "yay hooks (auto-scan on yay install)", "desktop
+  notifier (watches last-scan.log)" → "desktop notifier (alerts on new scan
+  results)".
+- New: `archcanary-gui --help` documents `--no-gui` usage, sudo rules, and
+  refers to `archcanary --help` for the full flag list.
+
 ## v0.1.3 (2026-06-18)
 
 - New: `--extra-list=PATH_OR_URL` — load an additional package list for a
