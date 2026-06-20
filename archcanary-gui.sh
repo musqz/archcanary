@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $EUID -eq 0 ]]; then
+    echo "ERROR: do not run archcanary-gui as root or with sudo." >&2
+    echo "Run it as your regular user — root checks are handled via pkexec (polkit)." >&2
+    exit 1
+fi
+
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 MAIN_SCRIPT=""
 
