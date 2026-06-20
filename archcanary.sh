@@ -404,10 +404,10 @@ run_doctor() {
     # --- System install (root) --------------------------------------------
     if [[ -n ${want[system]:-} ]]; then
         printf '%sSystem install (root)%s\n' "$B" "$N"
-        _item "system scanner copy" "$(_file /usr/lib/archcanary/archcanary.sh)"          "sudo bash $installer --system" "path: /usr/lib/archcanary/archcanary.sh"
-        _item "root-helper (pkexec)" "$(_file /usr/lib/archcanary/root-helper)"                  "sudo bash $installer --system" "path: /usr/lib/archcanary/root-helper"
-        _item "polkit policy"        "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "sudo bash $installer --system" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
-        _item "DKMS allowlist"       "$(_file /etc/archcanary/dkms_allowlist.conf)"              "sudo bash $installer --system" "path: /etc/archcanary/dkms_allowlist.conf"
+        _item "scanner script (/usr/lib/archcanary)"     "$(_file /usr/lib/archcanary/archcanary.sh)"          "sudo bash $installer --system" "path: /usr/lib/archcanary/archcanary.sh"
+        _item "root helper (enables root checks in GUI)" "$(_file /usr/lib/archcanary/root-helper)"           "sudo bash $installer --system" "path: /usr/lib/archcanary/root-helper"
+        _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "sudo bash $installer --system" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
+        _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "sudo bash $installer --system" "path: /etc/archcanary/dkms_allowlist.conf"
         printf '\n'
     fi
 
@@ -417,16 +417,16 @@ run_doctor() {
         # Checks enabled state (not just file presence) for the four units the
         # installer enables: two system, two user.
         _unit system "archcanary.timer"        "system scan timer (weekly + boot)"
-        _unit system "archcanary.path"         "pacman-tx trigger (scan after each install)"
+        _unit system "archcanary.path"         "post-install trigger (scan after each pacman transaction)"
         _unit user   "archcanary-user.timer"   "user scan timer (cache/autostart checks)"
-        _unit user   "archcanary-notify.path"  "desktop notifier (watches last-scan.log)"
+        _unit user   "archcanary-notify.path"  "desktop notifier (alerts on new scan results)"
         printf '\n'
     fi
 
     # --- Pre-install layer (external) -------------------------------------
     if [[ -n ${want[external]:-} ]]; then
         printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
-        _opt_item "aurscan wrapper" \
+        _opt_item "aurscan (pre-install PKGBUILD scanner)" \
             "$(command -v aurscan >/dev/null 2>&1 && echo 0 || echo 1)" \
             "" \
             "binary: $(command -v aurscan 2>/dev/null || echo 'not found — https://github.com/musqz/aurscan')"
@@ -436,8 +436,8 @@ run_doctor() {
                 "" \
                 "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
         fi
-        _opt_dep "traur (heuristic scanner)" traur traur "279-signal pre-install scanner"
-        _opt_item "yay init.lua hooks" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"
+        _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
+        _opt_item "yay hooks (auto-scan on yay install)" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"
         printf '\n'
     fi
 
