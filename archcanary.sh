@@ -373,14 +373,21 @@ run_doctor() {
 
     # --- Dependencies ------------------------------------------------------
     if [[ -n ${want[deps]:-} ]]; then
-        printf '%sDependencies (official repos)%s\n' "$B" "$N"
-        # yad is a GUI binary — never run it to probe a version (a bad arg opens
-        # a dialog); pass "" to skip the probe and just report path + pkg.
-        _dep "yad (GUI toolkit)"            yad         yad       "GTK dialog toolkit"          "sudo pacman -S yad"        ""
-        _dep "bpftool (eBPF enumeration)"  bpftool      bpf       "loaded-eBPF enumeration"     "sudo pacman -S bpf"        version
-        _dep "notify-send (desktop alerts)" notify-send libnotify "desktop notifications"       "sudo pacman -S libnotify"
-        _dep "pkexec (GUI root checks)"    pkexec       polkit    "GUI privilege escalation"    "sudo pacman -S polkit"
-        printf '\n'
+        local _deps_ok=true
+        for _dc in yad bpftool notify-send pkexec; do
+            command -v "$_dc" >/dev/null 2>&1 || { _deps_ok=false; break; }
+        done
+        unset _dc
+        if ! $_deps_ok || [[ $detail -eq 1 ]]; then
+            printf '%sDependencies (official repos)%s\n' "$B" "$N"
+            # yad is a GUI binary — never run it to probe a version (a bad arg opens
+            # a dialog); pass "" to skip the probe and just report path + pkg.
+            _dep "yad (GUI toolkit)"            yad         yad       "GTK dialog toolkit"          "sudo pacman -S yad"        ""
+            _dep "bpftool (eBPF enumeration)"  bpftool      bpf       "loaded-eBPF enumeration"     "sudo pacman -S bpf"        version
+            _dep "notify-send (desktop alerts)" notify-send libnotify "desktop notifications"       "sudo pacman -S libnotify"
+            _dep "pkexec (GUI root checks)"    pkexec       polkit    "GUI privilege escalation"    "sudo pacman -S polkit"
+            printf '\n'
+        fi
     fi
 
     # --- User install ------------------------------------------------------
