@@ -75,6 +75,7 @@ REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
 NO_NOTIFY=false
+NO_SUMMARY=false
 DOCTOR=false
 DOCTOR_SECTIONS=""
 
@@ -115,6 +116,7 @@ for arg in "$@"; do
         --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
         --all-time)              ALL_TIME=true ;;
         --no-notify)             NO_NOTIFY=true ;;
+        --no-summary)            NO_SUMMARY=true ;;
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
         --help|-h)
@@ -142,7 +144,8 @@ for arg in "$@"; do
   --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
             echo "  --all-time                Disable recency window — flag any installed infected"
             echo "                            package regardless of install date (for cross-campaign checks)"
-            echo "  --no-notify               Suppress the desktop notification on detection"
+            echo "  --no-notify               Suppress the desktop notification on detection
+  --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --doctor                  Report install/config status of every stack element"
             echo "                            (deps, install, systemd, aurscan, traur, yay hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
@@ -1846,7 +1849,7 @@ if [[ ${#SKIPPED_ROOT[@]} -gt 0 && $EXIT_CODE -lt 1 ]]; then
     EXIT_CODE=1
 fi
 
-_print_summary
+$NO_SUMMARY || _print_summary
 
 echo "============================================================"
 case $EXIT_CODE in
