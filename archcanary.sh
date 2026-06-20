@@ -71,6 +71,7 @@ CHECK_BPFTOOL=false
 CHECK_LDSO=false
 CHECK_AUTOSTART=false
 CHECK_KMOD=false
+CHECK_FULL=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 ALL_TIME=false
@@ -104,7 +105,7 @@ for arg in "$@"; do
         --check-ldso)       CHECK_LDSO=true ;;
         --check-autostart)  CHECK_AUTOSTART=true ;;
         --check-kmod)       CHECK_KMOD=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_FULL=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -167,6 +168,16 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Focused mode: a specific --check-* flag was given without --full.
+# Suppresses the campaign header and the always-on package/log checks so
+# each individual check window shows only the output it was asked for.
+FOCUSED_MODE=false
+if ! $CHECK_FULL && { $CHECK_SYSTEMD || $CHECK_EBPF || $CHECK_NPM_CACHE || \
+    $CHECK_BUN_CACHE || $CHECK_YARN_CACHE || $CHECK_PNPM_CACHE || $CHECK_PKGBUILD || \
+    $CHECK_BPFTOOL || $CHECK_LDSO || $CHECK_AUTOSTART || $CHECK_KMOD; }; then
+    FOCUSED_MODE=true
+fi
 
 # ---------------------------------------------------------------------------
 # Setup doctor
@@ -1753,63 +1764,65 @@ for p in "${INFECTED_PKGS[@]}"; do
     INFECTED_LOOKUP["$p"]=1
 done
 
-echo "============================================================"
-echo " Archcanary v${SCRIPT_VERSION}"
-echo " Campaign: malicious npm packages (malicious_npm_packages.txt) infostealer + eBPF rootkit"
-if $ALL_TIME; then
-    echo " Date window: all-time (no recency filter)"
-else
-    echo " Date window: ${START_DATE} to ${END_DATE}"
-fi
-echo " Packages checked: ${#INFECTED_PKGS[@]}"
-if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
+if ! $FOCUSED_MODE; then
+    echo "============================================================"
+    echo " Archcanary v${SCRIPT_VERSION}"
+    echo " Campaign: malicious npm packages (malicious_npm_packages.txt) infostealer + eBPF rootkit"
     if $ALL_TIME; then
-        echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, 2025 campaign — all-time)"
+        echo " Date window: all-time (no recency filter)"
     else
-        echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, window ${CHAOS_START_DATE} to ${CHAOS_END_DATE})"
+        echo " Date window: ${START_DATE} to ${END_DATE}"
     fi
-fi
-if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
-    echo "   (incl. ${#RUSSIAN_SPAM_PKGS[@]} Russian Spam Campaign pkgs, 2026-06-14)"
-fi
-if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
-    echo "   (incl. ${#EXTRA_PKGS[@]} extra pkgs from extra_lists.conf / --extra-list)"
-fi
-echo "============================================================"
-echo
+    echo " Packages checked: ${#INFECTED_PKGS[@]}"
+    if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
+        if $ALL_TIME; then
+            echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, 2025 campaign — all-time)"
+        else
+            echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, window ${CHAOS_START_DATE} to ${CHAOS_END_DATE})"
+        fi
+    fi
+    if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
+        echo "   (incl. ${#RUSSIAN_SPAM_PKGS[@]} Russian Spam Campaign pkgs, 2026-06-14)"
+    fi
+    if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
+        echo "   (incl. ${#EXTRA_PKGS[@]} extra pkgs from extra_lists.conf / --extra-list)"
+    fi
+    echo "============================================================"
+    echo
 
-log_info "Loaded ${#INFECTED_PKGS[@]} packages from $PACKAGE_LIST_FILE"
+    log_info "Loaded ${#INFECTED_PKGS[@]} packages from $PACKAGE_LIST_FILE"
 
-echo "--- [1] Currently installed foreign packages ---"
-log_info "Querying ${#INFECTED_PKGS[@]} packages via pacman -Qmq..."
-check_current && ret=$? || ret=$?
-[[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-_rec "Package list (${#INFECTED_PKGS[@]} pkgs)" "$ret"
-echo
+    echo "--- [1] Currently installed foreign packages ---"
+    log_info "Querying ${#INFECTED_PKGS[@]} packages via pacman -Qmq..."
+    check_current && ret=$? || ret=$?
+    [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "Package list (${#INFECTED_PKGS[@]} pkgs)" "$ret"
+    echo
 
-echo "--- [2] Historical pacman logs ---"
-_log_ret=0
-if [[ -f /var/log/pacman.log ]]; then
-    LOGS_TMP=$(mktemp)
-    CLEANUP_FILES+=("$LOGS_TMP")
-    check_logs 2>&1 | tee "$LOGS_TMP" || true
-    if grep -q 'LOG_HIT' "$LOGS_TMP" 2>/dev/null; then
-        echo "  WARNING: historical log matches (name-match against official compromised list):"
-        grep 'LOG_HIT' "$LOGS_TMP" | sed 's/LOG_HIT: /  - /'
-        echo "  NOTE: if the PKGBUILD looks clean now, the malicious commit may have been"
-        echo "  reverted — check AUR git history around the install date/time above."
-        echo "  Either way, treat the install-time window as a potential exposure."
-        [[ 2 -gt $EXIT_CODE ]] && EXIT_CODE=2
-        _log_ret=2
+    echo "--- [2] Historical pacman logs ---"
+    _log_ret=0
+    if [[ -f /var/log/pacman.log ]]; then
+        LOGS_TMP=$(mktemp)
+        CLEANUP_FILES+=("$LOGS_TMP")
+        check_logs 2>&1 | tee "$LOGS_TMP" || true
+        if grep -q 'LOG_HIT' "$LOGS_TMP" 2>/dev/null; then
+            echo "  WARNING: historical log matches (name-match against official compromised list):"
+            grep 'LOG_HIT' "$LOGS_TMP" | sed 's/LOG_HIT: /  - /'
+            echo "  NOTE: if the PKGBUILD looks clean now, the malicious commit may have been"
+            echo "  reverted — check AUR git history around the install date/time above."
+            echo "  Either way, treat the install-time window as a potential exposure."
+            [[ 2 -gt $EXIT_CODE ]] && EXIT_CODE=2
+            _log_ret=2
+        else
+            echo "  Clean: no historical log matches found."
+        fi
+        rm -f "$LOGS_TMP"
     else
-        echo "  Clean: no historical log matches found."
+        echo "  Skipped: /var/log/pacman.log not found."
     fi
-    rm -f "$LOGS_TMP"
-else
-    echo "  Skipped: /var/log/pacman.log not found."
+    _rec "pacman.log history" "$_log_ret"
+    echo
 fi
-_rec "pacman.log history" "$_log_ret"
-echo
 
 if $CHECK_SYSTEMD; then
     echo "--- [3] Systemd persistence check ---"
