@@ -343,10 +343,10 @@ _claude_analyze() {
     exec 9>"$fifo"
     rm -f "$fifo"
 
-    {
-        printf 'You are a security analyst for Arch Linux. Analyze the following security scan output (archcanary or traur). Identify genuine threats, explain likely false positives, and give clear actionable advice. Be concise.\n\n'
-        cat "$infile"
-    } | "$CLAUDE_CLI" >&9 2>/dev/null &
+    local prompt
+    prompt="$(printf 'You are a security analyst for Arch Linux. Analyze the following security scan output (archcanary or traur). Identify genuine threats, explain likely false positives, and give clear actionable advice. Be concise.\n\n'
+              sed 's/\x1b\[[0-9;]*[mGKHF]//g' "$infile")"
+    "$CLAUDE_CLI" -p "$prompt" >&9 2>/dev/null &
     local claude_pid=$!
     wait "$claude_pid" 2>/dev/null || true
     printf '\n─── done ───\n' >&9
