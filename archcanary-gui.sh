@@ -62,10 +62,6 @@ AURSCAN="$(command -v aurscan 2>/dev/null || true)"
 HAS_AURSCAN=false
 [[ -n "$AURSCAN" ]] && HAS_AURSCAN=true
 
-CLAUDE_CLI="$(command -v claude 2>/dev/null || true)"
-HAS_CLAUDE=false
-[[ -n "$CLAUDE_CLI" ]] && HAS_CLAUDE=true
-
 # Action data — order here is the canonical index used by run_action
 LABELS=(
     "Refresh + full scan"       # 0  root
@@ -326,46 +322,13 @@ GUIDE
 }
 
 # Stream infile through Claude and show the response in a yad window.
-_claude_analyze() {
-    local infile="$1" title="${2:-scan}"
-    local fifo yad_pid
-    fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
-    mkfifo "$fifo"
-    yad --text-info \
-        --title="Claude — $title — Archcanary" \
-        --window-icon=security-high \
-        --width=1000 --height=700 \
-        --fontname="Monospace 10" \
-        --wrap --tail \
-        --button="Close:0" \
-        < "$fifo" 2>/dev/null &
-    yad_pid=$!
-    exec 9>"$fifo"
-    rm -f "$fifo"
-
-    local prompt
-    prompt="$(printf 'You are a security analyst for Arch Linux. Analyze the following security scan output (archcanary or traur). Identify genuine threats, explain likely false positives, and give clear actionable advice. Be concise.\n\n'
-              sed 's/\x1b\[[0-9;]*[mGKHF]//g' "$infile")"
-    "$CLAUDE_CLI" -p "$prompt" >&9 2>/dev/null &
-    local claude_pid=$!
-    wait "$claude_pid" 2>/dev/null || true
-    printf '\n─── done ───\n' >&9
-    wait "$yad_pid" 2>/dev/null || true
-    exec 9>&-
-}
-
 # Run a command, stream output live to a text-info window, return its exit code.
-# Shows a "Deep analyse" button when the claude CLI is available.
 show_output() {
     local title="$1" scan_exit=0
     shift
-    local tmpout fifo yad_pid yad_rc=0
-    tmpout=$(mktemp /tmp/archcanary-XXXXXX.txt)
+    local fifo yad_pid
     fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
     mkfifo "$fifo"
-
-    local btn_args=("--button=Close:0")
-    $HAS_CLAUDE && btn_args+=("--button=Deep analyse:2")
 
     yad --text-info \
         --title="$title — Archcanary" \
@@ -373,23 +336,19 @@ show_output() {
         --width=1000 --height=660 \
         --fontname="Monospace 10" \
         --wrap --tail --editable \
-        "${btn_args[@]}" \
+        --button=Close:0 \
         < "$fifo" 2>/dev/null &
     yad_pid=$!
     exec 8>"$fifo"
     rm -f "$fifo"
 
-    "$@" > "$tmpout" 2>&1 &
+    "$@" >&8 2>&1 &
     local scan_pid=$!
-    tail --pid="$scan_pid" -f -n +1 "$tmpout" >&8 2>/dev/null || true
     wait "$scan_pid" && scan_exit=0 || scan_exit=$?
     printf '\n─── done ───\n' >&8
 
-    wait "$yad_pid" 2>/dev/null && yad_rc=0 || yad_rc=$?
+    wait "$yad_pid" 2>/dev/null || true
     exec 8>&-
-
-    [[ $yad_rc -eq 2 ]] && $HAS_CLAUDE && _claude_analyze "$tmpout" "$title"
-    rm -f "$tmpout"
     return $scan_exit
 }
 
@@ -510,18 +469,16 @@ run_action() {
         # Use a FIFO so yad stays alive until the user clicks Close.
         # We hold the write end (fd 8) open ourselves; yad never sees EOF until
         # we close it, which we only do after wait returns (user closed the window).
-        local fifo yad_rc=0
+        local fifo
         fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
         mkfifo "$fifo"
-        local root_btn_args=("--button=Close:0")
-        $HAS_CLAUDE && root_btn_args+=("--button=Deep analyse:2")
         yad --text-info \
             --title="$label — Archcanary" \
             --window-icon=security-high \
             --width=1000 --height=660 \
             --fontname="Monospace 10" \
             --wrap --tail --editable \
-            "${root_btn_args[@]}" \
+            --button=Close:0 \
             < "$fifo" 2>/dev/null &
         local yad_pid=$!
         exec 8>"$fifo"
@@ -532,11 +489,10 @@ run_action() {
         wait "$pkexec_pid" 2>/dev/null || scan_exit=$?
         printf '\n─── done ───\n' >&8
 
-        wait "$yad_pid" 2>/dev/null && yad_rc=0 || yad_rc=$?
+        wait "$yad_pid" 2>/dev/null || true
         exec 8>&-
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit" "$tmpout"; fi
-        [[ $yad_rc -eq 2 ]] && $HAS_CLAUDE && _claude_analyze "$tmpout" "$label"
         rm -f "$tmpout"
         if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog; fi
     else
