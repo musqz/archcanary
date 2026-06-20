@@ -150,7 +150,7 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-yarn-cache` | yarn cache scan | No |
 | `--check-pnpm-cache` | pnpm cache + fnm per-version Node installs | No |
 | `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex) | No |
-| `--check-bpftool` | Enumerate all loaded eBPF programs via `bpftool`; flags stealth hook types | Yes |
+| `--check-bpftool` | Enumerate loaded eBPF programs (stealth types), perf/kprobe attachments with owning PID and hooked function, XDP/TC network attachments | Yes |
 | `--check-ldso` | `/etc/ld.so.preload` injection + recent `/etc/ld.so.conf.d/` changes | No |
 | `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns | No |
 | `--check-kmod` | Kernel modules not owned by pacman; untracked DKMS builds | Yes |

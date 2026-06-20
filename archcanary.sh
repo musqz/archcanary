@@ -129,7 +129,7 @@ for arg in "$@"; do
             echo "  --check-yarn-cache Check yarn cache (v1 + Berry, incl. fnm per-version globals)"
             echo "  --check-pnpm-cache Check pnpm store/cache (global installs + metadata + dlx)"
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
-            echo "  --check-bpftool    Enumerate loaded eBPF programs/links (needs root); flags stealth hook types"
+            echo "  --check-bpftool    Enumerate loaded eBPF programs/links/perf-hooks/net-attachments (needs root)"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
             echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
             echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
@@ -1027,18 +1027,21 @@ check_ebpf() {
 
 # ---------------------------------------------------------------------------
 # Check 8: loaded eBPF programs/links (bpftool)
-# Complements --check-ebpf: that greps /sys/fs/bpf for pinned hidden_* maps;
-# this enumerates ALL programs/links actually loaded in the kernel — including
-# UNPINNED ones an eBPF rootkit may keep alive via an open fd or a BPF link,
-# which the bpffs glob structurally cannot see.
+# Three sub-checks, each covering a different attack surface:
 #
-# A loaded-program count is NOT itself an indicator: systemd, networking and
-# container runtimes legitimately load cgroup/sched_cls/xdp/socket_filter
-# programs. So this is informational, and only WARNS (exit 1, not 2) when
-# stealth-associated hook types are present — kprobe/kretprobe/tracepoint/
-# raw_tracepoint/perf_event/tracing(fentry,fexit,lsm)/lsm — the hooks an eBPF
-# rootkit uses to hide PIDs, files and itself. Legitimate if you run
-# AppArmor/SELinux, bpftrace/bcc/sysprof/Falco; confirm the source before dismissing.
+# prog show — enumerates ALL programs loaded in the kernel, including unpinned
+#   ones an eBPF rootkit keeps alive via an open fd or BPF link (not visible
+#   in /sys/fs/bpf). Warns when stealth-associated hook types are present:
+#   kprobe/kretprobe/tracepoint/raw_tracepoint/perf_event/tracing/lsm.
+#
+# perf show — lists every kprobe/kretprobe/tracepoint/uprobe with the owning
+#   PID and the exact kernel function being hooked. Flags hooks on functions
+#   rootkits use to hide files (getdents64), processes (kill), and network
+#   connections (tcp_v4_connect, inet_csk_accept).
+#
+# net show — lists XDP, TC, TCX, and netfilter programs attached to network
+#   interfaces. A rootkit can use XDP/TC to silently drop or intercept packets
+#   (e.g. hide C2 traffic). On a typical Arch workstation this should be empty.
 # ---------------------------------------------------------------------------
 check_bpftool() {
     if ! command -v bpftool &>/dev/null; then
@@ -1054,45 +1057,87 @@ check_bpftool() {
         return 77
     fi
 
+    local worst_ret=0
+
+    # --- prog show: count programs, flag stealth hook types ---
     if [[ -z "$progs" ]]; then
-        echo "  Clean: no eBPF programs loaded."
-        return 0
-    fi
+        echo "  Loaded eBPF programs: 0"
+    else
+        local total stealth
+        total=$(grep -cE '^[0-9]+:' <<<"$progs")
+        stealth=$(grep -oiwE 'kprobe|kretprobe|tracepoint|raw_tracepoint|perf_event|tracing|lsm' <<<"$progs" \
+                  | tr '[:upper:]' '[:lower:]' | sort -u | paste -sd, -)
 
-    local total stealth
-    total=$(grep -cE '^[0-9]+:' <<<"$progs")
-    # Match the program-type token (2nd field, e.g. "12: kprobe  name ...").
-    stealth=$(grep -oiwE 'kprobe|kretprobe|tracepoint|raw_tracepoint|perf_event|tracing|lsm' <<<"$progs" \
-              | tr '[:upper:]' '[:lower:]' | sort -u | paste -sd, -)
+        echo "  Loaded eBPF programs: $total"
+        if [[ -n "$stealth" ]]; then
+            local non_lsm_stealth
+            non_lsm_stealth=$(tr ',' '\n' <<<"$stealth" | grep -v '^lsm$' | paste -sd, -)
 
-    echo "  Loaded eBPF programs: $total"
-    if [[ -n "$stealth" ]]; then
-        # LSM eBPF programs are loaded by systemd (RestrictFileSystems= sandboxing),
-        # AppArmor, and SELinux as normal security enforcement — not rootkit activity.
-        # Downgrade to INFO if lsm is the only flagged type and all loaders are known-safe.
-        local non_lsm_stealth
-        non_lsm_stealth=$(tr ',' '\n' <<<"$stealth" | grep -v '^lsm$' | paste -sd, -)
-
-        if [[ -z "$non_lsm_stealth" ]]; then
-            # Check for unknown loaders in pids lines (boot-loaded programs have no pids line — that's fine)
-            local unknown_loaders
-            unknown_loaders=$(grep -E '^\s+pids ' <<<"$progs" \
-                | grep -Ev 'systemd\([0-9]+\)|apparmor_parser\([0-9]+\)|selinuxd\([0-9]+\)' || true)
-            if [[ -z "$unknown_loaders" ]]; then
-                echo "  INFO: lsm eBPF programs present — expected (systemd sandboxing / AppArmor / SELinux)."
-                return 0
+            if [[ -z "$non_lsm_stealth" ]]; then
+                local unknown_loaders
+                unknown_loaders=$(grep -E '^\s+pids ' <<<"$progs" \
+                    | grep -Ev 'systemd\([0-9]+\)|apparmor_parser\([0-9]+\)|selinuxd\([0-9]+\)' || true)
+                if [[ -z "$unknown_loaders" ]]; then
+                    echo "  INFO: lsm eBPF programs present — expected (systemd sandboxing / AppArmor / SELinux)."
+                else
+                    echo "  WARNING: stealth-associated program types: $stealth (unknown loader)"
+                    echo "  Review: sudo bpftool prog show"
+                    worst_ret=1
+                fi
+            else
+                local warn_types="${non_lsm_stealth:-$stealth}"
+                echo "  WARNING: stealth-associated program types present: $warn_types"
+                echo "  These hook types are used by eBPF rootkits to hide PIDs/files/processes."
+                echo "  Review: sudo bpftool prog show ; sudo bpftool link show"
+                echo "  (Legitimate if you run bpftrace/bcc/sysprof/Falco — confirm the source.)"
+                worst_ret=1
             fi
+        else
+            echo "  Clean: only non-stealth program types (cgroup/net) loaded."
         fi
-
-        local warn_types="${non_lsm_stealth:-$stealth}"
-        echo "  WARNING: stealth-associated program types present: $warn_types"
-        echo "  These hook types are used by eBPF rootkits to hide PIDs/files/processes."
-        echo "  Review: sudo bpftool prog show ; sudo bpftool link show"
-        echo "  (Legitimate if you run bpftrace/bcc/sysprof/Falco — confirm the source.)"
-        return 1
     fi
-    echo "  Clean: only non-stealth program types (cgroup/net) loaded."
-    return 0
+
+    # --- perf show: kprobe/tracepoint attachments with owning PID and target ---
+    local perf_out
+    perf_out=$(bpftool perf show 2>/dev/null) || true
+    if [[ -z "$perf_out" ]]; then
+        echo "  Perf attachments (kprobe/tracepoint): none."
+    else
+        local perf_count
+        perf_count=$(grep -c 'prog_id' <<<"$perf_out" || true)
+        echo "  Perf attachments (kprobe/tracepoint/uprobe): $perf_count"
+        # Flag hooks on the functions rootkits use to hide files, PIDs, and network connections.
+        local suspicious_perf
+        suspicious_perf=$(grep -iE '\b(getdents|sys_kill|__x64_sys_kill|tcp_v4_connect|inet_csk_accept|security_inode_getattr|security_file_open)\b' \
+                          <<<"$perf_out" || true)
+        if [[ -n "$suspicious_perf" ]]; then
+            echo "  WARNING: kprobes on rootkit-associated functions (file-hide/process-hide/network):"
+            echo "$suspicious_perf" | sed 's/^/    /'
+            echo "  Confirm: sudo bpftool perf show"
+            [[ $worst_ret -lt 1 ]] && worst_ret=1
+        else
+            echo "  No hooks on rootkit-associated functions."
+        fi
+        echo "$perf_out" | sed 's/^/    /'
+    fi
+
+    # --- net show: XDP / TC programs attached to network interfaces ---
+    local net_out
+    net_out=$(bpftool net show 2>/dev/null) || true
+    local net_entries
+    net_entries=$(grep -vE '^(xdp:|tc:|flow_dissector:|netfilter:|tcx:|netkit:)\s*$' <<<"$net_out" \
+                  | grep -v '^\s*$' || true)
+    if [[ -z "$net_entries" ]]; then
+        echo "  Net attachments (XDP/TC): none."
+    else
+        echo "  WARNING: eBPF programs attached to network interfaces:"
+        echo "$net_out" | sed 's/^/    /'
+        echo "  On a workstation, unexpected XDP/TC programs may intercept or filter traffic."
+        echo "  Confirm: sudo bpftool net show"
+        [[ $worst_ret -lt 1 ]] && worst_ret=1
+    fi
+
+    return $worst_ret
 }
 
 # ---------------------------------------------------------------------------
