@@ -492,6 +492,7 @@ build_list_args() {
     $HAS_TRAUR && _row 14
     $HAS_AURSCAN && _row 15
     _row 16
+    _row 17
 }
 
 # Main loop
