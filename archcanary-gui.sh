@@ -20,6 +20,11 @@ if [[ -z "$MAIN_SCRIPT" ]]; then
     exit 1
 fi
 
+# --no-gui: bypass yad, run a full scan in the terminal with structured output.
+if [[ "${1:-}" == "--no-gui" ]]; then
+    exec "$MAIN_SCRIPT" --full --no-notify "${@:2}"
+fi
+
 ROOT_HELPER="/usr/lib/archcanary/root-helper"
 PKEXEC="$(command -v pkexec 2>/dev/null || true)"
 HAS_ROOT=false

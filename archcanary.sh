@@ -1628,6 +1628,36 @@ _apply_ret() { # $1=return code  $2=check label
     fi
 }
 
+# Summary table — parallel arrays appended as each check runs.
+_SUMMARY_NAMES=()
+_SUMMARY_CODES=()
+_rec() { _SUMMARY_NAMES+=("$1"); _SUMMARY_CODES+=("$2"); }
+
+_print_summary() {
+    local _G="" _R="" _Y="" _B="" _N=""
+    if [[ -t 1 ]]; then
+        _G=$(tput setaf 2 2>/dev/null || true)
+        _R=$(tput setaf 1 2>/dev/null || true)
+        _Y=$(tput setaf 3 2>/dev/null || true)
+        _B=$(tput bold   2>/dev/null || true)
+        _N=$(tput sgr0   2>/dev/null || true)
+    fi
+    local _w=36
+    printf '\n Check summary\n'
+    printf ' %s\n' "$(printf '─%.0s' $(seq 1 55))"
+    local i
+    for i in "${!_SUMMARY_NAMES[@]}"; do
+        local name="${_SUMMARY_NAMES[$i]}" code="${_SUMMARY_CODES[$i]}"
+        case "$code" in
+            0)  printf ' %-*s %s✅  clean%s\n'             "$_w" "$name" "$_G"      "$_N" ;;
+            1)  printf ' %-*s %s⚠   warnings%s\n'          "$_w" "$name" "$_Y"      "$_N" ;;
+            2)  printf ' %-*s %s❌  INFECTED%s\n'          "$_w" "$name" "$_R$_B"   "$_N" ;;
+            77) printf ' %-*s ⚠   skipped (needs root)\n'  "$_w" "$name"                  ;;
+        esac
+    done
+    printf ' %s\n' "$(printf '─%.0s' $(seq 1 55))"
+}
+
 load_packages
 
 # Build CHAOS_LOOKUP before merging into INFECTED_PKGS so checks can apply
@@ -1686,9 +1716,11 @@ echo "--- [1] Currently installed foreign packages ---"
 log_info "Querying ${#INFECTED_PKGS[@]} packages via pacman -Qmq..."
 check_current && ret=$? || ret=$?
 [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+_rec "Package list (${#INFECTED_PKGS[@]} pkgs)" "$ret"
 echo
 
 echo "--- [2] Historical pacman logs ---"
+_log_ret=0
 if [[ -f /var/log/pacman.log ]]; then
     LOGS_TMP=$(mktemp)
     CLEANUP_FILES+=("$LOGS_TMP")
@@ -1700,6 +1732,7 @@ if [[ -f /var/log/pacman.log ]]; then
         echo "  reverted — check AUR git history around the install date/time above."
         echo "  Either way, treat the install-time window as a potential exposure."
         [[ 2 -gt $EXIT_CODE ]] && EXIT_CODE=2
+        _log_ret=2
     else
         echo "  Clean: no historical log matches found."
     fi
@@ -1707,12 +1740,14 @@ if [[ -f /var/log/pacman.log ]]; then
 else
     echo "  Skipped: /var/log/pacman.log not found."
 fi
+_rec "pacman.log history" "$_log_ret"
 echo
 
 if $CHECK_SYSTEMD; then
     echo "--- [3] Systemd persistence check ---"
     check_systemd && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "Systemd persistence" "$ret"
     echo
 fi
 
@@ -1720,6 +1755,7 @@ if $CHECK_EBPF; then
     echo "--- [4] eBPF rootkit check ---"
     check_ebpf && ret=$? || ret=$?
     _apply_ret "$ret" ebpf
+    _rec "eBPF rootkit traces" "$ret"
     echo
 fi
 
@@ -1727,6 +1763,7 @@ if $CHECK_NPM_CACHE; then
     echo "--- [5] npm cache check ---"
     check_npm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "npm cache" "$ret"
     echo
 fi
 
@@ -1734,6 +1771,7 @@ if $CHECK_BUN_CACHE; then
     echo "--- [6] bun cache check ---"
     check_bun_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "bun cache" "$ret"
     echo
 fi
 
@@ -1741,6 +1779,7 @@ if $CHECK_YARN_CACHE; then
     echo "--- [6b] yarn cache check ---"
     check_yarn_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "yarn cache" "$ret"
     echo
 fi
 
@@ -1748,6 +1787,7 @@ if $CHECK_PNPM_CACHE; then
     echo "--- [6c] pnpm cache check ---"
     check_pnpm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "pnpm cache" "$ret"
     echo
 fi
 
@@ -1755,6 +1795,7 @@ if $CHECK_PKGBUILD; then
     echo "--- [7] PKGBUILD/install file scan (obfuscation-aware) ---"
     check_pkgbuild_caches && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "PKGBUILD obfuscation scan" "$ret"
     echo
 fi
 
@@ -1762,6 +1803,7 @@ if $CHECK_BPFTOOL; then
     echo "--- [8] Loaded eBPF programs/links (bpftool) ---"
     check_bpftool && ret=$? || ret=$?
     _apply_ret "$ret" bpftool
+    _rec "eBPF programs (bpftool)" "$ret"
     echo
 fi
 
@@ -1769,6 +1811,7 @@ if $CHECK_LDSO; then
     echo "--- [9] ld.so.preload injection check ---"
     check_ldso && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "ld.so.preload injection" "$ret"
     echo
 fi
 
@@ -1776,6 +1819,7 @@ if $CHECK_AUTOSTART; then
     echo "--- [10] XDG autostart + shell RC persistence check ---"
     check_autostart && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
+    _rec "XDG autostart + shell RCs" "$ret"
     echo
 fi
 
@@ -1783,6 +1827,7 @@ if $CHECK_KMOD; then
     echo "--- [11] Kernel module / DKMS audit ---"
     check_kmod && ret=$? || ret=$?
     _apply_ret "$ret" kmod
+    _rec "Kernel modules (DKMS)" "$ret"
     echo
 fi
 
@@ -1791,6 +1836,8 @@ fi
 if [[ ${#SKIPPED_ROOT[@]} -gt 0 && $EXIT_CODE -lt 1 ]]; then
     EXIT_CODE=1
 fi
+
+_print_summary
 
 echo "============================================================"
 case $EXIT_CODE in
