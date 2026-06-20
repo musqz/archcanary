@@ -152,9 +152,9 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── package_list.txt              # refreshed weekly via --refresh
     └── malicious_npm_packages.txt    # static list, auto-seeded on first run
 
-~/.config/yay/                        # yay 13.0
-    ├── init.lua                      # Lua hooks (age warning, pattern block, install log)
-    └── config.json                   # yay config — "version": "13.0.0", editmenu off (aurscan owns review)
+~/.config/yay/
+    ├── init.lua                      # Lua hooks (age warning, pattern block, install log) — new in yay 13.0
+    └── config.json                   # standard yay config — edit_menu on (aurscan is manual, not intercepting)
 
 /usr/local/bin/aurscan                # manual pre-install scanner
 ~/.local/bin/claude                   # LLM backend (curl -fsSL https://claude.ai/install.sh | bash)
