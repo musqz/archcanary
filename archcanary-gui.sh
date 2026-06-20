@@ -354,7 +354,7 @@ show_output() {
     sleep 0.3
     kill "$tail_pid" 2>/dev/null || true
     wait "$tail_pid" 2>/dev/null || true
-    printf '\n─── done ───\n' >&8
+    printf '\n─── done ───\n' >&8 || true
 
     wait "$yad_pid" 2>/dev/null || true
     exec 8>&-
@@ -520,7 +520,9 @@ run_action() {
         sleep 0.3
         kill "$tail_pid" 2>/dev/null || true
         wait "$tail_pid" 2>/dev/null || true
-        printf '\n─── done ───\n' >&8
+        # Guard against SIGPIPE: user may have closed the window while the scan
+        # was still running, which closes the FIFO read end before we get here.
+        printf '\n─── done ───\n' >&8 || true
 
         wait "$yad_pid" 2>/dev/null || true
         exec 8>&-
