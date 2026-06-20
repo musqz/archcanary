@@ -1621,10 +1621,21 @@ check_kmod() {
 
     # Build set of all .ko paths owned by pacman.
     # Normalize to underscores: lsmod uses underscores, .ko filenames use hyphens.
+    # || true: grep exits 1 on no matches; don't let set -o pipefail abort here.
     local pacman_mods
     pacman_mods=$(pacman -Ql 2>/dev/null | awk '{print $2}' | grep '\.ko' | \
         sed 's/\.ko.*//' | xargs -I{} basename {} 2>/dev/null | \
-        tr '-' '_' | sort -u)
+        tr '-' '_' | sort -u) || true
+
+    # Build set of module names that DKMS has compiled onto this kernel.
+    # These live under updates/dkms/ and are NOT in pacman -Ql output —
+    # the DKMS section below audits them separately, so exclude them here
+    # to avoid false-positive "unknown module" warnings.
+    local dkms_fs_mods
+    dkms_fs_mods=$(find /usr/lib/modules -maxdepth 5 \
+        -path '*/updates/dkms/*.ko*' 2>/dev/null | \
+        xargs -I{} basename {} 2>/dev/null | \
+        sed 's/\.ko.*//' | tr '-' '_' | sort -u) || true
 
     local lsmod_out
     if ! lsmod_out=$($lsmod_cmd 2>/dev/null); then
@@ -1638,20 +1649,24 @@ check_kmod() {
         local mod
         mod=$(awk '{print $1}' <<< "$line")
         [[ "$mod" == "Module" || -z "$mod" ]] && continue
-        # Normalize to underscores before lookup (matches the pacman_mods normalization above)
+        # Normalize to underscores before lookup (matches normalization above)
         local mod_norm="${mod//-/_}"
-        if ! grep -qxF "$mod_norm" <<< "$pacman_mods" 2>/dev/null; then
-            unknown+=("$mod")
+        if grep -qxF "$mod_norm" <<< "$pacman_mods" 2>/dev/null; then
+            continue  # owned by a pacman package
         fi
+        if grep -qxF "$mod_norm" <<< "$dkms_fs_mods" 2>/dev/null; then
+            continue  # compiled by DKMS — audited in the DKMS section below
+        fi
+        unknown+=("$mod")
     done <<< "$lsmod_out"
 
     if [[ ${#unknown[@]} -gt 0 ]]; then
-        echo "  WARNING: ${#unknown[@]} loaded module(s) not found in any pacman package:"
+        echo "  WARNING: ${#unknown[@]} loaded module(s) not traceable to pacman or DKMS:"
         print_list unknown
         echo "  Verify with: modinfo <module> ; pacman -Qo \$(modinfo -n <module>)"
         found=2
     else
-        echo "  Clean: all loaded modules traceable to pacman packages."
+        echo "  Clean: all loaded modules traceable to pacman packages or DKMS."
     fi
 
     # DKMS check (optional — skip if dkms not installed)
