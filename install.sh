@@ -153,10 +153,12 @@ else
     install -m 755 "$REPO_DIR/archcanary-gui.sh" "$USER_BIN/archcanary-gui"
     echo "  installed: $USER_BIN/archcanary"
     echo "  installed: $USER_BIN/archcanary-gui"
+    _removed_system=false
     for f in archcanary archcanary-gui; do
         if [[ -f "$SYSTEM_BIN/$f" ]]; then
             sudo rm -f "$SYSTEM_BIN/$f"
             echo "  removed:   $SYSTEM_BIN/$f (superseded by user install)"
+            _removed_system=true
         fi
     done
 fi
@@ -301,4 +303,11 @@ if ! $SYSTEM && [[ ":$PATH:" != *":$USER_BIN:"* ]]; then
     echo "WARNING: $USER_BIN is not in your PATH."
     echo "Add this to your shell profile:"
     echo "  export PATH=\"\$PATH:$USER_BIN\""
+fi
+
+# If system bins were removed, bash may have the old path cached.
+if ! $SYSTEM && ${_removed_system:-false}; then
+    echo
+    echo "NOTE: system-wide binaries were removed. Run 'hash -r' in your current"
+    echo "shell (or open a new terminal) so bash picks up the user install."
 fi
