@@ -62,9 +62,13 @@ AURSCAN="$(command -v aurscan 2>/dev/null || true)"
 HAS_AURSCAN=false
 [[ -n "$AURSCAN" ]] && HAS_AURSCAN=true
 
+# True once the package list has been refreshed this session.
+# The first run of the full scan (idx 0) auto-adds --refresh and sets this.
+REFRESHED=false
+
 # Action data — order here is the canonical index used by run_action
 LABELS=(
-    "Refresh + full scan"       # 0  root
+    "Full scan"                 # 0  root
     "Systemd persistence"       # 1
     "npm cache"                 # 2
     "bun cache"                 # 3
@@ -83,7 +87,7 @@ LABELS=(
 )
 
 FLAGS=(
-    "--refresh --full --no-notify --no-summary"
+    "--full --no-notify --no-summary"
     "--check-systemd --no-notify --no-summary"
     "--check-npm-cache --no-notify --no-summary"
     "--check-bun-cache --no-notify --no-summary"
@@ -388,7 +392,7 @@ CONF
         yad --info \
             --title="Extra lists — Archcanary" \
             --window-icon=security-high \
-            --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Refresh + full scan</b> to fetch any new URLs." \
+            --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Full scan</b> to fetch any new URLs." \
             --width=420 \
             --button="OK:0" 2>/dev/null || true
     fi
@@ -432,6 +436,13 @@ run_action() {
     fi
 
     read -ra flag_arr <<< "$flags"
+
+    # Full scan (idx 0) always refreshes the package list on the first run of
+    # the session. Subsequent runs skip the network fetch for speed.
+    if [[ "$idx" -eq 0 ]] && ! $REFRESHED; then
+        flag_arr=(--refresh "${flag_arr[@]}")
+        REFRESHED=true
+    fi
 
     if [[ "$needs_root" == "true" ]]; then
         if ! $HAS_ROOT; then
