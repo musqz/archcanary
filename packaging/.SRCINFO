@@ -16,6 +16,6 @@ pkgbase = archcanary
 	optdepends = aurscan: LLM-based PKGBUILD scanner (pre-install gate)
 	backup = etc/archcanary/dkms_allowlist.conf
 	source = archcanary-0.1.6.tar.gz::https://github.com/musqz/archcanary/archive/v0.1.6.tar.gz
-	sha256sums = SKIP
+	sha256sums = c1d5fb0db6ce7d2f40b610338f60a2d00a9ec8f21689e4ca5816450dfa56e4d3
 
 pkgname = archcanary
