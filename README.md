@@ -50,7 +50,7 @@ archcanary integrates with and builds on the following:
 | [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) | Origin — the aur-malware-check script archcanary started from |
 | [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan), adapted to read `~/.config/aurscan/env` for archcanary GUI integration |
 | [claude-code](https://code.claude.com/docs/en/setup) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs |
-| [traur](https://aur.archlinux.org/packages/traur) | Pre-install heuristic scanner — 279 signals across 5 weighted categories |
+| [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 5 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) |
 | [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log |
 | [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui` |
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection |
@@ -60,18 +60,19 @@ archcanary integrates with and builds on the following:
 ### Detection Layers
 
 ```
-User runs `aurscan <pkg>` before installing
-    ├── static rules (offline) — known campaign signatures
-    ├── Claude LLM reads PKGBUILD — novel/obfuscated patterns
-    └── on CLEAN → user runs `yay -S pkg` / `yay -Syu`
-            └── yay init.lua hooks
-                            ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
-                            ├── AURPreInstall  — offline pattern check
-                            └── PostInstall    — logs AUR installs
+yay -S pkg / yay -Syu / yay <term>   (transparent — aurscan is wired in as yay's editor-gate)
+    ├── aurscan-gate runs on each AUR PKGBUILD before build
+    │       ├── static rules (offline) — known campaign signatures
+    │       ├── Claude LLM reads PKGBUILD — novel/obfuscated patterns
+    │       └── non-CLEAN → build aborted;  CLEAN → build proceeds
+    └── yay init.lua hooks (independent offline layer)
+            ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
+            ├── AURPreInstall  — offline pattern check
+            └── PostInstall    — logs AUR installs
 
 systemd system timer (weekly + on boot + after each pacman transaction)
     └── archcanary --full --all-time
-            ├── known-bad package list (1900+ JS campaign + 83 Russian spam)
+            ├── known-bad package list (1900+ JS campaign + 73 Russian spam)
             ├── pacman.log history (compressed log support)
             ├── systemd persistence (services, drop-ins, timers)
             ├── eBPF rootkit traces + bpftool program enumeration
@@ -196,7 +197,7 @@ See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.
 
 [aurscan](https://github.com/musqz/aurscan) scans PKGBUILDs with an LLM before `yay` builds them. The GUI exposes its backend configuration under **Utilities → LLM settings**.
 
-> **AUR helper compatibility:** aurscan's automatic pre-install scanning only works with **yay** — it relies on yay 13.0's `init.lua` hook system, which fires before each build. Other helpers (paru, pikaur, aurutils) have no equivalent hook, so PKGBUILD scanning won't trigger automatically with them. archcanary's post-install detection (all other checks) works with any AUR helper.
+> **AUR helper compatibility:** aurscan's automatic scanning is wired into **yay** as its **editor-gate** — yay's `config.json` sets `editor=aurscan-gate` with `editmenu=true`, so yay invokes aurscan on each PKGBUILD before building (no `alias yay=syay` needed). Other helpers (paru, pikaur, aurutils) need their own equivalent, so PKGBUILD scanning won't trigger automatically with them out of the box. archcanary's post-install detection (all other checks) works with any AUR helper.
 
 <img src="images/llm.png" alt="LLM Settings dialog" width="400"/>
 
@@ -230,7 +231,7 @@ Two waves:
 
 ### Russian Spam Campaign (June 14, 2026)
 
-A separate campaign ([reported by Sid Karunaratne](https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/2YQSHTC27MOKDDKHZTH2BJGTEN2CYC7W/)) in which 83 AUR package PKGBUILDs were modified to inject Russian-language spam `echo` statements into `~/.bashrc`, `~/.zshrc`, and other shell configs at install time. No credential theft or persistence — nuisance/propaganda payload. Reported to Arch DevOps; cleanup was in progress as of 2026-06-14.
+A separate campaign ([reported by Sid Karunaratne](https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/2YQSHTC27MOKDDKHZTH2BJGTEN2CYC7W/)) in which 73 AUR package PKGBUILDs were modified to inject Russian-language spam `echo` statements into `~/.bashrc`, `~/.zshrc`, and other shell configs at install time. No credential theft or persistence — nuisance/propaganda payload. Reported to Arch DevOps; cleanup was in progress as of 2026-06-14.
 
 archcanary detects these via `malicious_russian_spam_packages.txt` (shown in the scan header alongside the JS campaign count).
 

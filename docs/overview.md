@@ -9,15 +9,17 @@ detection*.
 
 ```mermaid
 flowchart TD
-    subgraph PRE["1 · BEFORE install — manual"]
+    subgraph PRE["1 · BEFORE install — manual (optional)"]
         T["traur scan &lt;pkg&gt;<br/>279 heuristic signals"]
     end
 
-    subgraph AT["2 · AT install — manual pre-check + automatic hooks"]
-        AS["aurscan &lt;pkg&gt;<br/>static rules + Claude LLM"] -->|suspicious| AB["build aborted"]
-        AS -->|CLEAN| U["yay -S pkg / yay -Syu"]
-        U --> LUA["yay init.lua hooks<br/>age warn · pattern block · log"]
-        LUA --> OK["package installed"]
+    subgraph AT["2 · AT install — automatic"]
+        U["yay -S pkg / yay -Syu / yay &lt;term&gt;"] --> GATE["aurscan editor-gate<br/>static rules + Claude LLM"]
+        GATE -->|non-CLEAN| AB["build / install aborted"]
+        GATE -->|CLEAN| LUA["yay init.lua hooks<br/>age warn · pattern block · log"]
+        LUA --> TH["traur pacman hook<br/>trust score · AbortOnFail"]
+        TH -->|low trust| AB
+        TH -->|OK| OK["package installed"]
     end
 
     subgraph AFTER["3 · AFTER install / always — automatic, root"]
@@ -39,9 +41,10 @@ flowchart TD
 
 | Phase | Tool | Trigger | Automatic? | Catches |
 |-------|------|---------|:---------:|---------|
-| 1 · Before | `traur scan <pkg>` | You run it before installing | ✗ manual | Maintainer reputation, PKGBUILD heuristics (279 signals) |
-| 2 · Before build | `aurscan <pkg>` | You run it before installing | ✗ manual | Novel / obfuscated payloads — Claude reads the PKGBUILD |
+| 1 · Before (optional) | `traur scan <pkg>` | You run it before installing | ✗ manual | Maintainer reputation, PKGBUILD heuristics (279 signals) |
+| 2 · At install | `aurscan` editor-gate | Every `yay` build (transparent) | ✓ auto | Novel / obfuscated payloads — Claude reads each PKGBUILD before build |
 | 2 · At install | yay `init.lua` hooks | Every `yay` install/upgrade | ✓ | Known campaign signatures, stale-rewrite upgrades (offline) |
+| 2 · At install | `traur` pacman hook | Every pacman install/upgrade (incl. repo pkgs) | ✓ auto | Maintainer/metadata trust score; aborts the transaction on fail |
 | 3 · After / always | `archcanary` | systemd timer (weekly + boot) + `.path` (after each pacman tx) | ✓ root | Known-bad packages, systemd/eBPF/npm persistence, rootkit traces |
 | 4 · On detection | notifier → GUI | `last-scan.log` flips to INFECTED | ✓ | Surfaces a result; review is manual |
 
@@ -49,7 +52,7 @@ flowchart TD
 
 - **Nothing here removes malware.** Every layer *detects and reports* — remediation is left to you. See [Read-only by design](../README.md).
 - **Pre-install vs post-install.** Phases 1–2 try to stop a bad package before it lands; phase 3 catches anything already installed (or installed before the stack existed).
-- **Defence in depth.** `aurscan` (with Claude) catches novel/obfuscated payloads; the offline Lua hooks catch known campaign signatures and run even with no network; `traur` adds maintainer/metadata signals no static scan sees. None replaces the others.
+- **Defence in depth.** `aurscan` (with Claude) catches novel/obfuscated payloads; the offline Lua hooks catch known campaign signatures and run even with no network; `traur` (a pacman PreTransaction hook, also runnable by hand) adds maintainer/metadata trust signals no static scan sees and can abort the install. None replaces the others.
 
 ## Go deeper
 
