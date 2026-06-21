@@ -197,7 +197,7 @@ See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.
 
 [aurscan](https://github.com/musqz/aurscan) scans PKGBUILDs with an LLM before `yay` builds them. The GUI exposes its backend configuration under **Utilities → LLM settings**.
 
-> **AUR helper compatibility:** aurscan's automatic scanning is wired into **yay** as its **editor-gate** — yay's `config.json` sets `editor=aurscan-gate` with `editmenu=true`, so yay invokes aurscan on each PKGBUILD before building (no `alias yay=syay` needed). Other helpers (paru, pikaur, aurutils) need their own equivalent, so PKGBUILD scanning won't trigger automatically with them out of the box. archcanary's post-install detection (all other checks) works with any AUR helper.
+> **AUR helper compatibility:** aurscan's automatic scanning is wired into **yay** as its **editor-gate** — yay's `config.json` sets `editor=aurscan-gate` with `editmenu=true`, so yay invokes aurscan on each PKGBUILD before building (no `alias yay=syay` needed). Other helpers (paru, pikaur, aurutils) need their own equivalent, so PKGBUILD scanning won't trigger automatically with them out of the box — run `aurscan --install-paru-hook` for paru. archcanary's post-install detection (all other checks) works with any AUR helper.
 
 <img src="images/llm.png" alt="LLM Settings dialog" width="400"/>
 
