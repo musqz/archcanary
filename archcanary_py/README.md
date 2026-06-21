@@ -1,6 +1,6 @@
 # archcanary_py — Python 3.14+ Archcanaryer
 
-Python-Äquivalent zu `archcanary.sh` + `custom_list_merge_aur_scan.sh`.
+Python-Äquivalent zu `archcanary.sh` + `archcanary-merge-lists.sh`.
 
 ## Quick Start (Äquivalente)
 
@@ -12,9 +12,9 @@ Python-Äquivalent zu `archcanary.sh` + `custom_list_merge_aur_scan.sh`.
 | `./archcanary.sh --check-bun-cache` | `python -m archcanary_py --check-bun-cache` |
 | `./archcanary.sh --refresh --full` | `python -m archcanary_py --refresh --full` |
 | `./archcanary.sh --package-list=FILE --malicious-npm-list=FILE` | `python -m archcanary_py --package-list=FILE --malicious-npm-list=FILE` |
-| `./custom_list_merge_aur_scan.sh -l FILE` | `python -m archcanary_py --merge -l FILE` |
-| `./custom_list_merge_aur_scan.sh -l URL1 -l FILE2 --skip-hedgedoc` | `python -m archcanary_py --merge -l URL1 -l FILE2 --skip-hedgedoc` |
-| `./custom_list_merge_aur_scan.sh -l FILE -- --all-time` | `python -m archcanary_py --merge -l FILE --all-time` |
+| `./archcanary-merge-lists.sh -l FILE` | `python -m archcanary_py --merge -l FILE` |
+| `./archcanary-merge-lists.sh -l URL1 -l FILE2 --skip-hedgedoc` | `python -m archcanary_py --merge -l URL1 -l FILE2 --skip-hedgedoc` |
+| `./archcanary-merge-lists.sh -l FILE -- --all-time` | `python -m archcanary_py --merge -l FILE --all-time` |
 | `--verbose` / `--debug` | identisch |
 | `--help` / `-h` | identisch |
 | `--log-file=PATH` | identisch |

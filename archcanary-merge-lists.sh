@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# custom_list_merge_aur_scan.sh — Fetch, merge, dedup, and scan
+# archcanary-merge-lists.sh — Fetch, merge, dedup, and scan
 #
 # Fetches the official HedgeDoc list (optional), merges with custom package
 # lists from URLs or files, deduplicates, and runs archcanary.sh.
@@ -8,10 +8,10 @@
 # the options separator to scan regardless of install date.
 #
 # Usage:
-#   ./custom_list_merge_aur_scan.sh -l ./historical_packages.txt
-#   ./custom_list_merge_aur_scan.sh -l https://paste.example.org/list.txt -l ./more.txt
-#   ./custom_list_merge_aur_scan.sh --skip-hedgedoc -l legacy.txt -- --all-time
-#   ./custom_list_merge_aur_scan.sh --skip-hedgedoc -l legacy.txt -- --all-time --verbose
+#   ./archcanary-merge-lists.sh -l ./historical_packages.txt
+#   ./archcanary-merge-lists.sh -l https://paste.example.org/list.txt -l ./more.txt
+#   ./archcanary-merge-lists.sh --skip-hedgedoc -l legacy.txt -- --all-time
+#   ./archcanary-merge-lists.sh --skip-hedgedoc -l legacy.txt -- --all-time --verbose
 #
 # Options:
 #   -l, --list=URL|FILE          Additional AUR package list (repeatable)

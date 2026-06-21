@@ -86,9 +86,15 @@ sudo systemctl enable --now archcanary.timer
 ```ini
 [Unit]
 Description=Watch for archcanary scan results
+# A transient trigger burst must never wedge the watcher into a permanent
+# 'failed' (start-limit-hit) state and silence detections.
+StartLimitIntervalSec=0
 
 [Path]
-PathModified=/var/lib/archcanary/last-scan.log
+# PathChanged (IN_CLOSE_WRITE) fires once when the writer closes the file, not
+# on every write. The scan streams last-scan.log line-by-line via tee, so
+# PathModified would fire dozens of times per scan and trip the start limit.
+PathChanged=/var/lib/archcanary/last-scan.log
 Unit=archcanary-notify.service
 
 [Install]
@@ -99,6 +105,9 @@ WantedBy=default.target
 ```ini
 [Unit]
 Description=Notify on archcanary malware detection
+# Don't rate-limit: the path unit may trigger this oneshot a few times around a
+# scan; a burst must not leave it stuck 'failed' (start-limit-hit).
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
@@ -111,7 +120,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now archcanary-notify.path
 ```
 
-> The path unit fires whenever the root scan rewrites the result file; the service notifies only when a detection is present. Needs a notification daemon (`dunst`, `mako`, GNOME, KDE) and `libnotify`. To review/remediate, open **Archcanary** from your app launcher.
+> The path unit fires once when the root scan finishes writing the result file (it watches for file close, not every write); the service notifies only when a detection is present. Needs a notification daemon (`dunst`, `mako`, GNOME, KDE) and `libnotify`. To review/remediate, open **Archcanary** from your app launcher.
 
 ## 3. User-level scan (your session)
 

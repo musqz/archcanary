@@ -13,10 +13,10 @@ flowchart TD
         T["traur scan &lt;pkg&gt;<br/>279 heuristic signals"]
     end
 
-    subgraph AT["2 · AT install — manual pre-check + automatic hooks"]
-        AS["aurscan &lt;pkg&gt;<br/>static rules + Claude LLM"] -->|suspicious| AB["build aborted"]
-        AS -->|CLEAN| U["yay -S pkg / yay -Syu"]
-        U --> LUA["yay init.lua hooks<br/>age warn · pattern block · log"]
+    subgraph AT["2 · AT install — automatic on every yay build"]
+        U["yay -S pkg / yay -Syu / yay &lt;term&gt;"] --> GATE["aurscan editor-gate<br/>static rules + Claude LLM"]
+        GATE -->|non-CLEAN| AB["build aborted"]
+        GATE -->|CLEAN| LUA["yay init.lua hooks<br/>age warn · pattern block · log"]
         LUA --> OK["package installed"]
     end
 
@@ -40,7 +40,7 @@ flowchart TD
 | Phase | Tool | Trigger | Automatic? | Catches |
 |-------|------|---------|:---------:|---------|
 | 1 · Before | `traur scan <pkg>` | You run it before installing | ✗ manual | Maintainer reputation, PKGBUILD heuristics (279 signals) |
-| 2 · Before build | `aurscan <pkg>` | You run it before installing | ✗ manual | Novel / obfuscated payloads — Claude reads the PKGBUILD |
+| 2 · At install | `aurscan` editor-gate | Every `yay` build (transparent) | ✓ auto | Novel / obfuscated payloads — Claude reads each PKGBUILD before build |
 | 2 · At install | yay `init.lua` hooks | Every `yay` install/upgrade | ✓ | Known campaign signatures, stale-rewrite upgrades (offline) |
 | 3 · After / always | `archcanary` | systemd timer (weekly + boot) + `.path` (after each pacman tx) | ✓ root | Known-bad packages, systemd/eBPF/npm persistence, rootkit traces |
 | 4 · On detection | notifier → GUI | `last-scan.log` flips to INFECTED | ✓ | Surfaces a result; review is manual |
