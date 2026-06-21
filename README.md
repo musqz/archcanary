@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/musqz/archcanary?sort=semver)](https://github.com/musqz/archcanary/releases)
 
-> **BETA — under heavy development.** Expect breaking changes, rough edges, and incomplete docs.
+> **BETA — under development.** Expect breaking changes, rough edges, and incomplete docs.
 > Designed and tested on Mabox Linux (Arch-based, Openbox).
 > Use on other Arch derivatives is not tested, but should work fine and build for it.
 
