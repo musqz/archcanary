@@ -69,7 +69,7 @@ User runs `aurscan <pkg>` before installing
                             ├── AURPreInstall  — offline pattern check
                             └── PostInstall    — logs AUR installs
 
-systemd system timer (weekly + on boot + after each pacman tx)
+systemd system timer (weekly + on boot + after each pacman transaction)
     └── archcanary --full --all-time
             ├── known-bad package list (1900+ JS campaign + 83 Russian spam)
             ├── pacman.log history (compressed log support)
