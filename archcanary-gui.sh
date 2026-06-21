@@ -462,8 +462,24 @@ run_action() {
         local tmpout pkexec_exit=0 pkexec_done=false
         tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
 
-        # Background pkexec: polkit dialog is the only window during auth
-        # so it gets focus on its own. Output window opens only after auth.
+        # Open the output window immediately so there is no visible gap between
+        # the list window closing and something appearing on screen.
+        # The polkit auth dialog will appear in front of this window.
+        local fifo
+        fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
+        mkfifo "$fifo"
+        yad --text-info \
+            --title="$label — Archcanary" \
+            --window-icon=security-high \
+            --width=1000 --height=660 \
+            --fontname="Monospace 10" \
+            --wrap --tail --editable \
+            --button=Close:0 \
+            < "$fifo" 2>/dev/null &
+        local yad_pid=$!
+        exec 8>"$fifo"
+        rm -f "$fifo"
+
         "$PKEXEC" "$ROOT_HELPER" "${flag_arr[@]}" > "$tmpout" 2>&1 &
         local pkexec_pid=$!
 
@@ -480,6 +496,10 @@ run_action() {
         fi
 
         if [[ ! -s "$tmpout" ]]; then
+            # Auth cancelled or failed — close the output window before the error dialog.
+            exec 8>&-
+            kill "$yad_pid" 2>/dev/null || true
+            wait "$yad_pid" 2>/dev/null || true
             rm -f "$tmpout"
             [[ $pkexec_exit -ne 0 && $pkexec_exit -ne 126 ]] && \
                 yad --error --title="Archcanary" \
@@ -488,24 +508,6 @@ run_action() {
                     --width=360 2>/dev/null || true
             return 0
         fi
-
-        # Use a FIFO so yad stays alive until the user clicks Close.
-        # We hold the write end (fd 8) open ourselves; yad never sees EOF until
-        # we close it, which we only do after wait returns (user closed the window).
-        local fifo
-        fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
-        mkfifo "$fifo"
-        yad --text-info \
-            --title="$label — Archcanary" \
-            --window-icon=security-high \
-            --width=1000 --height=660 \
-            --fontname="Monospace 10" \
-            --wrap --tail --editable \
-            --button=Close:0 \
-            < "$fifo" 2>/dev/null &
-        local yad_pid=$!
-        exec 8>"$fifo"
-        rm -f "$fifo"
 
         # tail -f (no --pid) avoids the race where tail exits as pkexec exits,
         # dropping content that was written just before pkexec closed its stdout.
