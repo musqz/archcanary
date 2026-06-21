@@ -462,9 +462,7 @@ run_action() {
         local tmpout pkexec_exit=0 pkexec_done=false
         tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
 
-        # Open the output window immediately so there is no visible gap between
-        # the list window closing and something appearing on screen.
-        # The polkit auth dialog will appear in front of this window.
+        # Open the output window immediately — no blank screen after clicking Run.
         local fifo
         fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
         mkfifo "$fifo"
@@ -480,6 +478,24 @@ run_action() {
         exec 8>"$fifo"
         rm -f "$fifo"
 
+        printf 'Authenticate in the polkit dialog to continue...\n\n' >&8 || true
+
+        # Let yad render and settle so the polkit dialog opens as the newest
+        # (and thus focused) window — without this delay, yad may steal focus
+        # back from polkit on click-to-focus WMs like Openbox.
+        sleep 0.4
+
+        # On Openbox click-to-focus, new windows don't auto-focus: poll for
+        # the polkit dialog and activate it as soon as it appears.
+        local _xdotool_pid=""
+        if command -v xdotool &>/dev/null; then
+            { while true; do
+                xdotool search --name "Authenticate" windowactivate 2>/dev/null && break
+                sleep 0.1
+              done; } &
+            _xdotool_pid=$!
+        fi
+
         "$PKEXEC" "$ROOT_HELPER" "${flag_arr[@]}" > "$tmpout" 2>&1 &
         local pkexec_pid=$!
 
@@ -487,6 +503,11 @@ run_action() {
         while [[ ! -s "$tmpout" ]] && kill -0 "$pkexec_pid" 2>/dev/null; do
             sleep 0.1
         done
+
+        if [[ -n "$_xdotool_pid" ]]; then
+            kill "$_xdotool_pid" 2>/dev/null || true
+            wait "$_xdotool_pid" 2>/dev/null || true
+        fi
 
         # If pkexec already exited (fast check), reap it now so all writes are
         # guaranteed flushed to tmpout before we inspect the file.
