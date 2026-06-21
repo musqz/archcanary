@@ -48,7 +48,7 @@ archcanary integrates with and builds on the following:
 | Project | Role |
 |---------|------|
 | [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) | Origin — the aur-malware-check script archcanary started from |
-| [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan), adapted to read `~/.config/aurscan/env` for archcanary GUI integration |
+| [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay`/`paru` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan), adapted to read `~/.config/aurscan/env` for archcanary GUI integration |
 | [claude-code](https://code.claude.com/docs/en/setup) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs |
 | [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 5 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) |
 | [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log |
@@ -195,9 +195,9 @@ See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.
 
 ## LLM Settings (aurscan)
 
-[aurscan](https://github.com/musqz/aurscan) scans PKGBUILDs with an LLM before `yay` builds them. The GUI exposes its backend configuration under **Utilities → LLM settings**.
+[aurscan](https://github.com/musqz/aurscan) scans PKGBUILDs with an LLM before `yay` or `paru` builds them. The GUI exposes its backend configuration under **Utilities → LLM settings**.
 
-> **AUR helper compatibility:** aurscan's automatic scanning is wired into **yay** as its **editor-gate** — yay's `config.json` sets `editor=aurscan-gate` with `editmenu=true`, so yay invokes aurscan on each PKGBUILD before building (no `alias yay=syay` needed). Other helpers (paru, pikaur, aurutils) need their own equivalent, so PKGBUILD scanning won't trigger automatically with them out of the box — run `aurscan --install-paru-hook` for paru. archcanary's post-install detection (all other checks) works with any AUR helper.
+> **AUR helper compatibility:** aurscan integrates natively with both **yay** and **paru** — one-time setup, no wrapper alias needed. yay uses its Lua editor-gate (`aurscan --install-yay-hook`); paru uses its native `PreBuildCommand` config key (`aurscan --install-paru-hook`), which paru invokes in the PKGBUILD directory before every build. Other helpers (pikaur, aurutils) have no equivalent hook yet. archcanary's post-install detection (all other checks) works with any AUR helper.
 
 <img src="images/llm.png" alt="LLM Settings dialog" width="400"/>
 
