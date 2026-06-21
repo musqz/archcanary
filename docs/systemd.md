@@ -209,16 +209,6 @@ systemctl status archcanary.timer
 systemctl --user status archcanary-user.timer archcanary-notify.path
 ```
 
-## Migrating from the old user service
-
-Earlier versions ran the scan as a **user** service (`~/.config/systemd/user/archcanary.{service,timer}`). Because that runs without root, the kmod/eBPF/bpftool checks are skipped and the scan now reports `INCOMPLETE` (exit 1). Disable the old user units and use the system scan above instead:
-
-```bash
-systemctl --user disable --now archcanary.timer
-rm -f ~/.config/systemd/user/archcanary.service \
-      ~/.config/systemd/user/archcanary.timer
-```
-
 ## Why the split?
 
 The system scan runs `--check-kmod`, `--check-ebpf`, and `--check-bpftool`, which need root to read kernel-module attribution and enumerate loaded eBPF programs — run without root they're skipped and the scan reports `INCOMPLETE` (exit 1). The user-level checks (npm/bun/pkgbuild caches, autostart, shell RCs) are the opposite: they must run **as you** so they see your real `~/.cache`/`~/.config` and resolve `Exec=` names against your PATH. Run as root they'd scan `/root` — missing your data and false-flagging root's own session relics. Hence two scans, each in the right context.
