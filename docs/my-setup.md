@@ -100,7 +100,7 @@ others.
 
 ### The yad GUI (`archcanary-gui`)
 
-Run from a desktop shortcut or app launcher — grouped menu with a per-session status column, polkit auth for root-requiring checks, and a live streaming output window:
+Grouped menu with a per-session status column, polkit auth for root-requiring checks, and a live streaming output window:
 
 ![archcanary-gui yad GUI — status column and grouped checks](../images/gui.png)
 
