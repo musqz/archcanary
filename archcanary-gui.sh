@@ -504,7 +504,7 @@ run_action() {
             sleep 0.1
         done
 
-        printf '\n================================================================\n\n' >&8 2>/dev/null || true
+        printf '\n============================================================\n\n' >&8 2>/dev/null || true
 
         if [[ -n "$_xdotool_pid" ]]; then
             kill "$_xdotool_pid" 2>/dev/null || true
