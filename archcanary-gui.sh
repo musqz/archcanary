@@ -499,19 +499,12 @@ run_action() {
         "$PKEXEC" "$ROOT_HELPER" "${flag_arr[@]}" > "$tmpout" 2>&1 &
         local pkexec_pid=$!
 
-        # Print dots while waiting for auth + script startup so the window
-        # doesn't look frozen. Stops as soon as the first output line arrives.
-        { while true; do printf '.' >&8 2>/dev/null || break; sleep 0.3; done; } &
-        local _dot_pid=$!
-
         # Wait for auth to succeed (check produces first output) or pkexec to exit
         while [[ ! -s "$tmpout" ]] && kill -0 "$pkexec_pid" 2>/dev/null; do
             sleep 0.1
         done
 
-        kill "$_dot_pid" 2>/dev/null || true
-        wait "$_dot_pid" 2>/dev/null || true
-        printf '\n\n' >&8 2>/dev/null || true
+        printf '\n================================================================\n\n' >&8 2>/dev/null || true
 
         if [[ -n "$_xdotool_pid" ]]; then
             kill "$_xdotool_pid" 2>/dev/null || true
