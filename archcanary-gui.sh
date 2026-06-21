@@ -478,7 +478,7 @@ run_action() {
         exec 8>"$fifo"
         rm -f "$fifo"
 
-        printf 'Authenticate in the polkit dialog to continue...\n\n' >&8 || true
+        printf 'Authenticate in the polkit dialog to continue...\n  After authenticating, please wait — the first scan fetches package lists from the network.\n\n' >&8 || true
 
         # Let yad render and settle so the polkit dialog opens as the newest
         # (and thus focused) window — without this delay, yad may steal focus
