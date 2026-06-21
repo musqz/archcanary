@@ -281,6 +281,12 @@ EOF
        "$REPO_DIR"/systemd/user/archcanary-user.service \
        "$REPO_DIR"/systemd/user/archcanary-user.timer \
        "$USER_UNITS/"
+    # The source unit uses %h/.local/bin (user install default). For a system
+    # install the binary lands in $SYSTEM_BIN, so patch the installed copy.
+    if $SYSTEM; then
+        sed -i "s|%h/.local/bin/archcanary|$SYSTEM_BIN/archcanary|g" \
+            "$USER_UNITS/archcanary-user.service"
+    fi
     if systemctl --user daemon-reload 2>/dev/null; then
         systemctl --user enable --now archcanary-notify.path 2>/dev/null || true
         systemctl --user enable --now archcanary-user.timer 2>/dev/null || true

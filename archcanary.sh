@@ -1567,6 +1567,10 @@ check_autostart() {
             exec_bin="${exec_bin//%h/$home_dir}"
             [[ "$exec_bin" == "$home_dir/.local/bin/"* ]] && continue
             [[ "$exec_bin" == "$home_dir/bin/"* ]] && continue
+            # /usr/local/ is the FHS-conventional prefix for manually-installed
+            # software; Arch's pacman never writes there, so unowned binaries in
+            # /usr/local/bin/ are expected and not a persistence signal.
+            [[ "$exec_bin" == "/usr/local/bin/"* ]] && continue
             if ! pacman -Qo "$exec_bin" &>/dev/null 2>&1; then
                 echo "  WARNING: user service with unowned ExecStart binary: $svc"
                 echo "    ExecStart=$exec_bin (not tracked by pacman)"
