@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.1.6 (2026-06-21)
+
+- Fix: the GUI root-scan (pkexec) output window now opens immediately when you
+  click Run, eliminating the blank-screen gap that made the first full scan
+  look like a crash. The window prints an "Authenticate in the polkit dialog to
+  continue..." prompt up front, then a `============` separator before the live
+  scan output begins.
+- Fix: restored polkit dialog focus handling — a short settle delay plus an
+  xdotool loop activates the "Authenticate" window on click-to-focus WMs like
+  Openbox, where new windows don't auto-focus. xdotool is optional; focus
+  degrades silently if it is absent. (This reverts a regression that had
+  dropped the focus hack in favour of a background-pkexec approach, which
+  reintroduced the blank-screen problem.)
+- Fix: on auth cancel or failure, the output window is closed cleanly before
+  the error dialog instead of being left empty.
+- Docs: clarified that aurscan PKGBUILD scanning is wired symmetrically for
+  both paru and yay; noted `aurscan --install-paru-hook` for paru users.
+
+## v0.1.5 (2026-06-21)
+
+- New: Arch packaging — `packaging/` directory with `PKGBUILD`, `.SRCINFO`, and
+  install scriptlet; the tool is now installable from a source tarball / AUR.
+- New: focused mode suppresses the campaign header and default checks when the
+  GUI runs a single targeted check, so each output window shows only its check.
+- New: first full scan per GUI session auto-refreshes the package list, then
+  subsequent scans skip the network fetch for speed.
+- New: `--check-bpftool` expanded with perf-hook and net-attachment sub-checks.
+- Fix: pkexec output streaming reworked — wait for pkexec before inspecting
+  output, stream via `tmpout` + `tail -f` (replacing `tail --pid`), and guard
+  the done-marker `printf` against SIGPIPE on early window close.
+- Fix: `--check-kmod` DKMS false positives and a `set -e` crash risk.
+- Fix: `install.sh --system` patches the user service `ExecStart` to
+  `/usr/local/bin`; `/usr/local/bin` is skipped in the autostart check.
+- Refactor: removed the deep-analyse / claude CLI integration from the GUI.
+
 ## v0.1.4 (2026-06-20)
 
 - Fix: `archcanary-gui` now rejects `sudo`/root invocation with a clear error;
