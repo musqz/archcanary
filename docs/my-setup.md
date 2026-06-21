@@ -11,7 +11,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 |-----------|-----------------|---------|
 | `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
 | `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window. `--no-gui` bypasses yad and runs a full scan in the terminal with the structured summary. |
-| `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Pre-install trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes) |
+| `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes). Runs **automatically as a pacman PreTransaction hook** (`/usr/share/libalpm/hooks/traur.hook` → `traur-hook`, `AbortOnFail`) on every install/upgrade — including repo packages — and is also runnable by hand (`traur scan <pkg>`) |
 | `aurscan` | [musqz/aurscan](https://github.com/musqz/aurscan) (fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan)) | LLM-based PKGBUILD scanner using Claude. Wired into yay as its **editor-gate** (`config.json` `editor=aurscan-gate` + `editmenu=true`): yay invokes it on each AUR PKGBUILD before building, so every `yay` build (and AUR dependency) is scanned transparently — a non-CLEAN verdict exits non-zero and aborts the build. Still runnable standalone (`aurscan <pkg>`). Requires the `claude` CLI (`@anthropic-ai/claude-code`) as its LLM backend |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an independent offline layer that also runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
 | `yad` | official repos | GTK dialog toolkit used by `archcanary-gui` |
@@ -50,12 +50,17 @@ archcanary-gui (on-demand — desktop shortcut or app launcher)
             └── root checks (eBPF, bpftool, kmod) → pkexec → polkit auth → root-helper
                     └── streams output live, updates status on close
 
-traur — two use cases:
+traur — runs three ways:
+    ├── pacman PreTransaction hook (automatic — installed by the traur package)
+    │       └── /usr/share/libalpm/hooks/traur.hook → traur-hook   (AbortOnFail)
+    │               └── trust-scores every pacman install/upgrade (incl. repo pkgs);
+    │                   a failing score aborts the transaction before install
+    │
     ├── GUI "Trust scan (traur)"  → traur scan  (no args)
     │       └── bulk audit of ALL installed AUR packages
     │               └── useful as a periodic sweep alongside archcanary
     │
-    └── terminal: traur scan <pkg>  (before installing a specific package)
+    └── terminal: traur scan <pkg>  (manually vet a package before installing)
             └── 279 signals, 5 weighted categories
                     ├── Pkgbuild (0.45)   — static analysis: shells, download-exec, obfuscation, exfil, miners
                     ├── Behavioral (0.25) — maintainer: new account, batch creation, orphan takeover, typosquat
