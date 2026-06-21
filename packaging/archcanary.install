@@ -1,0 +1,21 @@
+post_install() {
+  echo ""
+  echo "==> archcanary installed."
+  echo ""
+  echo "  Enable the automated system scan (runs as root — weekly + on boot + after pacman):"
+  echo "    sudo systemctl enable --now archcanary.timer archcanary.path"
+  echo ""
+  echo "  Enable the user-scope scan and result notifier (run as your user):"
+  echo "    systemctl --user enable --now archcanary-user.timer archcanary-notify.path"
+  echo ""
+  echo "  Run a manual full scan:"
+  echo "    archcanary --refresh --full --all-time"
+  echo ""
+  echo "  Optional add-ons: aurscan (LLM PKGBUILD scanner), yay (Lua hooks)."
+  echo "  See: https://github.com/musqz/archcanary"
+  echo ""
+}
+
+post_upgrade() {
+  post_install
+}
