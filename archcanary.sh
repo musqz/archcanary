@@ -488,7 +488,17 @@ if $RUN_LYNIS; then
         echo "Error: lynis not installed (pacman -S lynis)" >&2
         exit 1
     fi
-    exec lynis audit system
+    # Auto-install the archcanary Lynis plugin on first run (already root via pkexec).
+    # Ships as /usr/lib/archcanary/lynis-plugin-archcanary.sh; Lynis loads it on next audit.
+    _plugin_src="/usr/lib/archcanary/lynis-plugin-archcanary.sh"
+    _plugin_dst="/etc/lynis/plugins/plugin_archcanary_phase1.sh"
+    if [[ -f "$_plugin_src" && -d /etc/lynis/plugins && ! -f "$_plugin_dst" ]]; then
+        install -m 644 "$_plugin_src" "$_plugin_dst"
+        echo "Installed Lynis plugin: $_plugin_dst"
+        echo
+    fi
+    unset _plugin_src _plugin_dst
+    exec lynis audit system --no-colors
 fi
 
 # ---------------------------------------------------------------------------
@@ -1780,7 +1790,7 @@ check_lynis() {
     if [[ ${#warnings[@]} -gt 0 ]]; then
         echo "  Warnings (${#warnings[@]}):"
         for w in "${warnings[@]}"; do
-            echo "    • $w"
+            echo "    * $w"
         done
         return 1
     fi

@@ -499,7 +499,11 @@ run_action() {
         exec 8>"$fifo"
         rm -f "$fifo"
 
-        printf 'Authenticate in the polkit dialog to continue...\n  After authenticating, please wait — the first scan fetches package lists from the network.\n\n' >&8 || true
+        if [[ "$idx" -eq 0 ]]; then
+            printf 'Authenticate in the polkit dialog to continue...\n  After authenticating, please wait — the first scan fetches package lists from the network.\n\n' >&8 || true
+        else
+            printf 'Authenticate in the polkit dialog to continue...\n\n' >&8 || true
+        fi
 
         # Let yad render and settle so the polkit dialog opens as the newest
         # (and thus focused) window — without this delay, yad may steal focus
@@ -526,6 +530,9 @@ run_action() {
         done
 
         printf '\n============================================================\n\n' >&8 2>/dev/null || true
+        if [[ "$idx" -eq 17 ]]; then
+            printf 'Running lynis audit system, please wait (1-2 minutes)...\n\n' >&8 || true
+        fi
 
         if [[ -n "$_xdotool_pid" ]]; then
             kill "$_xdotool_pid" 2>/dev/null || true

@@ -204,6 +204,8 @@ if $SYSTEM; then
     sudo cp "$REPO_DIR/archcanary-root-helper" "$SYSTEM_LIB/root-helper"
     sudo chown root:root "$SYSTEM_LIB/root-helper"
     sudo chmod 755 "$SYSTEM_LIB/root-helper"
+    sudo install -m 644 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" \
+        "$SYSTEM_LIB/lynis-plugin-archcanary.sh"
     sudo cp "$REPO_DIR/org.archcanary.policy" /usr/share/polkit-1/actions/
     # Seed the bundled package lists next to the system script so a root scan
     # (system service) finds them — root's $HOME is /root, which is not seeded.
@@ -241,6 +243,7 @@ EOF
     fi
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
+    echo "  installed: $SYSTEM_LIB/lynis-plugin-archcanary.sh (auto-installed to /etc/lynis/plugins on first Lynis run)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
