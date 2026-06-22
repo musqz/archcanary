@@ -422,6 +422,11 @@ run_doctor() {
             _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui")" "bash $installer" "path: $user_bin/archcanary-gui"
         fi
         _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")" "archcanary --refresh" "path: $cfg_dir/package_list.txt"
+        if [[ -e "$cfg_dir" && ! -w "$cfg_dir" ]]; then
+            _warn "config dir writable" \
+                "sudo chown -R $USER: \"$cfg_dir\"" \
+                "dir is owned by root — --refresh will fail"
+        fi
         printf '\n'
     fi
 
