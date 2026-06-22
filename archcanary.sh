@@ -502,7 +502,7 @@ if $RUN_LYNIS; then
     # that yad text-info renders as [?] boxes. pipefail off so set -e doesn't
     # fire on lynis's own exit code before we can capture it.
     set +o pipefail
-    lynis audit system --no-colors 2>&1 | sed 's/[^\x09\x0A\x0D\x20-\x7E]//g'
+    lynis audit system --no-colors 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
     exit "${PIPESTATUS[0]}"
 fi
 
