@@ -139,11 +139,13 @@ STATUS[12]="   "  # Edit DKMS allowlist
 STATUS[13]="   "  # traur — opens its own output window, no verdict here
 STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
 STATUS[15]="   "  # extra lists — config dialog, no scan verdict
+STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
 STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
 unset _i
 
 _update_status() {
     local idx=$1 code=$2
+    [[ $idx -eq 16 ]] && return  # Lynis hardening report — informational, stays blank
     case $code in
         0) STATUS[$idx]=" ✅" ;;
         1) STATUS[$idx]=" ⚠ " ;;
@@ -163,7 +165,7 @@ declare -A _SCAN_TAG=(
 # whole list. $1 = overall exit code (fallback), $2 = scan output file.
 _propagate_full_scan() {
     local code=$1 out="${2:-}" i tag block
-    for i in 1 2 3 4 5 6 7 8 9 10 11 16; do
+    for i in 1 2 3 4 5 6 7 8 9 10 11; do
         tag="${_SCAN_TAG[$i]:-}"
         block=""
         [[ -n "$out" && -r "$out" && -n "$tag" ]] && block=$(awk -v t="$tag" '
