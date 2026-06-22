@@ -73,6 +73,7 @@ NO_SUMMARY=false
 DOCTOR=false
 DOCTOR_SECTIONS=""
 RUN_LYNIS=false
+_COLOR_ARG="auto"
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -112,6 +113,7 @@ for arg in "$@"; do
         --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
         --no-notify)             NO_NOTIFY=true ;;
         --no-summary)            NO_SUMMARY=true ;;
+        --color=*)               _COLOR_ARG="${arg#*=}" ;;
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
         --run-lynis)             RUN_LYNIS=true ;;
@@ -141,6 +143,7 @@ for arg in "$@"; do
   --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
             echo "  --no-notify               Suppress the desktop notification on detection
   --no-summary              Suppress the check summary table at the end of a scan"
+            echo "  --color=auto|always|never Control symbol/color output (default: auto; also obeys NO_COLOR env)"
             echo "  --doctor                  Report install/config status of every stack element"
             echo "                            (deps, install, systemd, aurscan, traur, yay hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
@@ -162,6 +165,33 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Initialise color/symbol globals — respects NO_COLOR env and --color flag.
+_init_color() {
+    local use=false
+    case "$_COLOR_ARG" in
+        always) use=true ;;
+        never)  use=false ;;
+        auto)   [[ -z "${NO_COLOR:-}" && -t 1 ]] && use=true ;;
+    esac
+    if $use; then
+        _CG=$'\e[32m' _CY=$'\e[33m' _CR=$'\e[31m'
+        _CB=$'\e[1m'  _CN=$'\e[0m'  _CC=$'\e[36m'
+        _SYM_CLEAN="${_CG}✅  clean${_CN}"
+        _SYM_WARNINGS="${_CY}⚠   warnings${_CN}"
+        _SYM_INFECTED_TXT="${_CR}${_CB}❌  INFECTED${_CN}"
+        _SYM_SKIPPED="⚠   skipped (needs root)"
+        _SEP55="$(printf '─%.0s' $(seq 1 55))"
+    else
+        _CG='' _CY='' _CR='' _CB='' _CN='' _CC=''
+        _SYM_CLEAN="[ok]   clean"
+        _SYM_WARNINGS="[!!]   warnings"
+        _SYM_INFECTED_TXT="[!!]   INFECTED"
+        _SYM_SKIPPED="[--]   skipped (needs root)"
+        _SEP55="$(printf '%0.s-' $(seq 1 55))"
+    fi
+}
+_init_color
 
 # Focused mode: a specific --check-* flag was given without --full.
 # Suppresses the campaign header and the always-on package/log checks so
@@ -248,11 +278,7 @@ run_doctor() {
         for s in "${ordered[@]}"; do want[$s]=1; done
     fi
 
-    # Colours only on a real terminal; piped/GUI-captured output stays plain.
-    local G='' Y='' R='' B='' N='' C=''
-    if [[ -t 1 ]]; then
-        G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; B=$'\e[1m'; N=$'\e[0m'; C=$'\e[36m'
-    fi
+    local G=$_CG Y=$_CY R=$_CR B=$_CB N=$_CN C=$_CC
 
     # Four states: OK (present + working), WARN (present but not functioning),
     # MISS (required, absent), OPT (optional addon — absent is fine). WARN and
@@ -1831,28 +1857,20 @@ _SUMMARY_CODES=()
 _rec() { _SUMMARY_NAMES+=("$1"); _SUMMARY_CODES+=("$2"); }
 
 _print_summary() {
-    local _G="" _R="" _Y="" _B="" _N=""
-    if [[ -t 1 ]]; then
-        _G=$(tput setaf 2 2>/dev/null || true)
-        _R=$(tput setaf 1 2>/dev/null || true)
-        _Y=$(tput setaf 3 2>/dev/null || true)
-        _B=$(tput bold   2>/dev/null || true)
-        _N=$(tput sgr0   2>/dev/null || true)
-    fi
     local _w=36
     printf '\n Check summary\n'
-    printf ' %s\n' "$(printf '─%.0s' $(seq 1 55))"
+    printf ' %s\n' "$_SEP55"
     local i
     for i in "${!_SUMMARY_NAMES[@]}"; do
         local name="${_SUMMARY_NAMES[$i]}" code="${_SUMMARY_CODES[$i]}"
         case "$code" in
-            0)  printf ' %-*s %s✅  clean%s\n'             "$_w" "$name" "$_G"      "$_N" ;;
-            1)  printf ' %-*s %s⚠   warnings%s\n'          "$_w" "$name" "$_Y"      "$_N" ;;
-            2)  printf ' %-*s %s❌  INFECTED%s\n'          "$_w" "$name" "$_R$_B"   "$_N" ;;
-            77) printf ' %-*s ⚠   skipped (needs root)\n'  "$_w" "$name"                  ;;
+            0)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_CLEAN" ;;
+            1)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_WARNINGS" ;;
+            2)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_INFECTED_TXT" ;;
+            77) printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_SKIPPED" ;;
         esac
     done
-    printf ' %s\n' "$(printf '─%.0s' $(seq 1 55))"
+    printf ' %s\n' "$_SEP55"
 }
 
 load_packages
@@ -2041,17 +2059,17 @@ fi
 
 $NO_SUMMARY || _print_summary
 
-echo "============================================================"
+printf '%s============================================================%s\n' "$_CB" "$_CN"
 case $EXIT_CODE in
-    0) echo " RESULT: CLEAN - No indicators found." ;;
-    1) echo " RESULT: WARNINGS - Review output above." ;;
-    2) echo " RESULT: INFECTED - Indicators found! Follow incident response." ;;
+    0) printf ' %sRESULT: CLEAN - No indicators found.%s\n'                           "$_CG"       "$_CN" ;;
+    1) printf ' %sRESULT: WARNINGS - Review output above.%s\n'                        "$_CY"       "$_CN" ;;
+    2) printf ' %sRESULT: INFECTED - Indicators found! Follow incident response.%s\n' "$_CR$_CB"   "$_CN" ;;
 esac
 if [[ ${#SKIPPED_ROOT[@]} -gt 0 ]]; then
-    echo " INCOMPLETE: ${#SKIPPED_ROOT[@]} root check(s) skipped (no root): ${SKIPPED_ROOT[*]}"
-    echo " Re-run with sudo for the full picture: sudo $0 --full"
+    printf ' INCOMPLETE: %d root check(s) skipped (no root): %s\n' "${#SKIPPED_ROOT[@]}" "${SKIPPED_ROOT[*]}"
+    printf ' Re-run with sudo for the full picture: sudo %s --full\n' "$0"
 fi
-echo "============================================================"
+printf '%s============================================================%s\n' "$_CB" "$_CN"
 
 if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
     if command -v notify-send &>/dev/null; then
