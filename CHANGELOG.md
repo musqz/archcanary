@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.7 (2026-06-22)
+
+- New: **Lynis integration** — two GUI rows: *Lynis hardening report* reads the last `/var/log/lynis-report.dat` (hardening index, warnings, scan date); *Run Lynis audit* executes `lynis audit system` via pkexec and streams output.
+- New: **Lynis plugin** (`configs/lynis-plugin-archcanary.sh`) — registers archcanary as a malware scanner (test `ARCH-0001`, +3 hardening points). Auto-installed to `/etc/lynis/plugins/` on first audit run; shipped to `/usr/lib/archcanary/` by `install.sh --system`.
+- New: **auditd rules editor** — GUI row (Utilities → Edit audit rules) visible when auditd is installed. Ships a default ruleset covering privilege escalation, pacman/AUR builds, kernel modules, systemd units, cron, and SSH config. Editable in-GUI; saves via pkexec and restarts auditd.
+- New: `install.sh --system` seeds `/etc/audit/rules.d/30-archcanary.conf` from the bundled template when auditd is installed and the file has no rules.
+- Fix: Lynis output ANSI cursor-movement codes (`ESC[2C`, `ESC[30C`) stripped before display in yad — `--no-colors` suppresses color SGR sequences but not cursor movement.
+- Fix: non-ASCII Unicode block characters (`▆` etc.) stripped from Lynis output for yad text-info compatibility.
+- Fix: `NEEDS_ROOT[16]` corrected to `true` — `/var/log/lynis-report.dat` is always mode 600; the non-root designation caused spurious WARNINGS in every full scan.
+- Fix: `--check-lynis` added to root-helper allowlist.
+- Fix: polkit wait message scoped to idx 0 only — other root checks no longer show the network-fetch warning.
+- Fix: busy indicator added to Run Lynis audit output window.
+- Fix: `*` bullet used in `check_lynis` warnings list (replaces `•` for monospace font compatibility).
+
 ## v0.1.6 (2026-06-21)
 
 - Fix: the GUI root-scan (pkexec) output window now opens immediately when you
