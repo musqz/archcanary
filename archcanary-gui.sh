@@ -22,6 +22,7 @@ fi
 
 # --no-gui: bypass yad, run a full scan in the terminal with structured output.
 if [[ "${1:-}" == "--no-gui" ]]; then
+    export ARCHCANARY_FROM_GUI=1
     exec "$MAIN_SCRIPT" --full --no-notify "${@:2}"
 fi
 

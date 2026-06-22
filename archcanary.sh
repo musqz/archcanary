@@ -2067,7 +2067,11 @@ case $EXIT_CODE in
 esac
 if [[ ${#SKIPPED_ROOT[@]} -gt 0 ]]; then
     printf ' INCOMPLETE: %d root check(s) skipped (no root): %s\n' "${#SKIPPED_ROOT[@]}" "${SKIPPED_ROOT[*]}"
-    printf ' Re-run with sudo for the full picture: sudo %s --full\n' "$0"
+    if [[ -n "${ARCHCANARY_FROM_GUI:-}" ]]; then
+        printf ' Re-run with sudo for the full picture: sudo archcanary-gui --no-gui\n'
+    else
+        printf ' Re-run with sudo for the full picture: sudo %s --full\n' "$0"
+    fi
 fi
 printf '%s============================================================%s\n' "$_CB" "$_CN"
 
