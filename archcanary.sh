@@ -1918,27 +1918,25 @@ done
 
 if ! $FOCUSED_MODE; then
     echo "============================================================"
+    local _main_win
+    if $ALL_TIME; then _main_win="all-time"; else _main_win="${START_DATE} – ${END_DATE}"; fi
     echo " Archcanary v${SCRIPT_VERSION}"
-    echo " Campaign: malicious npm packages (malicious_npm_packages.txt) infostealer + eBPF rootkit"
-    if $ALL_TIME; then
-        echo " Date window: all-time (no recency filter)"
-    else
-        echo " Date window: ${START_DATE} to ${END_DATE}"
-    fi
-    echo " Packages checked: ${#INFECTED_PKGS[@]}"
+    echo
+    echo " Lists loaded"
+    echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit  (${_main_win})"
     if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
-        if $ALL_TIME; then
-            echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, 2025 campaign — all-time)"
-        else
-            echo "   (incl. ${#CHAOS_RAT_PKGS[@]} CHAOS RAT pkgs, window ${CHAOS_START_DATE} to ${CHAOS_END_DATE})"
-        fi
+        local _chaos_win
+        if $ALL_TIME; then _chaos_win="all-time"; else _chaos_win="${CHAOS_START_DATE} – ${CHAOS_END_DATE}"; fi
+        printf "   + CHAOS RAT%10s pkgs  (%s)\n" "${#CHAOS_RAT_PKGS[@]}" "$_chaos_win"
     fi
     if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
-        echo "   (incl. ${#RUSSIAN_SPAM_PKGS[@]} Russian Spam Campaign pkgs, 2026-06-14)"
+        printf "   + Russian Spam%7s pkgs  (2026-06-14)\n" "${#RUSSIAN_SPAM_PKGS[@]}"
     fi
     if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
-        echo "   (incl. ${#EXTRA_PKGS[@]} extra pkgs from extra_lists.conf / --extra-list)"
+        printf "   + extra lists%8s pkgs  (extra_lists.conf / --extra-list)\n" "${#EXTRA_PKGS[@]}"
     fi
+    echo
+    echo " Packages checked: ${#INFECTED_PKGS[@]}"
     echo "============================================================"
     echo
 
