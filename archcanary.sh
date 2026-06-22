@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="0.1.6"
+SCRIPT_VERSION="0.1.7"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -1192,7 +1192,7 @@ check_bpftool() {
             echo "  WARNING: kprobes on rootkit-associated functions (file-hide/process-hide/network):"
             echo "$suspicious_perf" | sed 's/^/    /'
             echo "  Confirm: sudo bpftool perf show"
-            [[ $worst_ret -lt 1 ]] && worst_ret=1
+            worst_ret=1
         else
             echo "  No hooks on rootkit-associated functions."
         fi
@@ -1918,14 +1918,12 @@ done
 
 if ! $FOCUSED_MODE; then
     echo "============================================================"
-    if $ALL_TIME; then _main_win="all-time"; else _main_win="${START_DATE} – ${END_DATE}"; fi
     echo " Archcanary v${SCRIPT_VERSION}"
     echo
     echo " Lists loaded"
-    echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit  (${_main_win})"
+    echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit  ($($ALL_TIME && echo all-time || echo "${START_DATE} – ${END_DATE}"))"
     if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
-        if $ALL_TIME; then _chaos_win="all-time"; else _chaos_win="${CHAOS_START_DATE} – ${CHAOS_END_DATE}"; fi
-        printf "   + CHAOS RAT%10s pkgs  (%s)\n" "${#CHAOS_RAT_PKGS[@]}" "$_chaos_win"
+        printf "   + CHAOS RAT%10s pkgs  (%s)\n" "${#CHAOS_RAT_PKGS[@]}" "$($ALL_TIME && echo all-time || echo "${CHAOS_START_DATE} – ${CHAOS_END_DATE}")"
     fi
     if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
         printf "   + Russian Spam%7s pkgs  (2026-06-14)\n" "${#RUSSIAN_SPAM_PKGS[@]}"
