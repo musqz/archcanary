@@ -56,6 +56,8 @@ archcanary integrates with and builds on the following:
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection |
 | [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | `notify-send` — desktop critical alert on infected scan result |
 | [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI privilege escalation for root-requiring checks |
+| [lynis](https://cisofy.com/lynis/) | Optional — system hardening auditor; archcanary reads the last report and can trigger a new audit from the GUI; a plugin registers archcanary as a malware scanner in Lynis |
+| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional — kernel audit daemon; archcanary ships a default ruleset covering AUR builds, privilege escalation, and system config changes; editable from the GUI |
 
 ### Detection Layers
 
@@ -156,6 +158,8 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-ldso` | `/etc/ld.so.preload` injection + recent `/etc/ld.so.conf.d/` changes | No |
 | `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns | No |
 | `--check-kmod` | Kernel modules not owned by pacman; untracked DKMS builds | Yes |
+| `--check-lynis` | Read last Lynis report — hardening index, warnings, scan date | Yes |
+| `--run-lynis` | Run `lynis audit system`, stream output; auto-installs archcanary Lynis plugin on first run | Yes |
 | `--full` | All of the above | Partial |
 | `--all-time` | Skip the June 9-12 install-date window — scan all history | — |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc | — |
@@ -187,7 +191,9 @@ Every scan prints a per-check summary before the final verdict:
 `--system` sets up:
 - Root system timer: weekly + on boot + after each pacman transaction
 - User notifier: watches `/var/lib/archcanary/last-scan.log`, fires a desktop alert on `INFECTED`
-- pkexec root helper for GUI-triggered root checks (eBPF, bpftool, kmod)
+- pkexec root helper for GUI-triggered root checks (eBPF, bpftool, kmod, Lynis)
+- Lynis plugin at `/usr/lib/archcanary/lynis-plugin-archcanary.sh` (auto-installed to `/etc/lynis/plugins/` on first GUI audit run)
+- auditd ruleset at `/etc/audit/rules.d/30-archcanary.conf` when auditd is installed (seeded from template, editable via GUI)
 
 See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.md](docs/my-setup.md) for the full personal stack and reinstall steps.
 
