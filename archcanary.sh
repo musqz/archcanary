@@ -203,6 +203,9 @@ run_doctor() {
     real_user="${SUDO_USER:-$USER}"
     real_home="$(getent passwd "$real_user" | cut -d: -f6)"
     [[ -z "$real_home" ]] && real_home="$HOME"
+    # Extend PATH with the real user's bin dirs so command -v finds their tools
+    # even when running under sudo (root's PATH omits ~/.local/bin).
+    export PATH="$real_home/.local/bin:$real_home/bin:$PATH"
     cfg_dir="${XDG_CONFIG_HOME:-$real_home/.config}/archcanary"
     user_bin="$real_home/.local/bin"
     user_sd="${XDG_CONFIG_HOME:-$real_home/.config}/systemd/user"
