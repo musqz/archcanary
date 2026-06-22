@@ -591,8 +591,8 @@ build_list_args() {
     _row 12
     $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
-    _row 15
     $HAS_LYNIS && _row 16
+    _row 15
 }
 
 # Main loop
