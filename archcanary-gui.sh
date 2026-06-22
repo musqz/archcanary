@@ -248,20 +248,21 @@ edit_allowlist() {
 
 edit_audit_rules() {
     local cfg="/etc/audit/rules.d/30-archcanary.conf"
-    if [[ ! -f "$cfg" ]]; then
-        yad --warning \
-            --title="Audit Rules — Archcanary" \
-            --window-icon=security-high \
-            --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> to create it." \
-            --width=440 2>/dev/null || true
-        return
-    fi
-    local tmpout
+    local template="/usr/lib/archcanary/audit-rules.conf"
+    local tmpin tmpout
+    tmpin="$(mktemp /tmp/archcanary-XXXXXX.conf)"
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.conf)"
+    if grep -qE '^\s*-[waAbfe]' "$cfg" 2>/dev/null; then
+        cp "$cfg" "$tmpin"
+    elif [[ -f "$template" ]]; then
+        cp "$template" "$tmpin"
+    else
+        printf '# No rules found. Run ./install.sh --system to seed the template.\n' > "$tmpin"
+    fi
     if yad --text-info \
         --title="Audit Rules — Archcanary" \
         --window-icon=security-high \
-        --filename="$cfg" \
+        --filename="$tmpin" \
         --width=700 --height=520 \
         --fontname="Monospace 10" \
         --editable \
@@ -276,7 +277,7 @@ edit_audit_rules() {
                 --width=420 2>/dev/null || true
         fi
     fi
-    rm -f "$tmpout"
+    rm -f "$tmpin" "$tmpout"
 }
 
 edit_lynis_config() {
