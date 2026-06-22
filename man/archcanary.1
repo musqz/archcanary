@@ -38,7 +38,8 @@ Check the npm cache for package names in
 .IR malicious_npm_packages.txt .
 .TP
 .B \-\-check-bun-cache
-Check the bun cache for the same malicious package name list.
+Check the bun cache for packages in
+.IR malicious_npm_packages.txt .
 .TP
 .B \-\-check-yarn-cache
 Scan yarn v1 and Berry caches, including fnm per-version globals.
@@ -117,9 +118,8 @@ Repeatable.
 Verbose output.
 .TP
 .B \-\-debug
-Verbose output with
-.B set -x
-trace.
+Verbose; enables
+.BR set\ -x .
 .TP
 \fB\-\-log-file\fR=\fIPATH\fR
 Write full detail log to
@@ -138,13 +138,10 @@ Suppress the desktop notification on detection.
 Suppress the check summary table at the end of a scan.
 .TP
 \fB\-\-color\fR=\fIauto\fR|\fIalways\fR|\fInever\fR
-Control symbol and color output.
+Control color and Unicode symbol output (default:
+.BR auto ).
 .B auto
-(default) enables color only when stdout is a terminal.
-.B never
-and the
-.B NO_COLOR
-environment variable both disable all color and Unicode symbols.
+enables color only when stdout is a terminal.
 .SS Health check
 .TP
 .B \-\-doctor
@@ -153,12 +150,11 @@ Report the install and configuration status of every stack element
 .TP
 \fB\-\-doctor\fR=\fISECTION\fR[,\fISECTION\fR...]
 Check only the named section(s) with extra per-item detail.
-Valid sections:
+Sections:
 .BR platform ", " deps ", " user ", " system ", " systemd ", " external .
-Tool names such as
-.BR aurscan ", " traur ", " yad
-are also accepted as aliases.
-Sections may be comma- or space-separated.
+Tool names
+.RB ( aurscan ", " traur ", " yad \&...)
+are also accepted.
 .TP
 .B \-\-help ", " \-h
 Print a short usage summary and exit.
@@ -175,10 +171,8 @@ Infected — malicious packages or artifacts detected.
 .SH ENVIRONMENT
 .TP
 .B NO_COLOR
-If set to any value, disables all ANSI color codes and Unicode symbols
-in output (equivalent to
+If set, disables all color and Unicode symbols (equivalent to
 .BR \-\-color=never ).
-This is a widely adopted convention for command-line tools.
 .TP
 .B PACMAN_LOG_GLOB
 Override the glob used to find pacman log files.
@@ -193,10 +187,10 @@ Known-bad AUR package list (infostealer + eBPF rootkit campaign).
 Malicious npm package name list.
 .TP
 .I /var/lib/archcanary/last-scan.log
-Latest system-level scan result; watched by the user notifier unit.
+Last system scan result.
 .TP
 .I ~/.cache/archcanary/last-user-scan.log
-Latest user-level scan result.
+Last user scan result.
 .TP
 .I /etc/archcanary/dkms_allowlist.conf
 System-wide DKMS module allowlist for
@@ -207,7 +201,7 @@ Lynis report file read by
 .BR \-\-check-lynis .
 .TP
 .I /usr/lib/archcanary/
-System library directory: root scan script, polkit helper, Lynis plugin.
+System library directory.
 .SH SEE ALSO
 .BR archcanary-gui (1),
 .BR pacman (8),
