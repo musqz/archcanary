@@ -1918,6 +1918,7 @@ done
 if ! $FOCUSED_MODE; then
     echo "============================================================"
     echo " Archcanary v${SCRIPT_VERSION}"
+    echo " Scanned: $(date '+%Y-%m-%d %H:%M')"
     echo
     echo " Lists loaded"
     echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit"
