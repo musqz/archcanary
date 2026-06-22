@@ -89,6 +89,7 @@ LABELS=(
     "LLM settings (aurscan)"   # 14
     "Extra lists"               # 15
     "Lynis hardening report"   # 16
+    "Run Lynis audit"          # 17  root
 )
 
 FLAGS=(
@@ -109,6 +110,7 @@ FLAGS=(
     "__aurscan_settings__"
     "__extra_lists__"
     "--check-lynis --no-notify --no-summary"
+    "--run-lynis"
 )
 
 NEEDS_ROOT=(
@@ -116,6 +118,7 @@ NEEDS_ROOT=(
     true true true
     false false false false
     false
+    true
 )
 
 # Per-session status for each check index.
@@ -419,6 +422,16 @@ run_action() {
     local flags="${FLAGS[$idx]}"
     local needs_root="${NEEDS_ROOT[$idx]}"
 
+    if [[ "$idx" -eq 16 || "$idx" -eq 17 ]] && ! $HAS_LYNIS; then
+        yad --info \
+            --title="Lynis — Archcanary" \
+            --window-icon=security-high \
+            --text="<b>Lynis</b> is not installed.\n\nInstall from official repos:\n  <tt>sudo pacman -S lynis</tt>" \
+            --width=420 \
+            --button="OK:0" 2>/dev/null || true
+        return
+    fi
+
     if [[ "$flags" == "__dkms_edit__" ]]; then
         edit_allowlist
         return
@@ -586,12 +599,13 @@ build_list_args() {
 
     _sep "Root checks"
     for i in 9 10 11; do _row "$i" "🔐  ${LABELS[$i]}"; done
+    _row 17 "🔐  ${LABELS[17]}"
 
     _sep "Utilities"
     _row 12
     $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
-    $HAS_LYNIS && _row 16
+    _row 16
     _row 15
 }
 
