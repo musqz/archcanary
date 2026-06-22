@@ -422,6 +422,11 @@ run_doctor() {
             _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui")" "bash $installer" "path: $user_bin/archcanary-gui"
         fi
         _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")" "archcanary --refresh" "path: $cfg_dir/package_list.txt"
+        if [[ -e "$cfg_dir" && ! -w "$cfg_dir" ]]; then
+            _warn "config dir writable" \
+                "sudo chown -R $USER: \"$cfg_dir\"" \
+                "dir is owned by root — --refresh will fail"
+        fi
         printf '\n'
     fi
 
@@ -442,8 +447,13 @@ run_doctor() {
         # installer enables: two system, two user.
         _unit system "archcanary.timer"        "system scan timer (weekly + boot)"
         _unit system "archcanary.path"         "post-install trigger (scan after each pacman transaction)"
-        _unit user   "archcanary-user.timer"   "user scan timer (cache/autostart checks)"
-        _unit user   "archcanary-notify.path"  "desktop notifier (alerts on new scan results)"
+        if [[ $EUID -eq 0 ]]; then
+            _ok "user scan timer (cache/autostart checks)"    "skipped — run --doctor as your regular user to check"
+            _ok "desktop notifier (alerts on new scan results)" "skipped — run --doctor as your regular user to check"
+        else
+            _unit user   "archcanary-user.timer"   "user scan timer (cache/autostart checks)"
+            _unit user   "archcanary-notify.path"  "desktop notifier (alerts on new scan results)"
+        fi
         printf '\n'
     fi
 
