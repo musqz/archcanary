@@ -117,7 +117,7 @@ NEEDS_ROOT=(
     true false false false false false false false false
     true true true
     false false false false
-    false
+    true
     true
 )
 
@@ -612,7 +612,7 @@ build_list_args() {
     _row 12
     $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
-    _row 16
+    _row 16 "🔐  ${LABELS[16]}"
     _row 15
 }
 
