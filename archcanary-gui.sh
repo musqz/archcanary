@@ -147,6 +147,19 @@ STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
 STATUS[19]="   "  # Edit Lynis config — config dialog, no scan verdict
 unset _i
 
+# Derive full-scan status (row 0) from whichever individual checks have results.
+# Used when the scan window is closed before completion.
+_infer_full_status() {
+    local worst=0
+    for i in 1 2 3 4 5 6 7 8 9 10 11; do
+        case "${STATUS[$i]:-}" in
+            *"❌"*) worst=2; break ;;
+            *"⚠"*)  [[ $worst -lt 1 ]] && worst=1 ;;
+        esac
+    done
+    _update_status 0 "$worst"
+}
+
 _update_status() {
     local idx=$1 code=$2
     [[ $idx -eq 16 ]] && return  # Lynis hardening report — informational, stays blank
@@ -664,6 +677,7 @@ run_action() {
                     --window-icon=security-high \
                     --text="pkexec failed (exit $pkexec_exit)" \
                     --width=360 2>/dev/null || true
+            if [[ "$idx" -eq 0 ]]; then _infer_full_status; fi
             return 0
         fi
 
