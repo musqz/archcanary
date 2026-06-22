@@ -22,8 +22,9 @@
 #   ./archcanary.sh --check-npm-cache  # also check npm cache for atomic-lockfile
 #   ./archcanary.sh --full             # enable all checks
 #
-# Environment:
+# Environment / date window (env vars or equivalent --start-date/--end-date flags):
 #   START_DATE=2026-06-09  END_DATE=2026-06-12  ./archcanary.sh
+#   ./archcanary.sh --start-date=2026-06-09 --end-date=2026-06-12
 #   PACMAN_LOG_GLOB="/var/log/pacman.log*"       ./archcanary.sh
 #
 # Exit codes:
@@ -46,6 +47,8 @@ SCRIPT_VERSION="0.1.8"
 # Configuration
 # ---------------------------------------------------------------------------
 PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
+START_DATE=${START_DATE:-}
+END_DATE=${END_DATE:-}
 # Pulls the live package list from the official Arch Linux HedgeDoc note.
 LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
 # Supplementary lists — pulled from the repo on --refresh.
@@ -80,6 +83,8 @@ PACKAGE_LIST_FILE_OPT=""
 MALICIOUS_NPM_LIST_OPT=""
 CHAOS_RAT_LIST_OPT=""
 RUSSIAN_SPAM_LIST_OPT=""
+START_DATE_OPT=""
+END_DATE_OPT=""
 EXTRA_LIST_OPTS=()
 
 # Temp file cleanup on exit/interrupt
@@ -111,6 +116,8 @@ for arg in "$@"; do
         --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
         --russian-spam-list=*)   RUSSIAN_SPAM_LIST_OPT="${arg#*=}" ;;
         --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
+        --start-date=*)          START_DATE_OPT="${arg#*=}" ;;
+        --end-date=*)            END_DATE_OPT="${arg#*=}" ;;
         --no-notify)             NO_NOTIFY=true ;;
         --no-summary)            NO_SUMMARY=true ;;
         --color=*)               _COLOR_ARG="${arg#*=}" ;;
@@ -141,6 +148,8 @@ for arg in "$@"; do
             echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)
   --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)
   --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
+            echo "  --start-date=YYYY-MM-DD   Only flag packages installed on or after this date (env: START_DATE)"
+            echo "  --end-date=YYYY-MM-DD     Only flag packages installed on or before this date (env: END_DATE)"
             echo "  --no-notify               Suppress the desktop notification on detection
   --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --color=auto|always|never Control symbol/color output (default: auto; also obeys NO_COLOR env)"
@@ -579,6 +588,14 @@ if [[ -n "$RUSSIAN_SPAM_LIST_OPT" ]]; then
     RUSSIAN_SPAM_LIST="$RUSSIAN_SPAM_LIST_OPT"
 fi
 
+if [[ -n "$START_DATE_OPT" ]]; then
+    START_DATE="$START_DATE_OPT"
+fi
+
+if [[ -n "$END_DATE_OPT" ]]; then
+    END_DATE="$END_DATE_OPT"
+fi
+
 # ---------------------------------------------------------------------------
 # Invoking-user home under sudo/pkexec
 # Root-requiring checks (--check-kmod/--check-bpftool/--check-ebpf) are run as
@@ -889,9 +906,15 @@ check_current() {
     local found=()
     while IFS= read -r pkg; do
         [[ -v INFECTED_LOOKUP["$pkg"] ]] || continue
-        local install_date
+        local install_date install_date_iso
         install_date=$(LC_ALL=C pacman -Qi -- "$pkg" 2>/dev/null | awk -F': ' '/^Install Date/ { print $2; exit }')
         [[ -n "$install_date" ]] || continue
+        if [[ -n "$START_DATE" || -n "$END_DATE" ]]; then
+            install_date_iso=$(date -d "$install_date" +%F 2>/dev/null) || true
+            [[ -n "$install_date_iso" ]] || continue
+            [[ -z "$START_DATE" || ! "$install_date_iso" < "$START_DATE" ]] || continue
+            [[ -z "$END_DATE"   || ! "$install_date_iso" > "$END_DATE"   ]] || continue
+        fi
         if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then
             found+=("$pkg (installed: $install_date) [CHAOS RAT campaign, 2025-07]")
         else
@@ -946,6 +969,11 @@ check_logs() {
             [[ "$line" =~ $re_date ]] || continue
             datetime_str=${BASH_REMATCH[1]}
             date_str="${datetime_str:0:10}"
+
+            if [[ -n "$START_DATE" || -n "$END_DATE" ]]; then
+                [[ -z "$START_DATE" || ! "$date_str" < "$START_DATE" ]] || continue
+                [[ -z "$END_DATE"   || ! "$date_str" > "$END_DATE"   ]] || continue
+            fi
 
             [[ "$line" =~ $re_alpm ]] || continue
             action=${BASH_REMATCH[1]}
@@ -1918,6 +1946,9 @@ if ! $FOCUSED_MODE; then
     fi
     echo
     echo " Packages checked: ${#INFECTED_PKGS[@]}"
+    if [[ -n "$START_DATE" || -n "$END_DATE" ]]; then
+        echo " Date window: ${START_DATE:-beginning} → ${END_DATE:-now}"
+    fi
     echo "============================================================"
     echo
 

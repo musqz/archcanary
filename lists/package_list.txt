@@ -1162,7 +1162,6 @@ nody-greeter
 non-daw-git
 nordnm
 notepad---bin
-notepad\u2014bin
 notify-desktop-git
 notion-app-enhanced
 nox-bin
