@@ -7,7 +7,13 @@ archcanary \- security scanner for Arch Linux
 .SH DESCRIPTION
 .B archcanary
 is a layered security detection stack for Arch Linux.
-It scans for malicious AUR packages, systemd and eBPF persistence,
+It integrates and orchestrates existing security tools \(em
+.BR lynis ,
+.BR bpftool ,
+.BR traur ,
+.BR aurscan ,
+and others \(em into a single unified scanner, while also performing
+its own checks for malicious AUR packages, systemd and eBPF persistence,
 npm/bun/yarn/pnpm cache poisoning, PKGBUILD obfuscation, kernel module
 tampering, library injection, and more.
 .PP
