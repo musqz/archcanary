@@ -62,6 +62,10 @@ AURSCAN="$(command -v aurscan 2>/dev/null || true)"
 HAS_AURSCAN=false
 [[ -n "$AURSCAN" ]] && HAS_AURSCAN=true
 
+LYNIS="$(command -v lynis 2>/dev/null || true)"
+HAS_LYNIS=false
+[[ -n "$LYNIS" ]] && HAS_LYNIS=true
+
 # True once the package list has been refreshed this session.
 # The first run of the full scan (idx 0) auto-adds --refresh and sets this.
 REFRESHED=false
@@ -84,6 +88,7 @@ LABELS=(
     "Trust scan (traur)"        # 13
     "LLM settings (aurscan)"   # 14
     "Extra lists"               # 15
+    "Lynis hardening report"   # 16
 )
 
 FLAGS=(
@@ -103,12 +108,14 @@ FLAGS=(
     "__traur__"
     "__aurscan_settings__"
     "__extra_lists__"
+    "--check-lynis --no-notify --no-summary"
 )
 
 NEEDS_ROOT=(
     true false false false false false false false false
     true true true
     false false false false
+    false
 )
 
 # Per-session status for each check index.
@@ -134,6 +141,7 @@ _update_status() {
 declare -A _SCAN_TAG=(
     [1]='3'  [2]='5'  [3]='6'  [4]='6b' [5]='6c'
     [6]='7'  [7]='9'  [8]='10' [9]='4'  [10]='8' [11]='11'
+    [16]='12'
 )
 
 # After a full scan (idx 0), set each check row from ITS OWN section in the
@@ -141,7 +149,7 @@ declare -A _SCAN_TAG=(
 # whole list. $1 = overall exit code (fallback), $2 = scan output file.
 _propagate_full_scan() {
     local code=$1 out="${2:-}" i tag block
-    for i in 1 2 3 4 5 6 7 8 9 10 11; do
+    for i in 1 2 3 4 5 6 7 8 9 10 11 16; do
         tag="${_SCAN_TAG[$i]:-}"
         block=""
         [[ -n "$out" && -r "$out" && -n "$tag" ]] && block=$(awk -v t="$tag" '
@@ -584,6 +592,7 @@ build_list_args() {
     $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
     _row 15
+    $HAS_LYNIS && _row 16
 }
 
 # Main loop
