@@ -498,7 +498,12 @@ if $RUN_LYNIS; then
         echo
     fi
     unset _plugin_src _plugin_dst
-    exec lynis audit system --no-colors
+    # Can't use exec: pipe through sed to strip non-ASCII block chars (▆ etc.)
+    # that yad text-info renders as [?] boxes. pipefail off so set -e doesn't
+    # fire on lynis's own exit code before we can capture it.
+    set +o pipefail
+    lynis audit system --no-colors 2>&1 | sed 's/[^\x09\x0A\x0D\x20-\x7E]//g'
+    exit "${PIPESTATUS[0]}"
 fi
 
 # ---------------------------------------------------------------------------
