@@ -76,6 +76,14 @@ if $UNINSTALL; then
         fi
     done
 
+    if $SYSTEM; then
+        sudo rm -f /usr/share/man/man1/archcanary.1
+        echo "  removed: /usr/share/man/man1/archcanary.1"
+    else
+        rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/archcanary.1"
+        echo "  removed: ${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/archcanary.1"
+    fi
+
     desktop_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications/archcanary.desktop"
     if [[ -f "$desktop_dst" ]]; then
         rm "$desktop_dst"
@@ -149,6 +157,9 @@ if $SYSTEM; then
             _removed_user=true
         fi
     done
+    sudo install -d -m 755 /usr/share/man/man1
+    sudo install -m 644 "$REPO_DIR/man/archcanary.1" /usr/share/man/man1/archcanary.1
+    echo "  installed: /usr/share/man/man1/archcanary.1"
 else
     mkdir -p "$USER_BIN"
     install -m 755 "$REPO_DIR/archcanary.sh"    "$USER_BIN/archcanary"
@@ -163,6 +174,10 @@ else
             _removed_system=true
         fi
     done
+    MAN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/man/man1"
+    mkdir -p "$MAN_DIR"
+    install -m 644 "$REPO_DIR/man/archcanary.1" "$MAN_DIR/archcanary.1"
+    echo "  installed: $MAN_DIR/archcanary.1"
 fi
 
 # Install desktop entry
