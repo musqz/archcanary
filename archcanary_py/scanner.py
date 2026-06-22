@@ -142,20 +142,9 @@ class AurScanner:
         self,
         infected_packages: set[str],
         malicious_npm_packages: set[str],
-        start_date: str = '2026-06-09',
-        end_date: str = '2026-06-12',
-        all_time: bool = False,
     ) -> None:
         self.infected_packages = infected_packages
         self.malicious_npm_packages = malicious_npm_packages
-        self._start = date.fromisoformat(start_date)
-        self._end = date.fromisoformat(end_date)
-        self.all_time = all_time
-
-    def _in_window(self, d: date) -> bool:
-        if self.all_time:
-            return True
-        return self._start <= d <= self._end
 
     def check_current(self) -> list[PackageMatch]:
         try:
@@ -186,7 +175,7 @@ class AurScanner:
                     raw = line.split(':', 1)[1].strip()
                     install_date = parse_pacman_date(raw)
                     break
-            if install_date is not None and self._in_window(install_date):
+            if install_date is not None:
                 matches.append(PackageMatch(pkg, install_date))
         return matches
 
@@ -204,8 +193,6 @@ class AurScanner:
                     if not dm:
                         continue
                     date_str = dm.group(1)
-                    if not self._in_window(date.fromisoformat(date_str)):
-                        continue
                     am = alpm_re.search(line)
                     if not am:
                         continue

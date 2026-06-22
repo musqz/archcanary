@@ -4,14 +4,10 @@
 #
 # Fetches the official HedgeDoc list (optional), merges with custom package
 # lists from URLs or files, deduplicates, and runs archcanary.sh.
-# By default the campaign date window applies.  Pass -- --all-time after
-# the options separator to scan regardless of install date.
-#
 # Usage:
 #   ./archcanary-merge-lists.sh -l ./historical_packages.txt
 #   ./archcanary-merge-lists.sh -l https://paste.example.org/list.txt -l ./more.txt
-#   ./archcanary-merge-lists.sh --skip-hedgedoc -l legacy.txt -- --all-time
-#   ./archcanary-merge-lists.sh --skip-hedgedoc -l legacy.txt -- --all-time --verbose
+#   ./archcanary-merge-lists.sh --skip-hedgedoc -l legacy.txt -- --verbose
 #
 # Options:
 #   -l, --list=URL|FILE          Additional AUR package list (repeatable)
@@ -24,8 +20,8 @@
 #
 #   --    Separator — all following arguments are passed through to
 #         archcanary.sh unchanged.
-#         Useful flags: --all-time (disable date window), --verbose,
-#         --check-systemd, --check-npm-cache, --check-bun-cache, --full.
+#         Useful flags: --verbose, --check-systemd, --check-npm-cache,
+#         --check-bun-cache, --full.
 
 set -euo pipefail
 
