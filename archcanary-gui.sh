@@ -62,6 +62,10 @@ AURSCAN="$(command -v aurscan 2>/dev/null || true)"
 HAS_AURSCAN=false
 [[ -n "$AURSCAN" ]] && HAS_AURSCAN=true
 
+LYNIS="$(command -v lynis 2>/dev/null || true)"
+HAS_LYNIS=false
+[[ -n "$LYNIS" ]] && HAS_LYNIS=true
+
 # True once the package list has been refreshed this session.
 # The first run of the full scan (idx 0) auto-adds --refresh and sets this.
 REFRESHED=false
@@ -84,6 +88,8 @@ LABELS=(
     "Trust scan (traur)"        # 13
     "LLM settings (aurscan)"   # 14
     "Extra lists"               # 15
+    "Lynis hardening report"   # 16
+    "Run Lynis audit"          # 17  root
 )
 
 FLAGS=(
@@ -103,12 +109,16 @@ FLAGS=(
     "__traur__"
     "__aurscan_settings__"
     "__extra_lists__"
+    "--check-lynis --no-notify --no-summary"
+    "--run-lynis"
 )
 
 NEEDS_ROOT=(
     true false false false false false false false false
     true true true
     false false false false
+    true
+    true
 )
 
 # Per-session status for each check index.
@@ -134,6 +144,7 @@ _update_status() {
 declare -A _SCAN_TAG=(
     [1]='3'  [2]='5'  [3]='6'  [4]='6b' [5]='6c'
     [6]='7'  [7]='9'  [8]='10' [9]='4'  [10]='8' [11]='11'
+    [16]='12'
 )
 
 # After a full scan (idx 0), set each check row from ITS OWN section in the
@@ -141,7 +152,7 @@ declare -A _SCAN_TAG=(
 # whole list. $1 = overall exit code (fallback), $2 = scan output file.
 _propagate_full_scan() {
     local code=$1 out="${2:-}" i tag block
-    for i in 1 2 3 4 5 6 7 8 9 10 11; do
+    for i in 1 2 3 4 5 6 7 8 9 10 11 16; do
         tag="${_SCAN_TAG[$i]:-}"
         block=""
         [[ -n "$out" && -r "$out" && -n "$tag" ]] && block=$(awk -v t="$tag" '
@@ -411,6 +422,16 @@ run_action() {
     local flags="${FLAGS[$idx]}"
     local needs_root="${NEEDS_ROOT[$idx]}"
 
+    if [[ "$idx" -eq 16 || "$idx" -eq 17 ]] && ! $HAS_LYNIS; then
+        yad --info \
+            --title="Lynis — Archcanary" \
+            --window-icon=security-high \
+            --text="<b>Lynis</b> is not installed.\n\nInstall from official repos:\n  <tt>sudo pacman -S lynis</tt>" \
+            --width=420 \
+            --button="OK:0" 2>/dev/null || true
+        return
+    fi
+
     if [[ "$flags" == "__dkms_edit__" ]]; then
         edit_allowlist
         return
@@ -478,7 +499,11 @@ run_action() {
         exec 8>"$fifo"
         rm -f "$fifo"
 
-        printf 'Authenticate in the polkit dialog to continue...\n  After authenticating, please wait — the first scan fetches package lists from the network.\n\n' >&8 || true
+        if [[ "$idx" -eq 0 ]]; then
+            printf 'Authenticate in the polkit dialog to continue...\n  After authenticating, please wait — the first scan fetches package lists from the network.\n\n' >&8 || true
+        else
+            printf 'Authenticate in the polkit dialog to continue...\n\n' >&8 || true
+        fi
 
         # Let yad render and settle so the polkit dialog opens as the newest
         # (and thus focused) window — without this delay, yad may steal focus
@@ -505,6 +530,9 @@ run_action() {
         done
 
         printf '\n============================================================\n\n' >&8 2>/dev/null || true
+        if [[ "$idx" -eq 17 ]]; then
+            printf 'Running lynis audit system, please wait (1-2 minutes)...\n\n' >&8 || true
+        fi
 
         if [[ -n "$_xdotool_pid" ]]; then
             kill "$_xdotool_pid" 2>/dev/null || true
@@ -578,11 +606,13 @@ build_list_args() {
 
     _sep "Root checks"
     for i in 9 10 11; do _row "$i" "🔐  ${LABELS[$i]}"; done
+    _row 17 "🔐  ${LABELS[17]}"
 
     _sep "Utilities"
     _row 12
     $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
+    _row 16 "🔐  ${LABELS[16]}"
     _row 15
 }
 

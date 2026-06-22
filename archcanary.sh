@@ -71,6 +71,7 @@ CHECK_BPFTOOL=false
 CHECK_LDSO=false
 CHECK_AUTOSTART=false
 CHECK_KMOD=false
+CHECK_LYNIS=false
 CHECK_FULL=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
@@ -79,6 +80,7 @@ NO_NOTIFY=false
 NO_SUMMARY=false
 DOCTOR=false
 DOCTOR_SECTIONS=""
+RUN_LYNIS=false
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -105,7 +107,8 @@ for arg in "$@"; do
         --check-ldso)       CHECK_LDSO=true ;;
         --check-autostart)  CHECK_AUTOSTART=true ;;
         --check-kmod)       CHECK_KMOD=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_FULL=true ;;
+        --check-lynis)      CHECK_LYNIS=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_LYNIS=true; CHECK_FULL=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -120,6 +123,7 @@ for arg in "$@"; do
         --no-summary)            NO_SUMMARY=true ;;
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
+        --run-lynis)             RUN_LYNIS=true ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -134,6 +138,7 @@ for arg in "$@"; do
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
             echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
             echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
+            echo "  --check-lynis      Parse Lynis hardening report (/var/log/lynis-report.dat)"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
@@ -175,7 +180,7 @@ done
 FOCUSED_MODE=false
 if ! $CHECK_FULL && { $CHECK_SYSTEMD || $CHECK_EBPF || $CHECK_NPM_CACHE || \
     $CHECK_BUN_CACHE || $CHECK_YARN_CACHE || $CHECK_PNPM_CACHE || $CHECK_PKGBUILD || \
-    $CHECK_BPFTOOL || $CHECK_LDSO || $CHECK_AUTOSTART || $CHECK_KMOD; }; then
+    $CHECK_BPFTOOL || $CHECK_LDSO || $CHECK_AUTOSTART || $CHECK_KMOD || $CHECK_LYNIS; }; then
     FOCUSED_MODE=true
 fi
 
@@ -448,6 +453,7 @@ run_doctor() {
                 "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
         fi
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
+        _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         _opt_item "yay hooks (auto-scan on yay install)" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"
         printf '\n'
     fi
@@ -475,6 +481,29 @@ run_doctor() {
 if $DOCTOR; then
     _doctor_rc=0; run_doctor || _doctor_rc=$?
     exit $_doctor_rc
+fi
+
+if $RUN_LYNIS; then
+    if ! command -v lynis &>/dev/null; then
+        echo "Error: lynis not installed (pacman -S lynis)" >&2
+        exit 1
+    fi
+    # Auto-install the archcanary Lynis plugin on first run (already root via pkexec).
+    # Ships as /usr/lib/archcanary/lynis-plugin-archcanary.sh; Lynis loads it on next audit.
+    _plugin_src="/usr/lib/archcanary/lynis-plugin-archcanary.sh"
+    _plugin_dst="/etc/lynis/plugins/plugin_archcanary_phase1.sh"
+    if [[ -f "$_plugin_src" && -d /etc/lynis/plugins && ! -f "$_plugin_dst" ]]; then
+        install -m 644 "$_plugin_src" "$_plugin_dst"
+        echo "Installed Lynis plugin: $_plugin_dst"
+        echo
+    fi
+    unset _plugin_src _plugin_dst
+    # Can't use exec: pipe through sed to strip non-ASCII block chars (▆ etc.)
+    # that yad text-info renders as [?] boxes. pipefail off so set -e doesn't
+    # fire on lynis's own exit code before we can capture it.
+    set +o pipefail
+    lynis audit system --no-colors 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
+    exit "${PIPESTATUS[0]}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1709,6 +1738,73 @@ check_kmod() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 12: Lynis hardening report
+# Parses /var/log/lynis-report.dat (written by: sudo lynis audit system).
+# Reports the hardening index and warnings from the last Lynis run.
+# The report file is root-owned (600) — returns 77 if unreadable without root.
+# Override the report path with LYNIS_REPORT_FILE for testing.
+# ---------------------------------------------------------------------------
+check_lynis() {
+    local report_file="${LYNIS_REPORT_FILE:-/var/log/lynis-report.dat}"
+
+    if ! command -v lynis &>/dev/null; then
+        echo "  Skipped: lynis not installed (pacman -S lynis)."
+        return 0
+    fi
+
+    if [[ ! -f "$report_file" ]]; then
+        echo "  No Lynis report found at $report_file."
+        echo "  Generate one with: sudo lynis audit system"
+        return 1
+    fi
+
+    if [[ ! -r "$report_file" ]]; then
+        echo "  Cannot read $report_file — needs root."
+        echo "  → Try: sudo archcanary --check-lynis"
+        return 77
+    fi
+
+    local hardening_index scan_date
+    hardening_index=$(grep '^hardening_index=' "$report_file" | cut -d= -f2 | tr -d '[:space:]' || true)
+    scan_date=$(grep '^report_datetime_start=' "$report_file" | cut -d= -f2 | head -1 | cut -c1-10 || true)
+
+    local stale_warning=""
+    if [[ -n "$scan_date" ]]; then
+        local scan_epoch today_epoch days_ago
+        scan_epoch=$(date -d "$scan_date" +%s 2>/dev/null || true)
+        today_epoch=$(date +%s)
+        if [[ -n "$scan_epoch" && "$scan_epoch" -gt 0 ]]; then
+            days_ago=$(( (today_epoch - scan_epoch) / 86400 ))
+            if [[ $days_ago -gt 30 ]]; then
+                stale_warning=" (${days_ago} days old — consider re-running: sudo lynis audit system)"
+            fi
+        fi
+    fi
+
+    echo "  Last scan: ${scan_date:-unknown}${stale_warning}"
+    [[ -n "$hardening_index" ]] && echo "  Hardening index: $hardening_index / 100"
+
+    local warnings=()
+    while IFS= read -r line; do
+        local id desc
+        id=$(cut -d'|' -f1 <<< "$line")
+        desc=$(cut -d'|' -f2 <<< "$line")
+        warnings+=("$id  $desc")
+    done < <(grep '^warning\[\]=' "$report_file" | sed 's/^warning\[\]=//' || true)
+
+    if [[ ${#warnings[@]} -gt 0 ]]; then
+        echo "  Warnings (${#warnings[@]}):"
+        for w in "${warnings[@]}"; do
+            echo "    * $w"
+        done
+        return 1
+    fi
+
+    echo "  No warnings in last Lynis report."
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
@@ -1928,6 +2024,14 @@ if $CHECK_KMOD; then
     check_kmod && ret=$? || ret=$?
     _apply_ret "$ret" kmod
     _rec "Kernel modules (DKMS)" "$ret"
+    echo
+fi
+
+if $CHECK_LYNIS; then
+    echo "--- [12] Lynis hardening report ---"
+    check_lynis && ret=$? || ret=$?
+    _apply_ret "$ret" lynis
+    _rec "Lynis hardening" "$ret"
     echo
 fi
 
