@@ -17,3 +17,6 @@ packaging/pkg/
 packaging/*.pkg.tar.zst
 packaging/*.pkg.tar.xz
 packaging/*.tar.gz
+
+# user
+.bashtask
