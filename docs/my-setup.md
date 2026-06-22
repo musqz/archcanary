@@ -125,7 +125,6 @@ sudo ~/.local/bin/archcanary --check-kmod
 # Full scan without the GUI — terminal output with structured summary table.
 # Extra flags pass through (e.g. --refresh).
 archcanary-gui --no-gui
-archcanary-gui --no-gui
 
 # Setup health check — is every element installed and configured? (no root,
 # no scan; auto-detects distro/AUR helpers and prints a fix command per gap).
