@@ -99,6 +99,7 @@ LABELS=(
     "Run Lynis audit"          # 17  root
     "Edit audit rules"         # 18
     "Edit Lynis config"        # 19
+    "About"                    # 20
 )
 
 FLAGS=(
@@ -122,6 +123,7 @@ FLAGS=(
     "--run-lynis"
     "__audit_rules_edit__"
     "__lynis_config_edit__"
+    "__about__"
 )
 
 NEEDS_ROOT=(
@@ -130,6 +132,7 @@ NEEDS_ROOT=(
     false false false false
     true
     true
+    false
     false
     false
 )
@@ -146,6 +149,7 @@ STATUS[15]="   "  # extra lists — config dialog, no scan verdict
 STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
 STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
 STATUS[19]="   "  # Edit Lynis config — config dialog, no scan verdict
+STATUS[20]="   "  # About — no scan verdict
 unset _i
 
 # Derive full-scan status (row 0) from whichever individual checks have results.
@@ -325,6 +329,27 @@ edit_lynis_config() {
         fi
     fi
     rm -f "$tmpout" "$tmpout.new"
+}
+
+show_about() {
+    local version="0.1.7"
+    local repo="https://github.com/musqz/archcanary"
+    yad --info \
+        --title="About Archcanary" \
+        --window-icon=security-high \
+        --width=440 --height=240 \
+        --no-wrap \
+        --button="Close":0 \
+        --text="<b>Archcanary</b>  v${version}
+
+Security scanner for Arch Linux — detects malicious packages,
+suspicious systemd units, eBPF backdoors, rogue kernel modules,
+and more.
+
+Source: <a href=\"${repo}\">${repo}</a>
+
+Developed with AI assistance (Claude Code / Anthropic).
+All changes reviewed and verified by the maintainer."
 }
 
 aurscan_settings() {
@@ -558,6 +583,11 @@ run_action() {
         return
     fi
 
+    if [[ "$flags" == "__about__" ]]; then
+        show_about
+        return
+    fi
+
     if [[ "$flags" == "__aurscan_settings__" ]]; then
         aurscan_settings
         return
@@ -742,6 +772,7 @@ build_list_args() {
     _row 12
     $HAS_AURSCAN && _row 14
     _row 15
+    _row 20
 }
 
 # Main loop
