@@ -1918,14 +1918,12 @@ done
 
 if ! $FOCUSED_MODE; then
     echo "============================================================"
-    local _main_win
     if $ALL_TIME; then _main_win="all-time"; else _main_win="${START_DATE} – ${END_DATE}"; fi
     echo " Archcanary v${SCRIPT_VERSION}"
     echo
     echo " Lists loaded"
     echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit  (${_main_win})"
     if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
-        local _chaos_win
         if $ALL_TIME; then _chaos_win="all-time"; else _chaos_win="${CHAOS_START_DATE} – ${CHAOS_END_DATE}"; fi
         printf "   + CHAOS RAT%10s pkgs  (%s)\n" "${#CHAOS_RAT_PKGS[@]}" "$_chaos_win"
     fi
