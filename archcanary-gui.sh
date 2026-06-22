@@ -748,7 +748,10 @@ run_action() {
 # Root items get a 🔐 prefix in column 2; separators have blank status in col 1.
 build_list_args() {
     local -n _out=$1
-    _sep() { _out+=("   " "  ───  $1  ───────────────────────"); }
+    _sep() {
+        local name="$1" dashes='────────────────────────────────'
+        _out+=("   " "  ───  ${name}  ${dashes:0:$(( 23 + 15 - ${#name} ))}")
+    }
     _row() { local i=$1; local lbl="${2:-${LABELS[$i]}}"; _out+=("${STATUS[$i]}" "$lbl"); }
 
     _row 0 "🔐  ${LABELS[0]}"
