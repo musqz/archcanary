@@ -138,6 +138,7 @@ NEEDS_ROOT=(
 # Indices without a meaningful pass/fail (dkms, dialogs) stay blank.
 declare -A STATUS
 for _i in "${!LABELS[@]}"; do STATUS[$_i]="  ?"; done
+STATUS[0]="   "   # Full scan — blank until first run
 STATUS[12]="   "  # Edit DKMS allowlist
 STATUS[13]="   "  # traur — opens its own output window, no verdict here
 STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
