@@ -1809,10 +1809,9 @@ check_lynis() {
         for w in "${warnings[@]}"; do
             echo "    * $w"
         done
-        return 1
+    else
+        echo "  No warnings in last Lynis report."
     fi
-
-    echo "  No warnings in last Lynis report."
     return 0
 }
 
