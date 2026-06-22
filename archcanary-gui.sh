@@ -66,6 +66,9 @@ LYNIS="$(command -v lynis 2>/dev/null || true)"
 HAS_LYNIS=false
 [[ -n "$LYNIS" ]] && HAS_LYNIS=true
 
+HAS_AUDITD=false
+command -v auditctl &>/dev/null && HAS_AUDITD=true
+
 # True once the package list has been refreshed this session.
 # The first run of the full scan (idx 0) auto-adds --refresh and sets this.
 REFRESHED=false
@@ -90,6 +93,7 @@ LABELS=(
     "Extra lists"               # 15
     "Lynis hardening report"   # 16
     "Run Lynis audit"          # 17  root
+    "Edit audit rules"         # 18
 )
 
 FLAGS=(
@@ -111,6 +115,7 @@ FLAGS=(
     "__extra_lists__"
     "--check-lynis --no-notify --no-summary"
     "--run-lynis"
+    "__audit_rules_edit__"
 )
 
 NEEDS_ROOT=(
@@ -119,6 +124,7 @@ NEEDS_ROOT=(
     false false false false
     true
     true
+    false
 )
 
 # Per-session status for each check index.
@@ -129,6 +135,7 @@ STATUS[12]="   "  # Edit DKMS allowlist
 STATUS[13]="   "  # traur — opens its own output window, no verdict here
 STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
 STATUS[15]="   "  # extra lists — config dialog, no scan verdict
+STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
 unset _i
 
 _update_status() {
@@ -209,6 +216,39 @@ edit_allowlist() {
         > "$tmpout" 2>/dev/null; then
         # Write back to /etc as root — pkexec prompts via the polkit agent.
         if [[ -z "$PKEXEC" ]] || ! "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
+            yad --error --title="Archcanary" --window-icon=security-high \
+                --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
+                --width=420 2>/dev/null || true
+        fi
+    fi
+    rm -f "$tmpout"
+}
+
+edit_audit_rules() {
+    local cfg="/etc/audit/rules.d/30-archcanary.conf"
+    if [[ ! -f "$cfg" ]]; then
+        yad --warning \
+            --title="Audit Rules — Archcanary" \
+            --window-icon=security-high \
+            --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> to create it." \
+            --width=440 2>/dev/null || true
+        return
+    fi
+    local tmpout
+    tmpout="$(mktemp /tmp/archcanary-XXXXXX.conf)"
+    if yad --text-info \
+        --title="Audit Rules — Archcanary" \
+        --window-icon=security-high \
+        --filename="$cfg" \
+        --width=700 --height=520 \
+        --fontname="Monospace 10" \
+        --editable \
+        --button="Save + restart auditd:0" \
+        --button="Cancel:1" \
+        > "$tmpout" 2>/dev/null; then
+        if [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
+            "$PKEXEC" systemctl restart auditd 2>/dev/null || true
+        else
             yad --error --title="Archcanary" --window-icon=security-high \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
@@ -437,6 +477,11 @@ run_action() {
         return
     fi
 
+    if [[ "$flags" == "__audit_rules_edit__" ]]; then
+        edit_audit_rules
+        return
+    fi
+
     if [[ "$flags" == "__aurscan_settings__" ]]; then
         aurscan_settings
         return
@@ -613,6 +658,7 @@ build_list_args() {
     $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
     _row 16 "🔐  ${LABELS[16]}"
+    $HAS_AUDITD && _row 18
     _row 15
 }
 
