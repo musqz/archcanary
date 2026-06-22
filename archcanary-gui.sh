@@ -719,12 +719,12 @@ build_list_args() {
     _row 17 "🔐  ${LABELS[17]}"
 
     _sep "Utilities"
+    $HAS_LYNIS   && _row 16 "🔐  ${LABELS[16]}"
+    $HAS_TRAUR   && _row 13
+    $HAS_AUDITD  && _row 18
+    $HAS_LYNIS   && _row 19
     _row 12
-    $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
-    _row 16 "🔐  ${LABELS[16]}"
-    $HAS_AUDITD && _row 18
-    $HAS_LYNIS  && _row 19
     _row 15
 }
 
