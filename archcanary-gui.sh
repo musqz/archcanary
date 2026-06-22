@@ -99,6 +99,7 @@ LABELS=(
     "Run Lynis audit"          # 17  root
     "Edit audit rules"         # 18
     "Edit Lynis config"        # 19
+    "About"                    # 20
 )
 
 FLAGS=(
@@ -122,6 +123,7 @@ FLAGS=(
     "--run-lynis"
     "__audit_rules_edit__"
     "__lynis_config_edit__"
+    "__about__"
 )
 
 NEEDS_ROOT=(
@@ -132,12 +134,14 @@ NEEDS_ROOT=(
     true
     false
     false
+    false
 )
 
 # Per-session status for each check index.
 # Indices without a meaningful pass/fail (dkms, dialogs) stay blank.
 declare -A STATUS
 for _i in "${!LABELS[@]}"; do STATUS[$_i]="  ?"; done
+STATUS[0]="   "   # Full scan — blank until first run
 STATUS[12]="   "  # Edit DKMS allowlist
 STATUS[13]="   "  # traur — opens its own output window, no verdict here
 STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
@@ -145,7 +149,21 @@ STATUS[15]="   "  # extra lists — config dialog, no scan verdict
 STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
 STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
 STATUS[19]="   "  # Edit Lynis config — config dialog, no scan verdict
+STATUS[20]="   "  # About — no scan verdict
 unset _i
+
+# Derive full-scan status (row 0) from whichever individual checks have results.
+# Used when the scan window is closed before completion.
+_infer_full_status() {
+    local worst=0
+    for i in 1 2 3 4 5 6 7 8 9 10 11; do
+        case "${STATUS[$i]:-}" in
+            *"❌"*) worst=2; break ;;
+            *"⚠"*)  [[ $worst -lt 1 ]] && worst=1 ;;
+        esac
+    done
+    _update_status 0 "$worst"
+}
 
 _update_status() {
     local idx=$1 code=$2
@@ -311,6 +329,24 @@ edit_lynis_config() {
         fi
     fi
     rm -f "$tmpout" "$tmpout.new"
+}
+
+show_about() {
+    local version="0.1.7"
+    local repo="https://github.com/musqz/archcanary"
+    yad --info \
+        --title="About Archcanary" \
+        --window-icon=security-high \
+        --width=440 --height=240 \
+        --no-wrap \
+        --button="Close":0 \
+        --text="<b>Archcanary</b>  v${version}
+
+Security scanner for Arch Linux — detects malicious packages,
+suspicious systemd units, eBPF backdoors, rogue kernel modules,
+and more.
+
+Source: <a href=\"${repo}\">${repo}</a>"
 }
 
 aurscan_settings() {
@@ -544,6 +580,11 @@ run_action() {
         return
     fi
 
+    if [[ "$flags" == "__about__" ]]; then
+        show_about
+        return
+    fi
+
     if [[ "$flags" == "__aurscan_settings__" ]]; then
         aurscan_settings
         return
@@ -664,6 +705,7 @@ run_action() {
                     --window-icon=security-high \
                     --text="pkexec failed (exit $pkexec_exit)" \
                     --width=360 2>/dev/null || true
+            if [[ "$idx" -eq 0 ]]; then _infer_full_status; fi
             return 0
         fi
 
@@ -721,11 +763,13 @@ build_list_args() {
     _sep "Utilities"
     $HAS_LYNIS   && _row 16 "🔐  ${LABELS[16]}"
     $HAS_TRAUR   && _row 13
+    _sep "Settings"
     $HAS_AUDITD  && _row 18
     $HAS_LYNIS   && _row 19
     _row 12
     $HAS_AURSCAN && _row 14
     _row 15
+    _row 20
 }
 
 # Main loop
