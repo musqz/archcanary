@@ -511,7 +511,11 @@ if $RUN_LYNIS; then
     # fire on lynis's own exit code before we can capture it.
     set +o pipefail
     lynis audit system --no-colors 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
-    exit "${PIPESTATUS[0]}"
+    _lynis_exit="${PIPESTATUS[0]}"
+    # Lynis exit 2 = "found suggestions/warnings" — normal for a hardening audit,
+    # not a malware signal. Map to 1 (warnings) so the GUI doesn't show INFECTED.
+    [[ "$_lynis_exit" -eq 2 ]] && _lynis_exit=1
+    exit "$_lynis_exit"
 fi
 
 # ---------------------------------------------------------------------------

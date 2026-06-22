@@ -69,6 +69,9 @@ HAS_LYNIS=false
 HAS_AUDITD=false
 command -v auditctl &>/dev/null && HAS_AUDITD=true
 
+AUR_HELPER="yay"
+command -v yay  &>/dev/null || { command -v paru &>/dev/null && AUR_HELPER="paru"; } || AUR_HELPER="pacman"
+
 # True once the package list has been refreshed this session.
 # The first run of the full scan (idx 0) auto-adds --refresh and sets this.
 REFRESHED=false
@@ -186,7 +189,7 @@ _show_infected_dialog() {
         --title="Infected — Archcanary" \
         --window-icon=security-high \
         --width=520 \
-        --text="<b>Infected or compromised packages detected.</b>\n\n<b>1.</b>  Remove the package:\n      <tt>paru -R &lt;package-name&gt;</tt>\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
+        --text="<b>Infected or compromised packages detected.</b>\n\n<b>1.</b>  Remove the package:\n      <tt>${AUR_HELPER} -R &lt;package-name&gt;</tt>\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
         --button="OK:0" 2>/dev/null || true
 }
 
@@ -497,7 +500,7 @@ run_action() {
             yad --warning \
                 --title="traur not installed" \
                 --window-icon=security-high \
-                --text="<b>traur</b> is not installed.\n\nInstall it from AUR:\n  <tt>paru -S traur</tt>" \
+                --text="<b>traur</b> is not installed.\n\nInstall it from AUR:\n  <tt>${AUR_HELPER} -S traur</tt>" \
                 --width=360 2>/dev/null || true
             return
         fi
