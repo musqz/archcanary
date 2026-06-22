@@ -1,0 +1,62 @@
+# Lynis custom profile — archcanary defaults for Arch Linux
+# Place at /etc/lynis/custom.prf (seeded automatically by install.sh --system)
+#
+# Uncomment a skip-test line to suppress a known false positive.
+# Find test IDs with: lynis show tests | grep <keyword>
+# Run a fresh audit after changes: sudo lynis audit system
+
+# ---------------------------------------------------------------------------
+# Time synchronisation
+# ---------------------------------------------------------------------------
+# TIME-3185: systemd-timesyncd "did not synchronize recently"
+# False positive — Lynis checks an internal status file that may lag behind
+# even when the clock is actually in sync (verify with: timedatectl status)
+#skip-test=TIME-3185
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+# NETW-2705: fewer than 2 responsive nameservers in /etc/resolv.conf
+# False positive when using NextDNS, systemd-resolved, or a local DNS stub —
+# resolv.conf points to a single loopback/VPN address by design.
+#skip-test=NETW-2705
+
+# ---------------------------------------------------------------------------
+# Kernel
+# ---------------------------------------------------------------------------
+# KRNL-5830: reboot recommended
+# Appears after sysctl hardening changes. Goes away on next reboot.
+#skip-test=KRNL-5830
+
+# ---------------------------------------------------------------------------
+# Firewall — iptables kernel module not found
+# ---------------------------------------------------------------------------
+# FIRE-4508 / FIRE-4512: iptables module not loaded
+# Arch uses iptables-nft: /sbin/iptables symlinks to xtables-nft-multi.
+# nf_tables and nft_compat are loaded instead of the legacy ip_tables module.
+# The firewall is active — Lynis just doesn't detect the nftables backend.
+#skip-test=FIRE-4508
+#skip-test=FIRE-4512
+
+# ---------------------------------------------------------------------------
+# MAC / mandatory access control frameworks
+# ---------------------------------------------------------------------------
+# Arch Linux does not ship AppArmor, SELinux, or TOMOYO by default.
+# For a personal desktop these are optional; suppress the noise if not used.
+# To enable AppArmor: pacman -S apparmor, add lsm= to kernel cmdline.
+#skip-test=MACF-6204
+#skip-test=MACF-6208
+#skip-test=MACF-6232
+#skip-test=MACF-6240
+#skip-test=MACF-6290
+
+# ---------------------------------------------------------------------------
+# Service hardening scores (systemd-analyze security)
+# ---------------------------------------------------------------------------
+# Many system daemons are flagged EXPOSED or UNSAFE because they legitimately
+# need broad system access. Hardening these units would break the service.
+# Common expected findings on Arch:
+#   NetworkManager  ~7.8 EXPOSED  (manages interfaces, DNS, routing, VPN)
+#   auditd          ~9.4 UNSAFE   (needs CAP_AUDIT_CONTROL, kernel access)
+#   libvirtd        ~9.x UNSAFE   (hypervisor — needs full hardware access)
+# Add individual test IDs here if Lynis surfaces specific HRDN checks.
