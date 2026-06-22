@@ -1,6 +1,6 @@
 # Maintainer: musqz <gummy-fang-deputy@duck.com>
 pkgname=archcanary
-pkgver=0.1.7
+pkgver=0.1.8
 pkgrel=1
 pkgdesc="Layered security detection stack for Arch Linux — malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering"
 arch=('any')
@@ -18,7 +18,7 @@ optdepends=(
 backup=('etc/archcanary/dkms_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/musqz/$pkgname/archive/v$pkgver.tar.gz")
-sha256sums=('441a985cdc230123c60bf61e45e5fc72a008c2a02ad2b51a0d2c6c23ecdb0989')
+sha256sums=('SKIP')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
@@ -30,19 +30,23 @@ package() {
   # System lib: scanner + root helper + threat lists (used by the root scan)
   install -dm755 "$pkgdir/usr/lib/archcanary"
   install -m755  archcanary.sh         "$pkgdir/usr/lib/archcanary/archcanary.sh"
-  install -m755  archcanary-root-helper "$pkgdir/usr/lib/archcanary/root-helper"
+  install -m755  lib/archcanary-root-helper "$pkgdir/usr/lib/archcanary/root-helper"
   for _list in package_list.txt malicious_npm_packages.txt \
                chaos_rat_packages.txt malicious_russian_spam_packages.txt; do
-    install -Dm644 "$_list" "$pkgdir/usr/lib/archcanary/$_list"
+    install -Dm644 "lists/$_list" "$pkgdir/usr/lib/archcanary/$_list"
   done
 
   # Polkit policy (authorises root-helper via pkexec)
-  install -Dm644 org.archcanary.policy \
+  install -Dm644 configs/org.archcanary.policy \
     "$pkgdir/usr/share/polkit-1/actions/org.archcanary.policy"
 
   # Desktop entry
-  install -Dm644 archcanary.desktop \
+  install -Dm644 configs/archcanary.desktop \
     "$pkgdir/usr/share/applications/archcanary.desktop"
+
+  # Man page
+  install -Dm644 man/archcanary.1 \
+    "$pkgdir/usr/share/man/man1/archcanary.1"
 
   # Systemd system units (root scan: weekly timer + pacman-triggered path)
   for _unit in systemd/system/archcanary.service \
