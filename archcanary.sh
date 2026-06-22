@@ -1925,7 +1925,7 @@ if ! $FOCUSED_MODE; then
         printf "   + CHAOS RAT%10s pkgs\n" "${#CHAOS_RAT_PKGS[@]}"
     fi
     if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
-        printf "   + Russian Spam%7s pkgs  (2026-06-14)\n" "${#RUSSIAN_SPAM_PKGS[@]}"
+        printf "   + Russian Spam%7s pkgs\n" "${#RUSSIAN_SPAM_PKGS[@]}"
     fi
     if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
         printf "   + extra lists%8s pkgs  (extra_lists.conf / --extra-list)\n" "${#EXTRA_PKGS[@]}"
