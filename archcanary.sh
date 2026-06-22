@@ -199,9 +199,13 @@ fi
 run_doctor() {
     local repo_dir cfg_dir user_bin user_sd
     repo_dir="$(dirname "$(realpath "$0")")"
-    cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
-    user_bin="$HOME/.local/bin"
-    user_sd="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    local real_user real_home
+    real_user="${SUDO_USER:-$USER}"
+    real_home="$(getent passwd "$real_user" | cut -d: -f6)"
+    [[ -z "$real_home" ]] && real_home="$HOME"
+    cfg_dir="${XDG_CONFIG_HOME:-$real_home/.config}/archcanary"
+    user_bin="$real_home/.local/bin"
+    user_sd="${XDG_CONFIG_HOME:-$real_home/.config}/systemd/user"
     local system_installed=false
     [[ -f /usr/local/bin/archcanary ]] && system_installed=true
 
@@ -424,7 +428,7 @@ run_doctor() {
         _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")" "archcanary --refresh" "path: $cfg_dir/package_list.txt"
         if [[ -e "$cfg_dir" && ! -w "$cfg_dir" ]]; then
             _warn "config dir writable" \
-                "sudo chown -R $USER: \"$cfg_dir\"" \
+                "sudo chown -R $real_user: \"$cfg_dir\"" \
                 "dir is owned by root — --refresh will fail"
         fi
         printf '\n'
@@ -472,7 +476,7 @@ run_doctor() {
         fi
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
-        _opt_item "yay hooks (auto-scan on yay install)" "$(_file "$HOME/.config/yay/init.lua")" "" "path: $HOME/.config/yay/init.lua"
+        _opt_item "yay hooks (auto-scan on yay install)" "$(_file "$real_home/.config/yay/init.lua")" "" "path: $real_home/.config/yay/init.lua"
         printf '\n'
     fi
 
