@@ -75,7 +75,7 @@ CHECK_LYNIS=false
 CHECK_FULL=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
-ALL_TIME=false
+ALL_TIME=true
 NO_NOTIFY=false
 NO_SUMMARY=false
 DOCTOR=false
@@ -148,8 +148,7 @@ for arg in "$@"; do
             echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)
   --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)
   --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
-            echo "  --all-time                Disable recency window — flag any installed infected"
-            echo "                            package regardless of install date (for cross-campaign checks)"
+            echo "  --all-time                No-op (all-time is now the default; kept for compatibility)"
             echo "  --no-notify               Suppress the desktop notification on detection
   --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --doctor                  Report install/config status of every stack element"
@@ -1921,9 +1920,9 @@ if ! $FOCUSED_MODE; then
     echo " Archcanary v${SCRIPT_VERSION}"
     echo
     echo " Lists loaded"
-    echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit  ($($ALL_TIME && echo all-time || echo "${START_DATE} – ${END_DATE}"))"
+    echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit"
     if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
-        printf "   + CHAOS RAT%10s pkgs  (%s)\n" "${#CHAOS_RAT_PKGS[@]}" "$($ALL_TIME && echo all-time || echo "${CHAOS_START_DATE} – ${CHAOS_END_DATE}")"
+        printf "   + CHAOS RAT%10s pkgs\n" "${#CHAOS_RAT_PKGS[@]}"
     fi
     if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
         printf "   + Russian Spam%7s pkgs  (2026-06-14)\n" "${#RUSSIAN_SPAM_PKGS[@]}"
