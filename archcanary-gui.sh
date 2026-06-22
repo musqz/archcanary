@@ -71,6 +71,7 @@ command -v auditctl &>/dev/null && HAS_AUDITD=true
 
 AUR_HELPER="yay"
 command -v yay  &>/dev/null || { command -v paru &>/dev/null && AUR_HELPER="paru"; } || AUR_HELPER="pacman"
+_SHOW_OUTPUT_INFECTED_PKGS=""
 
 # True once the package list has been refreshed this session.
 # The first run of the full scan (idx 0) auto-adds --refresh and sets this.
@@ -185,12 +186,24 @@ _propagate_full_scan() {
 }
 
 _show_infected_dialog() {
+    local pkgs="${1:-}"
+    local remove_cmd
+    if [[ -n "$pkgs" ]]; then
+        remove_cmd="${AUR_HELPER} -R ${pkgs}"
+    else
+        remove_cmd="${AUR_HELPER} -R &lt;package-name&gt;"
+    fi
     yad --error \
         --title="Infected — Archcanary" \
         --window-icon=security-high \
         --width=520 \
-        --text="<b>Infected or compromised packages detected.</b>\n\n<b>1.</b>  Remove the package:\n      <tt>${AUR_HELPER} -R &lt;package-name&gt;</tt>\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
+        --text="<b>Infected or compromised packages detected.</b>\n\n<b>1.</b>  Remove the package(s):\n      <tt>${remove_cmd}</tt>\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
         --button="OK:0" 2>/dev/null || true
+}
+
+# Extract infected package names from scan output (lines: "  - pkgname (installed: ...)")
+_extract_infected_pkgs() {
+    grep -oP '^  - \K\S+' "$1" 2>/dev/null | head -20 | tr '\n' ' ' | sed 's/ $//' || true
 }
 
 edit_allowlist() {
@@ -412,6 +425,7 @@ show_output() {
 
     wait "$yad_pid" 2>/dev/null || true
     exec 8>&-
+    _SHOW_OUTPUT_INFECTED_PKGS="$(_extract_infected_pkgs "$tmpout")"
     rm -f "$tmpout"
     return $scan_exit
 }
@@ -629,14 +643,17 @@ run_action() {
         exec 8>&-
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit" "$tmpout"; fi
+        local _inf_pkgs=""
+        [[ "$scan_exit" -eq 2 ]] && _inf_pkgs="$(_extract_infected_pkgs "$tmpout")"
         rm -f "$tmpout"
-        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog; fi
+        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog "$_inf_pkgs"; fi
     else
         local scan_exit=0
+        _SHOW_OUTPUT_INFECTED_PKGS=""
         show_output "$label" "$MAIN_SCRIPT" "${flag_arr[@]}" && scan_exit=0 || scan_exit=$?
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit"; fi
-        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog; fi
+        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog "$_SHOW_OUTPUT_INFECTED_PKGS"; fi
     fi
 }
 
