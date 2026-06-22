@@ -1,0 +1,215 @@
+.TH ARCHCANARY 1 "2026-06-22" "archcanary 0.1.7" "User Commands"
+.SH NAME
+archcanary \- security scanner for Arch Linux
+.SH SYNOPSIS
+.B archcanary
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B archcanary
+is a layered security detection stack for Arch Linux.
+It scans for malicious AUR packages, systemd and eBPF persistence,
+npm/bun/yarn/pnpm cache poisoning, PKGBUILD obfuscation, kernel module
+tampering, library injection, and more.
+.PP
+By default (no flags) it checks currently installed foreign packages
+against the known-bad list and scans
+.I /var/log/pacman.log
+for historical installs.
+All checks are read-only; nothing is removed or quarantined.
+.SH OPTIONS
+.SS Scan checks
+.TP
+.B \-\-check-systemd
+Scan for unknown systemd services with
+.IR "Restart=always" .
+.TP
+.B \-\-check-ebpf
+Check for eBPF rootkit traces under
+.IR /sys/fs/bpf/hidden_* .
+.TP
+.B \-\-check-npm-cache
+Check the npm cache for package names in
+.IR malicious_npm_packages.txt .
+.TP
+.B \-\-check-bun-cache
+Check the bun cache for the same malicious package name list.
+.TP
+.B \-\-check-yarn-cache
+Scan yarn v1 and Berry caches, including fnm per-version globals.
+.TP
+.B \-\-check-pnpm-cache
+Scan the pnpm store, global installs, metadata cache, and dlx cache.
+.TP
+.B \-\-check-pkgbuild
+Scan AUR helper caches for obfuscation patterns in PKGBUILD and
+.I .install
+files (base64 decode-to-shell, eval subshell, printf hex/octal,
+variable-split command reassembly).
+.TP
+.B \-\-check-bpftool
+Enumerate loaded eBPF programs, perf/kprobe attachments with owning PID
+and hooked function, and XDP/TC network attachments.
+Requires root.
+.TP
+.B \-\-check-ldso
+Check
+.I /etc/ld.so.preload
+for shared library injection and recent
+.I /etc/ld.so.conf.d/
+changes.
+.TP
+.B \-\-check-autostart
+Scan XDG autostart entries, user systemd services, and shell RC files
+for download-and-exec patterns.
+.TP
+.B \-\-check-kmod
+Audit loaded kernel modules against pacman-tracked files; flag
+untracked DKMS builds not in the allowlist.
+Requires root.
+.TP
+.B \-\-check-lynis
+Parse the last Lynis hardening report at
+.IR /var/log/lynis-report.dat .
+Requires root.
+.TP
+.B \-\-run-lynis
+Run
+.B "lynis audit system"
+and stream the output.
+Auto-installs the archcanary Lynis plugin on first run.
+Requires root.
+.TP
+.B \-\-full
+Enable all of the above checks.
+.SS List management
+.TP
+.B \-\-refresh
+Download the latest package list from the Arch Linux HedgeDoc before scanning.
+.TP
+\fB\-\-package-list\fR=\fIPATH\fR
+Override the infected AUR package list (default:
+.IR ~/.config/archcanary/package_list.txt ).
+.TP
+\fB\-\-malicious-npm-list\fR=\fIPATH\fR
+Override the malicious npm package name list (default:
+.IR ~/.config/archcanary/malicious_npm_packages.txt ).
+.TP
+\fB\-\-chaos-rat-list\fR=\fIPATH\fR
+Override the CHAOS RAT campaign package list.
+.TP
+\fB\-\-russian-spam-list\fR=\fIPATH\fR
+Override the Russian Spam Campaign package list.
+.TP
+\fB\-\-extra-list\fR=\fIPATH_OR_URL\fR
+Load an additional package list from a file path or
+.B https://
+URL.
+Repeatable.
+.SS Output control
+.TP
+.BR \-\-verbose ", " \-v
+Verbose output.
+.TP
+.B \-\-debug
+Verbose output with
+.B set -x
+trace.
+.TP
+\fB\-\-log-file\fR=\fIPATH\fR
+Write full detail log to
+.IR PATH .
+If
+.I PATH
+is
+.BR auto ,
+the log is written to
+.IR "~/.cache/archcanary/aur-check-<date>.log" .
+.TP
+.B \-\-no-notify
+Suppress the desktop notification on detection.
+.TP
+.B \-\-no-summary
+Suppress the check summary table at the end of a scan.
+.TP
+\fB\-\-color\fR=\fIauto\fR|\fIalways\fR|\fInever\fR
+Control symbol and color output.
+.B auto
+(default) enables color only when stdout is a terminal.
+.B never
+and the
+.B NO_COLOR
+environment variable both disable all color and Unicode symbols.
+.SS Health check
+.TP
+.B \-\-doctor
+Report the install and configuration status of every stack element
+(binary dependencies, systemd units, aurscan, traur, yay hooks) and exit.
+.TP
+\fB\-\-doctor\fR=\fISECTION\fR[,\fISECTION\fR...]
+Check only the named section(s) with extra per-item detail.
+Valid sections:
+.BR platform ", " deps ", " user ", " system ", " systemd ", " external .
+Tool names such as
+.BR aurscan ", " traur ", " yad
+are also accepted as aliases.
+Sections may be comma- or space-separated.
+.TP
+.B \-\-help ", " \-h
+Print a short usage summary and exit.
+.SH EXIT STATUS
+.TP
+.B 0
+Clean — no indicators found.
+.TP
+.B 1
+Warnings — potential issues or skipped root checks.
+.TP
+.B 2
+Infected — malicious packages or artifacts detected.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+If set to any value, disables all ANSI color codes and Unicode symbols
+in output (equivalent to
+.BR \-\-color=never ).
+See
+.UR https://no-color.org
+.UE .
+.TP
+.B PACMAN_LOG_GLOB
+Override the glob used to find pacman log files.
+Default:
+.IR /var/log/pacman.log* .
+.SH FILES
+.TP
+.I ~/.config/archcanary/package_list.txt
+Known-bad AUR package list (infostealer + eBPF rootkit campaign).
+.TP
+.I ~/.config/archcanary/malicious_npm_packages.txt
+Malicious npm package name list.
+.TP
+.I /var/lib/archcanary/last-scan.log
+Latest system-level scan result; watched by the user notifier unit.
+.TP
+.I ~/.cache/archcanary/last-user-scan.log
+Latest user-level scan result.
+.TP
+.I /etc/archcanary/dkms_allowlist.conf
+System-wide DKMS module allowlist for
+.BR \-\-check-kmod .
+.TP
+.I /var/log/lynis-report.dat
+Lynis report file read by
+.BR \-\-check-lynis .
+.TP
+.I /usr/lib/archcanary/
+System library directory: root scan script, polkit helper, Lynis plugin.
+.SH SEE ALSO
+.BR archcanary-gui (1),
+.BR pacman (8),
+.BR systemctl (1),
+.BR lynis (8)
+.SH AUTHORS
+musqz
+.UR https://github.com/musqz/archcanary
+.UE
