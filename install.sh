@@ -248,6 +248,19 @@ EOF
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
+    # Seed auditd rules (only if auditd is installed and file not yet present)
+    if command -v auditctl &>/dev/null; then
+        sudo install -d -m 755 /etc/audit/rules.d
+        if [[ ! -f /etc/audit/rules.d/30-archcanary.conf ]]; then
+            sudo install -m 640 "$REPO_DIR/configs/audit-rules.conf" \
+                /etc/audit/rules.d/30-archcanary.conf
+            sudo systemctl restart auditd 2>/dev/null || true
+            echo "  installed: /etc/audit/rules.d/30-archcanary.conf (auditd rules — edit via GUI)"
+        else
+            echo "  kept:      /etc/audit/rules.d/30-archcanary.conf (already exists)"
+        fi
+    fi
+
     # --- Automated scan: root system units + user-session notifier ---------
     # Migrate away from the old user-scope scan units (superseded by the root
     # system scan; running --full as the user skips the root checks).
