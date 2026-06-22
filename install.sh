@@ -333,7 +333,7 @@ EOF
 fi
 
 echo
-echo "Done. Run: archcanary --refresh --full --all-time"
+echo "Done. Run: archcanary --refresh --full"
 
 # Warn if the install dir is not in PATH (only relevant for user install)
 if ! $SYSTEM && [[ ":$PATH:" != *":$USER_BIN:"* ]]; then

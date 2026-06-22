@@ -55,7 +55,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 StateDirectory=archcanary
-ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --all-time --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
+ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
 ```
 
 > `StateDirectory=archcanary` makes systemd create `/var/lib/archcanary` (mode 0755, root) automatically. This runs only the **system-level** checks (plus the always-on package/log checks) — the ones that need root and are machine-wide. The user-level checks run in section 3 as your user. `--no-notify` because root has no desktop session — section 2 handles alerts.
@@ -133,7 +133,7 @@ Description=archcanary user-level scan
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/archcanary --all-time --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log
+ExecStart=%h/.local/bin/archcanary --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log
 ```
 
 **`~/.config/systemd/user/archcanary-user.timer`**
@@ -168,7 +168,7 @@ Description=archcanary system scan (after pacman transaction)
 [Service]
 Type=oneshot
 StateDirectory=archcanary
-ExecStart=/usr/lib/archcanary/archcanary.sh --all-time --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
+ExecStart=/usr/lib/archcanary/archcanary.sh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
 ```
 
 **`/etc/systemd/system/archcanary.path`**

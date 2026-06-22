@@ -69,8 +69,8 @@ yay -S pkg / yay -Syu / yay <term>   (transparent — aurscan is wired in as yay
             └── PostInstall    — logs AUR installs
 
 systemd system timer (weekly + on boot + after each pacman transaction)
-    └── archcanary --full --all-time
-            ├── known-bad package list (1900+ JS campaign + 73 Russian spam)
+    └── archcanary --full
+            ├── known-bad package list (JS campaign + CHAOS RAT + Russian spam)
             ├── pacman.log history (compressed log support)
             ├── systemd persistence (services, drop-ins, timers)
             ├── eBPF rootkit traces + bpftool program enumeration
@@ -97,13 +97,13 @@ archcanary-gui (on-demand)
 archcanary
 
 # Full scan — all checks (some require root)
-sudo archcanary --full --all-time
+sudo archcanary --full
 
 # Check setup health
 archcanary --doctor
 
 # Refresh package list from the live HedgeDoc, then scan
-archcanary --refresh --full --all-time
+archcanary --refresh --full
 
 # GUI frontend (requires yad)
 archcanary-gui
@@ -157,7 +157,6 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-lynis` | Read last Lynis report — hardening index, warnings, scan date | Yes |
 | `--run-lynis` | Run `lynis audit system`, stream output; auto-installs archcanary Lynis plugin on first run | Yes |
 | `--full` | All of the above | Partial |
-| `--all-time` | Skip the June 9-12 install-date window — scan all history | — |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
 

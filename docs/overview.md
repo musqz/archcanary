@@ -23,7 +23,7 @@ flowchart TD
     end
 
     subgraph AFTER["3 · AFTER install / always — automatic, root"]
-        TIM["systemd timer<br/>weekly + on boot"] --> SCAN["archcanary<br/>--full --all-time"]
+        TIM["systemd timer<br/>weekly + on boot"] --> SCAN["archcanary<br/>--full"]
         PTH[".path unit<br/>after each pacman tx"] --> SCAN
         SCAN --> LOG["last-scan.log"]
     end

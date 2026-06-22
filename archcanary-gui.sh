@@ -34,11 +34,11 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "  --no-gui [OPTIONS]  Skip the GUI; run a full terminal scan instead."
     echo "                      Passes --full --no-notify plus any extra OPTIONS to archcanary."
     echo "                      Run with sudo to include root-requiring checks:"
-    echo "                        sudo archcanary-gui --no-gui --refresh --full --all-time"
+    echo "                        sudo archcanary-gui --no-gui --refresh --full"
     echo
     echo "  --help, -h          Show this help"
     echo
-    echo "All other flags (--refresh, --full, --all-time, etc.) are archcanary flags"
+    echo "All other flags (--refresh, --full, etc.) are archcanary flags"
     echo "and are only meaningful after --no-gui. Run 'archcanary --help' for the full list."
     exit 0
 fi
