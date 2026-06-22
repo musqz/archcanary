@@ -197,6 +197,15 @@ fi
 # not silently execute installs).
 # ---------------------------------------------------------------------------
 run_doctor() {
+    # Warn about scan-only flags that have no effect with --doctor.
+    local _ignored=()
+    $REFRESH_PACKAGE_LIST             && _ignored+=("--refresh")
+    [[ ${#EXTRA_LIST_OPTS[@]} -gt 0 ]] && _ignored+=("--extra-list")
+    $CHECK_FULL                       && _ignored+=("--full")
+    if [[ ${#_ignored[@]} -gt 0 ]]; then
+        printf 'NOTE: the following flags are ignored with --doctor: %s\n\n' "${_ignored[*]}" >&2
+    fi
+
     local repo_dir cfg_dir user_bin user_sd
     repo_dir="$(dirname "$(realpath "$0")")"
     local real_user real_home
