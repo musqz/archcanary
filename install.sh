@@ -183,13 +183,13 @@ fi
 # Install desktop entry
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$DESKTOP_DIR"
-cp "$REPO_DIR/archcanary.desktop" "$DESKTOP_DIR/archcanary.desktop"
+cp "$REPO_DIR/configs/archcanary.desktop" "$DESKTOP_DIR/archcanary.desktop"
 echo "  installed: $DESKTOP_DIR/archcanary.desktop"
 
 # Seed config dir (only if files don't already exist)
 for f in package_list.txt malicious_npm_packages.txt; do
     if [[ ! -f "$CONFIG_DIR/$f" ]]; then
-        cp "$REPO_DIR/$f" "$CONFIG_DIR/$f"
+        cp "$REPO_DIR/lists/$f" "$CONFIG_DIR/$f"
         echo "  seeded:    $CONFIG_DIR/$f"
     else
         echo "  kept:      $CONFIG_DIR/$f (already exists)"
@@ -216,18 +216,18 @@ if $SYSTEM; then
     sudo mkdir -p "$SYSTEM_LIB"
     sudo cp "$REPO_DIR/archcanary.sh" "$SYSTEM_LIB/archcanary.sh"
     sudo chmod 755 "$SYSTEM_LIB/archcanary.sh"
-    sudo cp "$REPO_DIR/archcanary-root-helper" "$SYSTEM_LIB/root-helper"
+    sudo cp "$REPO_DIR/lib/archcanary-root-helper" "$SYSTEM_LIB/root-helper"
     sudo chown root:root "$SYSTEM_LIB/root-helper"
     sudo chmod 755 "$SYSTEM_LIB/root-helper"
     sudo install -m 644 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" \
         "$SYSTEM_LIB/lynis-plugin-archcanary.sh"
     sudo install -m 644 "$REPO_DIR/configs/lynis-custom.prf" \
         "$SYSTEM_LIB/lynis-custom.prf"
-    sudo cp "$REPO_DIR/org.archcanary.policy" /usr/share/polkit-1/actions/
+    sudo cp "$REPO_DIR/configs/org.archcanary.policy" /usr/share/polkit-1/actions/
     # Seed the bundled package lists next to the system script so a root scan
     # (system service) finds them — root's $HOME is /root, which is not seeded.
     for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt malicious_russian_spam_packages.txt; do
-        [[ -f "$REPO_DIR/$_list" ]] && sudo cp "$REPO_DIR/$_list" "$SYSTEM_LIB/$_list"
+        [[ -f "$REPO_DIR/lists/$_list" ]] && sudo cp "$REPO_DIR/lists/$_list" "$SYSTEM_LIB/$_list"
     done
     # DKMS allowlist — single system-wide file (the kmod audit only runs as root).
     # Seed it once (mode 644 so non-root runs can read it), preferring an existing

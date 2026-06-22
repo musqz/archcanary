@@ -49,9 +49,9 @@ PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
 # Pulls the live package list from the official Arch Linux HedgeDoc note.
 LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
 # Supplementary lists — pulled from the repo on --refresh.
-MALICIOUS_NPM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/malicious_npm_packages.txt"
-CHAOS_RAT_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/chaos_rat_packages.txt"
-RUSSIAN_SPAM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/malicious_russian_spam_packages.txt"
+MALICIOUS_NPM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/malicious_npm_packages.txt"
+CHAOS_RAT_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/chaos_rat_packages.txt"
+RUSSIAN_SPAM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/malicious_russian_spam_packages.txt"
 
 CHECK_SYSTEMD=false
 CHECK_EBPF=false
@@ -668,7 +668,7 @@ fi
 unset _dkms_cfg _dl
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
-    _bundled="$(dirname "$(realpath "$0")")/malicious_npm_packages.txt"
+    _bundled="$(dirname "$(realpath "$0")")/lists/malicious_npm_packages.txt"
     if [[ -f "$_bundled" ]]; then
         cp "$_bundled" "$MALICIOUS_NPM_LIST"
     else
@@ -679,12 +679,12 @@ if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
 fi
 
 if [[ ! -f "$CHAOS_RAT_LIST" ]]; then
-    _bundled="$(dirname "$(realpath "$0")")/chaos_rat_packages.txt"
+    _bundled="$(dirname "$(realpath "$0")")/lists/chaos_rat_packages.txt"
     [[ -f "$_bundled" ]] && cp "$_bundled" "$CHAOS_RAT_LIST"
 fi
 
 if [[ ! -f "$RUSSIAN_SPAM_LIST" ]]; then
-    _bundled="$(dirname "$(realpath "$0")")/malicious_russian_spam_packages.txt"
+    _bundled="$(dirname "$(realpath "$0")")/lists/malicious_russian_spam_packages.txt"
     [[ -f "$_bundled" ]] && cp "$_bundled" "$RUSSIAN_SPAM_LIST"
 fi
 
@@ -770,7 +770,7 @@ load_packages() {
     fi
 
     if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
-        _bundled="$(dirname "$(realpath "$0")")/package_list.txt"
+        _bundled="$(dirname "$(realpath "$0")")/lists/package_list.txt"
         if [[ -f "$_bundled" ]]; then
             cp "$_bundled" "$PACKAGE_LIST_FILE"
         else
