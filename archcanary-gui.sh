@@ -784,7 +784,7 @@ while true; do
         --list \
         --title="Archcanary" \
         --window-icon=security-high \
-        --width=580 --height=560 \
+        --width=599 --height=413 \
         --column="" \
         --column="Action" \
         --no-headers \
