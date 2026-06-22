@@ -328,11 +328,19 @@ run_doctor() {
         else
             pfx="sudo "
         fi
-        if [[ $scope == user ]] && ! systemctl --user show-environment >/dev/null 2>&1; then
-            _warn "$label" \
-                "in a desktop session run: systemctl --user enable --now $unit" \
-                "scope: user — no session bus (e.g. over SSH/sudo); can't verify"
-            return 0
+        if [[ $scope == user ]]; then
+            # Some terminals (Openbox, launch-from-menu) don't inherit
+            # DBUS_SESSION_BUS_ADDRESS. Try the well-known socket before giving up.
+            if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+                local _xrd="/run/user/$(id -u 2>/dev/null || echo 0)"
+                [[ -S "$_xrd/bus" ]] && export DBUS_SESSION_BUS_ADDRESS="unix:path=$_xrd/bus"
+            fi
+            if ! systemctl --user show-environment >/dev/null 2>&1; then
+                _warn "$label" \
+                    "in a desktop session run: systemctl --user enable --now $unit" \
+                    "scope: user — no session bus (SSH/sudo context); can't verify"
+                return 0
+            fi
         fi
         local state active
         state="$($sctl is-enabled "$unit" 2>/dev/null || true)"
