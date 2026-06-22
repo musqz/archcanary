@@ -80,6 +80,7 @@ NO_NOTIFY=false
 NO_SUMMARY=false
 DOCTOR=false
 DOCTOR_SECTIONS=""
+RUN_LYNIS=false
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -122,6 +123,7 @@ for arg in "$@"; do
         --no-summary)            NO_SUMMARY=true ;;
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
+        --run-lynis)             RUN_LYNIS=true ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -479,6 +481,14 @@ run_doctor() {
 if $DOCTOR; then
     _doctor_rc=0; run_doctor || _doctor_rc=$?
     exit $_doctor_rc
+fi
+
+if $RUN_LYNIS; then
+    if ! command -v lynis &>/dev/null; then
+        echo "Error: lynis not installed (pacman -S lynis)" >&2
+        exit 1
+    fi
+    exec lynis audit system
 fi
 
 # ---------------------------------------------------------------------------
