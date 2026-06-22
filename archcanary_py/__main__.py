@@ -70,9 +70,6 @@ def create_parser() -> argparse.ArgumentParser:
         help='Custom infected AUR package list (default: ./package_list.txt)')
     parser.add_argument('--malicious-npm-list', type=str, default=None,
         help='Custom malicious npm package name list (default: ./malicious_npm_packages.txt)')
-    parser.add_argument('--all-time', action='store_true',
-        help='Disable recency window -- flag any installed infected package regardless of install date')
-
     # Merge mode options
     parser.add_argument('--merge', action='store_true',
         help='Enable merge mode (use merger.py logic)')
@@ -87,14 +84,10 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def print_banner(infected_count: int, start_date: str, end_date: str, all_time: bool) -> None:
+def print_banner(infected_count: int) -> None:
     print('============================================================')
     print(f' Archcanary v{SCRIPT_VERSION}')
     print(' Campaign: malicious npm packages (malicious_npm_packages.txt) infostealer + eBPF rootkit')
-    if all_time:
-        print(' Date window: all-time (no recency filter)')
-    else:
-        print(f' Date window: {start_date} to {end_date}')
     print(f' Packages checked: {infected_count}')
     print('============================================================')
     print()
@@ -108,12 +101,9 @@ def format_date(d: date) -> str:
     return d.strftime('%a %d %b %Y %I:%M:%S %p')
 
 
-def print_current_packages(matches: list[PackageMatch], all_time: bool) -> None:
+def print_current_packages(matches: list[PackageMatch]) -> None:
     if not matches:
-        if all_time:
-            print('  Clean: no infected packages currently installed.')
-        else:
-            print('  Clean: no infected packages installed within campaign window.')
+        print('  Clean: no infected packages currently installed.')
     else:
         print(f'  WARNING: {len(matches)} possibly infected package(s):')
         for m in matches:
@@ -311,15 +301,9 @@ def main(argv: list[str] | None = None) -> int:
         logger.error('No infected packages loaded.')
         return 1
 
-    start_date = '2026-06-09'
-    end_date = '2026-06-12'
-
     scanner = AurScanner(
         infected_packages=infected_packages,
         malicious_npm_packages=malicious_npm_packages,
-        start_date=start_date,
-        end_date=end_date,
-        all_time=args.all_time,
     )
 
     check_systemd = args.check_systemd or args.full
@@ -337,10 +321,10 @@ def main(argv: list[str] | None = None) -> int:
     pacman_log_exists = Path('/var/log/pacman.log').is_file()
     bpf_accessible = Path('/sys/fs/bpf').is_dir()
 
-    print_banner(len(infected_packages), start_date, end_date, args.all_time)
+    print_banner(len(infected_packages))
 
     print_section(1, 'Currently installed foreign packages')
-    print_current_packages(list(result.current_packages), args.all_time)
+    print_current_packages(list(result.current_packages))
     print()
 
     print_section(2, 'Historical pacman logs')
