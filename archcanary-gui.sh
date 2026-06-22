@@ -735,6 +735,7 @@ build_list_args() {
     _sep "Utilities"
     $HAS_LYNIS   && _row 16 "🔐  ${LABELS[16]}"
     $HAS_TRAUR   && _row 13
+    _sep "Settings"
     $HAS_AUDITD  && _row 18
     $HAS_LYNIS   && _row 19
     _row 12
