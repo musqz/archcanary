@@ -4,4 +4,4 @@ Description=archcanary system scan (after pacman transaction)
 [Service]
 Type=oneshot
 StateDirectory=archcanary
-ExecStart=/usr/lib/archcanary/archcanary.sh --all-time --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
+ExecStart=/usr/lib/archcanary/archcanary.sh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log

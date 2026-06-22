@@ -45,13 +45,6 @@ SCRIPT_VERSION="0.1.7"
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-START_DATE=${START_DATE:-2026-06-09}
-END_DATE=${END_DATE:-2026-06-12}
-# CHAOS RAT campaign (July 2025, separate incident). Packages were uploaded
-# ~2025-07-16 18:00 UTC and DELETED ~2025-07-18 18:00 UTC (~46h exposure).
-# Names no longer exist on AUR; installs outside this window are not malicious.
-CHAOS_START_DATE=${CHAOS_START_DATE:-2025-07-16}
-CHAOS_END_DATE=${CHAOS_END_DATE:-2025-07-19}
 PACMAN_LOG_GLOB=${PACMAN_LOG_GLOB:-/var/log/pacman.log*}
 # Pulls the live package list from the official Arch Linux HedgeDoc note.
 LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
@@ -75,7 +68,6 @@ CHECK_LYNIS=false
 CHECK_FULL=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
-ALL_TIME=true
 NO_NOTIFY=false
 NO_SUMMARY=false
 DOCTOR=false
@@ -118,7 +110,6 @@ for arg in "$@"; do
         --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
         --russian-spam-list=*)   RUSSIAN_SPAM_LIST_OPT="${arg#*=}" ;;
         --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
-        --all-time)              ALL_TIME=true ;;
         --no-notify)             NO_NOTIFY=true ;;
         --no-summary)            NO_SUMMARY=true ;;
         --doctor)                DOCTOR=true ;;
@@ -148,7 +139,6 @@ for arg in "$@"; do
             echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)
   --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)
   --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
-            echo "  --all-time                No-op (all-time is now the default; kept for compatibility)"
             echo "  --no-notify               Suppress the desktop notification on detection
   --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --doctor                  Report install/config status of every stack element"
@@ -848,18 +838,6 @@ log_info() {
 }
 log_warn()  { echo >&2 "[WARN] $*"; }
 
-date_in_window() {
-    local date_val=$1 start=${2:-$START_DATE} end=${3:-$END_DATE}
-    [[ "$date_val" < "$start" ]] && return 1
-    [[ "$date_val" > "$end" ]] && return 1
-    return 0
-}
-
-install_date_in_window() {
-    local raw_date=$1 normalized
-    normalized=$(LC_ALL=C date -d "$raw_date" +%F 2>/dev/null) || return 1
-    date_in_window "$normalized" "${2:-$START_DATE}" "${3:-$END_DATE}"
-}
 
 read_compressed_file() {
     local file=$1
@@ -889,20 +867,14 @@ check_current() {
         install_date=$(LC_ALL=C pacman -Qi -- "$pkg" 2>/dev/null | awk -F': ' '/^Install Date/ { print $2; exit }')
         [[ -n "$install_date" ]] || continue
         if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then
-            if $ALL_TIME || install_date_in_window "$install_date" "$CHAOS_START_DATE" "$CHAOS_END_DATE"; then
-                found+=("$pkg (installed: $install_date) [CHAOS RAT campaign, 2025-07]")
-            fi
-        elif $ALL_TIME || install_date_in_window "$install_date"; then
+            found+=("$pkg (installed: $install_date) [CHAOS RAT campaign, 2025-07]")
+        else
             found+=("$pkg (installed: $install_date)")
         fi
     done < <(pacman -Qmq "${INFECTED_PKGS[@]}" 2>/dev/null)
 
     if [[ ${#found[@]} -eq 0 ]]; then
-        if $ALL_TIME; then
-            echo "  Clean: no infected packages currently installed."
-        else
-            echo "  Clean: no infected packages installed within campaign window."
-        fi
+        echo "  Clean: no infected packages currently installed."
         return 0
     else
         echo "  WARNING: ${#found[@]} possibly infected package(s):"
@@ -957,10 +929,8 @@ check_logs() {
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
 
             if [[ -v CHAOS_LOOKUP[$pkg] ]]; then
-                $ALL_TIME || date_in_window "$date_str" "$CHAOS_START_DATE" "$CHAOS_END_DATE" || continue
                 echo "LOG_HIT: $pkg ($action on $datetime_str) [CHAOS RAT campaign, 2025-07]"
             else
-                $ALL_TIME || date_in_window "$date_str" || continue
                 echo "LOG_HIT: $pkg ($action on $datetime_str)"
             fi
         done < <(read_compressed_file "$file") || true
@@ -1527,7 +1497,7 @@ check_pnpm_cache() {
 # A non-empty /etc/ld.so.preload causes the dynamic linker to load the listed
 # .so into every process at startup — the classic root-level rootkit hook.
 # Any content here is a hard indicator; legitimate packages do not use it.
-# Also flags /etc/ld.so.conf.d/*.conf files modified within the campaign window.
+# Also reports /etc/ld.so.conf.d/*.conf entries for review.
 # Paths are overridable via env vars for testing without root.
 # ---------------------------------------------------------------------------
 check_ldso() {
@@ -1549,10 +1519,7 @@ check_ldso() {
         local mtime mdate
         mtime=$(stat -c %Y "$conf" 2>/dev/null) || continue
         mdate=$(date -d "@$mtime" +%F 2>/dev/null) || continue
-        if date_in_window "$mdate"; then
-            echo "  WARNING: ld.so.conf.d entry modified in campaign window: $conf (mtime $mdate)"
-            found=2
-        fi
+        echo "  INFO: ld.so.conf.d entry present: $conf (mtime $mdate)"
     done < <(find "$conf_dir" -name '*.conf' -type f 2>/dev/null)
 
     [[ $found -eq 0 ]] || return $found

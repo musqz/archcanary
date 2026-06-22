@@ -23,7 +23,7 @@ Full overview of how this fork is deployed and how the pieces connect.
 
 ```
 systemd SYSTEM timer (weekly + on boot, runs as root)
-    └── archcanary --refresh --full --all-time --no-notify
+    └── archcanary --refresh --full --no-notify
             ├── [1]  currently installed foreign packages
             ├── [2]  historical pacman logs
             ├── [3]  systemd persistence (services, drop-ins, timers)
@@ -113,7 +113,7 @@ Run the scanner directly:
 # bpftool) need root; without it they are skipped and the run is reported as
 # INCOMPLETE (exit 1, WARNINGS) rather than CLEAN, so a partial scan is never
 # mistaken for an all-clear.
-sudo ~/.local/bin/archcanary --full --all-time
+sudo ~/.local/bin/archcanary --full
 
 # User-level checks run fine without root:
 archcanary --check-systemd
@@ -123,9 +123,9 @@ archcanary --check-pkgbuild
 sudo ~/.local/bin/archcanary --check-kmod
 
 # Full scan without the GUI — terminal output with structured summary table.
-# Extra flags pass through (e.g. --all-time, --refresh).
+# Extra flags pass through (e.g. --refresh).
 archcanary-gui --no-gui
-archcanary-gui --no-gui --all-time
+archcanary-gui --no-gui
 
 # Setup health check — is every element installed and configured? (no root,
 # no scan; auto-detects distro/AUR helpers and prints a fix command per gap).
@@ -290,5 +290,5 @@ bash ~/Github/archcanary/install.sh
 bash ~/Github/archcanary/install.sh --system
 
 # 4. Run a first scan with package list refresh
-archcanary --refresh --full --all-time
+archcanary --refresh --full
 ```
