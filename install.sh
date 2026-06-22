@@ -261,17 +261,18 @@ EOF
         fi
     fi
 
-    # Seed auditd rules (only if auditd is installed and file not yet present)
+    # Seed auditd rules when auditd is installed and file is absent or has no rules
     if command -v auditctl &>/dev/null; then
+        _audit_cfg=/etc/audit/rules.d/30-archcanary.conf
         sudo install -d -m 755 /etc/audit/rules.d
-        if [[ ! -f /etc/audit/rules.d/30-archcanary.conf ]]; then
-            sudo install -m 640 "$REPO_DIR/configs/audit-rules.conf" \
-                /etc/audit/rules.d/30-archcanary.conf
+        if ! grep -qE '^\s*-[waAbfe]' "$_audit_cfg" 2>/dev/null; then
+            sudo install -m 644 "$REPO_DIR/configs/audit-rules.conf" "$_audit_cfg"
             sudo systemctl restart auditd 2>/dev/null || true
-            echo "  installed: /etc/audit/rules.d/30-archcanary.conf (auditd rules — edit via GUI)"
+            echo "  installed: $_audit_cfg (auditd rules — edit via GUI)"
         else
-            echo "  kept:      /etc/audit/rules.d/30-archcanary.conf (already exists)"
+            echo "  kept:      $_audit_cfg (already has rules)"
         fi
+        unset _audit_cfg
     fi
 
     # --- Automated scan: root system units + user-session notifier ---------
