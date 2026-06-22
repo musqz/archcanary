@@ -206,6 +206,8 @@ if $SYSTEM; then
     sudo chmod 755 "$SYSTEM_LIB/root-helper"
     sudo install -m 644 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" \
         "$SYSTEM_LIB/lynis-plugin-archcanary.sh"
+    sudo install -m 644 "$REPO_DIR/configs/lynis-custom.prf" \
+        "$SYSTEM_LIB/lynis-custom.prf"
     sudo cp "$REPO_DIR/org.archcanary.policy" /usr/share/polkit-1/actions/
     # Seed the bundled package lists next to the system script so a root scan
     # (system service) finds them — root's $HOME is /root, which is not seeded.
@@ -244,9 +246,20 @@ EOF
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/lynis-plugin-archcanary.sh (auto-installed to /etc/lynis/plugins on first Lynis run)"
+    echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
+
+    # Seed Lynis custom profile (only if lynis is installed and file not yet present)
+    if command -v lynis &>/dev/null; then
+        if [[ ! -f /etc/lynis/custom.prf ]]; then
+            sudo install -m 644 "$REPO_DIR/configs/lynis-custom.prf" /etc/lynis/custom.prf
+            echo "  installed: /etc/lynis/custom.prf (Lynis false-positive suppressions — edit to enable)"
+        else
+            echo "  kept:      /etc/lynis/custom.prf (already exists)"
+        fi
+    fi
 
     # Seed auditd rules (only if auditd is installed and file not yet present)
     if command -v auditctl &>/dev/null; then
