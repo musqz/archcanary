@@ -98,6 +98,7 @@ LABELS=(
     "Lynis hardening report"   # 16
     "Run Lynis audit"          # 17  root
     "Edit audit rules"         # 18
+    "Edit Lynis config"        # 19
 )
 
 FLAGS=(
@@ -120,6 +121,7 @@ FLAGS=(
     "--check-lynis --no-notify --no-summary"
     "--run-lynis"
     "__audit_rules_edit__"
+    "__lynis_config_edit__"
 )
 
 NEEDS_ROOT=(
@@ -128,6 +130,7 @@ NEEDS_ROOT=(
     false false false false
     true
     true
+    false
     false
 )
 
@@ -141,6 +144,7 @@ STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
 STATUS[15]="   "  # extra lists — config dialog, no scan verdict
 STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
 STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
+STATUS[19]="   "  # Edit Lynis config — config dialog, no scan verdict
 unset _i
 
 _update_status() {
@@ -244,20 +248,21 @@ edit_allowlist() {
 
 edit_audit_rules() {
     local cfg="/etc/audit/rules.d/30-archcanary.conf"
-    if [[ ! -f "$cfg" ]]; then
-        yad --warning \
-            --title="Audit Rules — Archcanary" \
-            --window-icon=security-high \
-            --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> to create it." \
-            --width=440 2>/dev/null || true
-        return
-    fi
-    local tmpout
+    local template="/usr/lib/archcanary/audit-rules.conf"
+    local tmpin tmpout
+    tmpin="$(mktemp /tmp/archcanary-XXXXXX.conf)"
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.conf)"
+    if grep -qE '^\s*-[waAbfe]' "$cfg" 2>/dev/null; then
+        cp "$cfg" "$tmpin"
+    elif [[ -f "$template" ]]; then
+        cp "$template" "$tmpin"
+    else
+        printf '# No rules found. Run ./install.sh --system to seed the template.\n' > "$tmpin"
+    fi
     if yad --text-info \
         --title="Audit Rules — Archcanary" \
         --window-icon=security-high \
-        --filename="$cfg" \
+        --filename="$tmpin" \
         --width=700 --height=520 \
         --fontname="Monospace 10" \
         --editable \
@@ -272,7 +277,40 @@ edit_audit_rules() {
                 --width=420 2>/dev/null || true
         fi
     fi
-    rm -f "$tmpout"
+    rm -f "$tmpin" "$tmpout"
+}
+
+edit_lynis_config() {
+    local cfg="/etc/lynis/custom.prf"
+    local template="/usr/lib/archcanary/lynis-custom.prf"
+    local tmpout
+    tmpout="$(mktemp /tmp/archcanary-XXXXXX.prf)"
+    if [[ -f "$cfg" ]]; then
+        cp "$cfg" "$tmpout"
+    elif [[ -f "$template" ]]; then
+        cp "$template" "$tmpout"
+    else
+        printf '# Lynis custom profile\n# skip-test=<TEST-ID>\n' > "$tmpout"
+    fi
+    if yad --text-info \
+        --title="Lynis Config — Archcanary" \
+        --window-icon=security-high \
+        --filename="$tmpout" \
+        --width=700 --height=520 \
+        --fontname="Monospace 10" \
+        --editable \
+        --button="Save:0" \
+        --button="Cancel:1" \
+        > "$tmpout.new" 2>/dev/null; then
+        if [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout.new" >/dev/null 2>&1; then
+            true
+        else
+            yad --error --title="Archcanary" --window-icon=security-high \
+                --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
+                --width=420 2>/dev/null || true
+        fi
+    fi
+    rm -f "$tmpout" "$tmpout.new"
 }
 
 aurscan_settings() {
@@ -481,7 +519,7 @@ run_action() {
     local flags="${FLAGS[$idx]}"
     local needs_root="${NEEDS_ROOT[$idx]}"
 
-    if [[ "$idx" -eq 16 || "$idx" -eq 17 ]] && ! $HAS_LYNIS; then
+    if [[ "$idx" -eq 16 || "$idx" -eq 17 || "$idx" -eq 19 ]] && ! $HAS_LYNIS; then
         yad --info \
             --title="Lynis — Archcanary" \
             --window-icon=security-high \
@@ -498,6 +536,11 @@ run_action() {
 
     if [[ "$flags" == "__audit_rules_edit__" ]]; then
         edit_audit_rules
+        return
+    fi
+
+    if [[ "$flags" == "__lynis_config_edit__" ]]; then
+        edit_lynis_config
         return
     fi
 
@@ -676,11 +719,12 @@ build_list_args() {
     _row 17 "🔐  ${LABELS[17]}"
 
     _sep "Utilities"
+    $HAS_LYNIS   && _row 16 "🔐  ${LABELS[16]}"
+    $HAS_TRAUR   && _row 13
+    $HAS_AUDITD  && _row 18
+    $HAS_LYNIS   && _row 19
     _row 12
-    $HAS_TRAUR && _row 13
     $HAS_AURSCAN && _row 14
-    _row 16 "🔐  ${LABELS[16]}"
-    $HAS_AUDITD && _row 18
     _row 15
 }
 
