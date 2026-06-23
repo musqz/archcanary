@@ -149,7 +149,7 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-bun-cache` | bun cache for malicious package names | No |
 | `--check-yarn-cache` | yarn cache scan | No |
 | `--check-pnpm-cache` | pnpm cache + fnm per-version Node installs | No |
-| `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex) | No |
+| `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex, ANSI-C hex/octal, rev/tr pipe-to-shell) | No |
 | `--check-bpftool` | Enumerate loaded eBPF programs (stealth types), perf/kprobe attachments with owning PID and hooked function, XDP/TC network attachments | Yes |
 | `--check-ldso` | `/etc/ld.so.preload` injection + recent `/etc/ld.so.conf.d/` changes | No |
 | `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns | No |
@@ -226,9 +226,10 @@ Attackers used commit forgery to impersonate AUR maintainers, injecting maliciou
 
 **Persistence:** systemd services with `Restart=always`; eBPF rootkit hides processes, files, and socket inodes when run as root with CAP_BPF.
 
-Two waves:
+Three waves:
 - **Wave 1 (npm)** — `atomic-lockfile` / `lockfile-js`; accounts `krisztinavarga`, `franziskaweber`, `tobiaswesterburg`, `ellenmyklebust`. Note: `arojas` was impersonated via git commit forgery — he is a legitimate KDE maintainer ([clarification](https://chaos.social/@dvzrv/116736017948300691)).
 - **Wave 2 (bun)** — `js-digest`; accounts `custodiatovar`, `veramagalhaes`.
+- **Wave 3 (obfuscated bun)** — June 14, 2026; Node.js packages, Plasma 6 applets, Firefox packages, Aura browser, LibreWolf extensions, NeoVim plug-ins. More elaborate obfuscation around the `bun` command; discovered by a821 and Nicolas Boichat (using a local Gemma E2B AI model). ([Phoronix](https://www.phoronix.com/news/Arch-Linux-AUR-More-Malware))
 
 ### Russian Spam Campaign (June 14, 2026)
 
