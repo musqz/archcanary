@@ -446,13 +446,8 @@ run_doctor() {
 
     # --- Dependencies ------------------------------------------------------
     if [[ -n ${want[deps]:-} ]]; then
-        local _deps_ok=true
-        for _dc in yad bpftool notify-send pkexec; do
-            command -v "$_dc" >/dev/null 2>&1 || { _deps_ok=false; break; }
-        done
-        unset _dc
-        if ! $_deps_ok || [[ $detail -eq 1 ]]; then
-            printf '%sDependencies (official repos)%s\n' "$B" "$N"
+        printf '%sDependencies (official repos)%s\n' "$B" "$N"
+        if true; then
             # yad is a GUI binary — never run it to probe a version (a bad arg opens
             # a dialog); pass "" to skip the probe and just report path + pkg.
             _dep "yad (GUI toolkit)"            yad         yad       "GTK dialog toolkit"          "sudo pacman -S yad"        ""
