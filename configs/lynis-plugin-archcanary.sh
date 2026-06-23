@@ -4,7 +4,7 @@
 #   Lynis plugin — archcanary
 #   Registers archcanary as an AUR supply chain malware scanner.
 #
-#   Auto-installed by: archcanary --run-lynis (runs as root via pkexec)
+#   Installed by:      ./install.sh --system → /usr/share/lynis/plugins/
 #   Source:            /usr/lib/archcanary/lynis-plugin-archcanary.sh
 #
 #################################################################################

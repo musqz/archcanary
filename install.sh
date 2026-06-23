@@ -129,6 +129,8 @@ if $UNINSTALL; then
                    /etc/audit/rules.d/archcanary.conf
         sudo augenrules --load 2>/dev/null || true
         echo "  removed: /etc/audit/rules.d/30-archcanary.rules (auditd rules)"
+        sudo rm -f /usr/share/lynis/plugins/plugin_archcanary_phase1.sh
+        echo "  removed: /usr/share/lynis/plugins/plugin_archcanary_phase1.sh (Lynis plugin)"
     fi
 
     echo
@@ -265,13 +267,13 @@ EOF
     fi
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
-    echo "  installed: $SYSTEM_LIB/lynis-plugin-archcanary.sh (auto-installed to /etc/lynis/plugins on first Lynis run)"
+    echo "  installed: $SYSTEM_LIB/lynis-plugin-archcanary.sh (source copy)"
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
-    # Seed Lynis custom profile (only if lynis is installed and file not yet present)
+    # Seed Lynis custom profile and install plugin (only if lynis is installed)
     if command -v lynis &>/dev/null; then
         if [[ ! -f /etc/lynis/custom.prf ]]; then
             sudo install -m 644 "$REPO_DIR/configs/lynis-custom.prf" /etc/lynis/custom.prf
@@ -279,6 +281,12 @@ EOF
         else
             echo "  kept:      /etc/lynis/custom.prf (already exists)"
         fi
+        # Install plugin directly to Lynis's plugin dir — Lynis only loads from there,
+        # not from /etc/lynis/plugins or any other path without explicit profile config.
+        _lynis_plugin_dst="/usr/share/lynis/plugins/plugin_archcanary_phase1.sh"
+        sudo install -m 644 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" "$_lynis_plugin_dst"
+        echo "  installed: $_lynis_plugin_dst (Lynis plugin — registers archcanary as malware scanner)"
+        unset _lynis_plugin_dst
     fi
 
     # Seed auditd rules when auditd is installed and file is absent or has no rules

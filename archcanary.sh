@@ -553,21 +553,15 @@ if $RUN_LYNIS; then
         echo "Error: lynis not installed (pacman -S lynis)" >&2
         exit 1
     fi
-    # Auto-install the archcanary Lynis plugin on first run (already root via pkexec).
-    # Ships as /usr/lib/archcanary/lynis-plugin-archcanary.sh; Lynis loads it on next audit.
-    _plugin_src="/usr/lib/archcanary/lynis-plugin-archcanary.sh"
-    _plugin_dst="/etc/lynis/plugins/plugin_archcanary_phase1.sh"
-    if [[ -f "$_plugin_src" && -d /etc/lynis/plugins && ! -f "$_plugin_dst" ]]; then
-        install -m 644 "$_plugin_src" "$_plugin_dst"
-        echo "Installed Lynis plugin: $_plugin_dst"
-        echo
-    fi
-    unset _plugin_src _plugin_dst
     # Can't use exec: pipe through sed to strip non-ASCII block chars (▆ etc.)
     # that yad text-info renders as [?] boxes. pipefail off so set -e doesn't
     # fire on lynis's own exit code before we can capture it.
     set +o pipefail
-    lynis audit system --no-colors 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
+    _lynis_args=(audit system --no-colors)
+    # Load our custom profile if present so false-positive suppressions apply.
+    [[ -f /etc/lynis/custom.prf ]] && _lynis_args+=(--profile /etc/lynis/custom.prf)
+    lynis "${_lynis_args[@]}" 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
+    unset _lynis_args
     _lynis_exit="${PIPESTATUS[0]}"
     # Lynis exit 2 = "found suggestions/warnings" — normal for a hardening audit,
     # not a malware signal. Map to 1 (warnings) so the GUI doesn't show INFECTED.
