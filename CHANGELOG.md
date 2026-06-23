@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.9 (2026-06-23)
+
+- New: **auditd post-build snapshot** — both scan services (`archcanary.service` and `archcanary-onchange.service`) now append `aur_build` audit events to `last-scan.log` after each run via `ExecStartPre`/`ExecStartPost`. Uses the mtime of the previous log as the implicit "last checked" timestamp; no extra state file needed. Bridges the gap between static pre-build PKGBUILD analysis and runtime kernel audit events.
+- New: `--start-date`/`--end-date` CLI flags for date-window filtering of pacman log history.
+- New: `--check-pkgbuild` detects two additional obfuscation patterns: ANSI-C hex/octal escape sequences (`$'\x62\x61\x73\x68'`) and `rev`/`tr`-based string reversal piped to shell.
+- New: `--doctor` includes a traur pacman hook sub-check.
+- Fix: auditd rules file was installed as `30-archcanary.conf` — `augenrules` silently ignores files without a `.rules` extension, leaving auditd with no active rules. Renamed to `30-archcanary.rules`; `install.sh` and `uninstall` now also clean up legacy `.conf` copies.
+- Fix: `systemctl restart auditd` replaced with `augenrules --load` — Arch configures auditd with `RefuseManualStart=yes`; the restart always failed silently.
+- Fix: `--run-lynis` was wired up but absent from `--help` output; documented with a note that it is intentionally excluded from `--full` (avoids a 2-minute Lynis run in automated scans).
+- Fix: GUI suggests `archcanary-gui --no-gui` in the sudo hint when invoked via the GUI wrapper.
+- Fix: man page SEE ALSO updated — added `auditd(8)`, `bpftool(8)`, `yay(8)`, `traur(1)`; removed stale `archcanary-gui(1)` entry.
+- Chore: `packaging/` removed during beta period.
+- Chore: `notepad-bin` dropped from the infected package list.
+- Docs: all aurscan references updated to the upstream AUR package `aurscan-manticore-git`; AUR install commands added.
+
 ## v0.1.7 (2026-06-22)
 
 - New: **Lynis integration** — two GUI rows: *Lynis hardening report* reads the last `/var/log/lynis-report.dat` (hardening index, warnings, scan date); *Run Lynis audit* executes `lynis audit system` via pkexec and streams output.
