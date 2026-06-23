@@ -156,6 +156,7 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-kmod` | Kernel modules not owned by pacman; untracked DKMS builds | Yes |
 | `--check-lynis` | Read last Lynis report — hardening index, warnings, scan date | Yes |
 | `--run-lynis` | Run `lynis audit system`, stream output | Yes |
+| `--check-pkginteg` | Verify installed file checksums via `pacman -Qkk`. Reports SHA256 mismatches on non-backup, non-factory files. Backup files (pacman-managed configs expected to diverge) and `/factory/` paths are filtered out. Prioritise hits in `/usr/bin/`, `/usr/lib/`, `/usr/sbin/`. | Yes |
 | `--full` | All of the above | Partial |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |

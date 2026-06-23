@@ -1,4 +1,4 @@
-.TH ARCHCANARY 1 "2026-06-22" "archcanary 0.1.7" "User Commands"
+.TH ARCHCANARY 1 "2026-06-23" "archcanary 0.1.9" "User Commands"
 .SH NAME
 archcanary \- security scanner for Arch Linux
 .SH SYNOPSIS
@@ -83,6 +83,24 @@ Requires root.
 Run
 .B "lynis audit system"
 and stream the output.
+Requires root.
+.TP
+.B \-\-check-pkginteg
+Verify installed file checksums against the pacman database using
+.BR "pacman \-Qkk" .
+Reports SHA256 mismatches on files that are not pacman-managed backup files
+and not under
+.IR /factory/ .
+Backup files (config files pacman marks as user-editable) diverge by design
+and are excluded.
+Prioritise any hits in
+.IR /usr/bin/ ,
+.IR /usr/lib/ ,
+and
+.IR /usr/sbin/ .
+Running as root gives complete coverage; as a regular user
+.BR pacman
+silently skips files it cannot read.
 Requires root.
 .TP
 .B \-\-full
