@@ -557,11 +557,7 @@ if $RUN_LYNIS; then
     # that yad text-info renders as [?] boxes. pipefail off so set -e doesn't
     # fire on lynis's own exit code before we can capture it.
     set +o pipefail
-    _lynis_args=(audit system --no-colors)
-    # Load our custom profile if present so false-positive suppressions apply.
-    [[ -f /etc/lynis/custom.prf ]] && _lynis_args+=(--profile /etc/lynis/custom.prf)
-    lynis "${_lynis_args[@]}" 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
-    unset _lynis_args
+    lynis audit system --no-colors 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
     _lynis_exit="${PIPESTATUS[0]}"
     # Lynis exit 2 = "found suggestions/warnings" — normal for a hardening audit,
     # not a malware signal. Map to 1 (warnings) so the GUI doesn't show INFECTED.

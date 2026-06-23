@@ -8,7 +8,7 @@
 - New: `--doctor` includes a traur pacman hook sub-check.
 - Fix: auditd rules file was installed as `30-archcanary.conf` — `augenrules` silently ignores files without a `.rules` extension, leaving auditd with no active rules. Renamed to `30-archcanary.rules`; `install.sh` and `uninstall` now also clean up legacy `.conf` copies.
 - Fix: `systemctl restart auditd` replaced with `augenrules --load` — Arch configures auditd with `RefuseManualStart=yes`; the restart always failed silently.
-- Fix: `--run-lynis` was wired up but absent from `--help` output; documented with a note that it is intentionally excluded from `--full` (avoids a 2-minute Lynis run in automated scans).
+- Fix: `--run-lynis` was wired up but absent from `--help` output; documented with a note that it is intentionally excluded from `--full` (avoids a 2-minute Lynis run in automated scans). Lynis plugin concept removed — Lynis's built-in malware scanner check is hardcoded to known tools and cannot be extended via plugins.
 - Fix: GUI suggests `archcanary-gui --no-gui` in the sudo hint when invoked via the GUI wrapper.
 - Fix: man page SEE ALSO updated — added `auditd(8)`, `bpftool(8)`, `yay(8)`, `traur(1)`; removed stale `archcanary-gui(1)` entry.
 - Chore: `packaging/` removed during beta period.
@@ -18,9 +18,8 @@
 ## v0.1.7 (2026-06-22)
 
 - New: **Lynis integration** — two GUI rows: *Lynis hardening report* reads the last `/var/log/lynis-report.dat` (hardening index, warnings, scan date); *Run Lynis audit* executes `lynis audit system` via pkexec and streams output.
-- New: **Lynis plugin** (`configs/lynis-plugin-archcanary.sh`) — registers archcanary as a malware scanner (test `ARCH-0001`, +3 hardening points). Auto-installed to `/etc/lynis/plugins/` on first audit run; shipped to `/usr/lib/archcanary/` by `install.sh --system`.
 - New: **auditd rules editor** — GUI row (Utilities → Edit audit rules) visible when auditd is installed. Ships a default ruleset covering privilege escalation, pacman/AUR builds, kernel modules, systemd units, cron, and SSH config. Editable in-GUI; saves via pkexec and restarts auditd.
-- New: `install.sh --system` seeds `/etc/audit/rules.d/30-archcanary.conf` from the bundled template when auditd is installed and the file has no rules.
+- New: `install.sh --system` seeds `/etc/audit/rules.d/30-archcanary.rules` from the bundled template when auditd is installed and the file has no rules.
 - Fix: Lynis output ANSI cursor-movement codes (`ESC[2C`, `ESC[30C`) stripped before display in yad — `--no-colors` suppresses color SGR sequences but not cursor movement.
 - Fix: non-ASCII Unicode block characters (`▆` etc.) stripped from Lynis output for yad text-info compatibility.
 - Fix: `NEEDS_ROOT[16]` corrected to `true` — `/var/log/lynis-report.dat` is always mode 600; the non-root designation caused spurious WARNINGS in every full scan.

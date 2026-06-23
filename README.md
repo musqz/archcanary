@@ -52,7 +52,7 @@ archcanary integrates with and builds on the following:
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection | Optional (`--check-bpftool`) |
 | [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | `notify-send` — desktop critical alert on infected scan result | Optional |
 | [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI privilege escalation for root-requiring checks | GUI + `--system` install |
-| [lynis](https://cisofy.com/lynis/) | System hardening auditor; archcanary reads the last report and can trigger a new audit from the GUI; a plugin registers archcanary as a malware scanner in Lynis | Optional |
+| [lynis](https://cisofy.com/lynis/) | System hardening auditor; archcanary reads the last report and can trigger a new audit from the GUI | Optional |
 | [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Kernel audit daemon; archcanary ships a default ruleset covering AUR builds, privilege escalation, and system config changes; editable from the GUI | Optional |
 
 ### Detection Layers
@@ -155,7 +155,7 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns | No |
 | `--check-kmod` | Kernel modules not owned by pacman; untracked DKMS builds | Yes |
 | `--check-lynis` | Read last Lynis report — hardening index, warnings, scan date | Yes |
-| `--run-lynis` | Run `lynis audit system`, stream output; auto-installs archcanary Lynis plugin on first run | Yes |
+| `--run-lynis` | Run `lynis audit system`, stream output | Yes |
 | `--full` | All of the above | Partial |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
@@ -187,8 +187,7 @@ Every scan prints a per-check summary before the final verdict:
 - Root system timer: weekly + on boot + after each pacman transaction
 - User notifier: watches `/var/lib/archcanary/last-scan.log`, fires a desktop alert on `INFECTED`
 - pkexec root helper for GUI-triggered root checks (eBPF, bpftool, kmod, Lynis)
-- Lynis plugin at `/usr/lib/archcanary/lynis-plugin-archcanary.sh` (auto-installed to `/etc/lynis/plugins/` on first GUI audit run)
-- auditd ruleset at `/etc/audit/rules.d/30-archcanary.conf` when auditd is installed (seeded from template, editable via GUI)
+- auditd ruleset at `/etc/audit/rules.d/30-archcanary.rules` when auditd is installed (seeded from template, editable via GUI)
 
 See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.md](docs/my-setup.md) for the full personal stack and reinstall steps.
 

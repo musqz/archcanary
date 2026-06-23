@@ -131,7 +131,6 @@ if $UNINSTALL; then
         echo "  removed: /etc/audit/rules.d/30-archcanary.rules (auditd rules)"
         sudo rm -f /usr/share/lynis/plugins/plugin_archcanary_phase1 \
                    /usr/share/lynis/plugins/plugin_archcanary_phase1.sh
-        echo "  removed: /usr/share/lynis/plugins/plugin_archcanary_phase1 (Lynis plugin)"
     fi
 
     echo
@@ -227,8 +226,6 @@ if $SYSTEM; then
     sudo cp "$REPO_DIR/lib/archcanary-root-helper" "$SYSTEM_LIB/root-helper"
     sudo chown root:root "$SYSTEM_LIB/root-helper"
     sudo chmod 755 "$SYSTEM_LIB/root-helper"
-    sudo install -m 644 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" \
-        "$SYSTEM_LIB/lynis-plugin-archcanary.sh"
     sudo install -m 644 "$REPO_DIR/configs/lynis-custom.prf" \
         "$SYSTEM_LIB/lynis-custom.prf"
     sudo cp "$REPO_DIR/configs/org.archcanary.policy" /usr/share/polkit-1/actions/
@@ -268,31 +265,18 @@ EOF
     fi
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
-    echo "  installed: $SYSTEM_LIB/lynis-plugin-archcanary.sh (source copy)"
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
-    # Seed Lynis custom profile and install plugin (only if lynis is installed)
+    # Seed Lynis custom profile (only if lynis is installed and file not yet present)
     if command -v lynis &>/dev/null; then
         if [[ ! -f /etc/lynis/custom.prf ]]; then
             sudo install -m 644 "$REPO_DIR/configs/lynis-custom.prf" /etc/lynis/custom.prf
             echo "  installed: /etc/lynis/custom.prf (Lynis false-positive suppressions — edit to enable)"
         else
             echo "  kept:      /etc/lynis/custom.prf (already exists)"
-        fi
-        # Install plugin directly to Lynis's plugin dir — Lynis only loads from there.
-        # Filename must have no extension (Lynis searches plugin_[a-z]*_phase1 without .sh).
-        # Permissions must be 640 or stricter (Lynis refuses world-readable plugins).
-        _lynis_plugin_dst="/usr/share/lynis/plugins/plugin_archcanary_phase1"
-        sudo install -m 640 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" "$_lynis_plugin_dst"
-        echo "  installed: $_lynis_plugin_dst (Lynis plugin — registers archcanary as malware scanner)"
-        unset _lynis_plugin_dst
-        # Ensure plugin=archcanary is in the live custom.prf (in case it predates this entry)
-        if [[ -f /etc/lynis/custom.prf ]] && ! grep -q "^plugin=archcanary" /etc/lynis/custom.prf; then
-            echo "plugin=archcanary" | sudo tee -a /etc/lynis/custom.prf >/dev/null
-            echo "  updated:   /etc/lynis/custom.prf (added plugin=archcanary)"
         fi
     fi
 
