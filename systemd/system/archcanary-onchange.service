@@ -4,4 +4,6 @@ Description=archcanary system scan (after pacman transaction)
 [Service]
 Type=oneshot
 StateDirectory=archcanary
+ExecStartPre=/bin/sh -c 'stat -c %Y /var/lib/archcanary/last-scan.log > /var/lib/archcanary/.prev-epoch 2>/dev/null || echo 0 > /var/lib/archcanary/.prev-epoch'
 ExecStart=/usr/lib/archcanary/archcanary.sh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
+ExecStartPost=/bin/sh -c 'epoch=$(cat /var/lib/archcanary/.prev-epoch); [ "$epoch" -gt 0 ] && ausearch -k aur_build -ts $(date -d "@$epoch" +"%m/%d/%Y") $(date -d "@$epoch" +"%H:%M:%S") -i 2>/dev/null >> /var/lib/archcanary/last-scan.log || true'
