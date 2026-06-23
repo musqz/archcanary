@@ -409,7 +409,7 @@ run_doctor() {
                 _warn "$label" "${pfx}systemctl ${uarg}enable --now $unit" \
                     "state: present but disabled — not running automatically" ;;
             *)
-                _miss "$label" "${pfx}bash $installer_sys" \
+                _miss "$label" "bash $installer_sys" \
                     "state: not installed" ;;
         esac
     }
@@ -477,10 +477,10 @@ run_doctor() {
     # --- System install (root) --------------------------------------------
     if [[ -n ${want[system]:-} ]]; then
         printf '%sSystem install (root)%s\n' "$B" "$N"
-        _item "scanner script (/usr/lib/archcanary)"     "$(_file /usr/lib/archcanary/archcanary.sh)"          "sudo bash $installer_sys" "path: /usr/lib/archcanary/archcanary.sh"
-        _item "root helper (enables root checks in GUI)" "$(_file /usr/lib/archcanary/root-helper)"           "sudo bash $installer_sys" "path: /usr/lib/archcanary/root-helper"
-        _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "sudo bash $installer_sys" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
-        _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "sudo bash $installer_sys" "path: /etc/archcanary/dkms_allowlist.conf"
+        _item "scanner script (/usr/lib/archcanary)"     "$(_file /usr/lib/archcanary/archcanary.sh)"          "bash $installer_sys" "path: /usr/lib/archcanary/archcanary.sh"
+        _item "root helper (enables root checks in GUI)" "$(_file /usr/lib/archcanary/root-helper)"           "bash $installer_sys" "path: /usr/lib/archcanary/root-helper"
+        _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "bash $installer_sys" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
+        _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "bash $installer_sys" "path: /etc/archcanary/dkms_allowlist.conf"
         printf '\n'
     fi
 
