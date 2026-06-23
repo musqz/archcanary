@@ -91,10 +91,7 @@ if $UNINSTALL; then
     fi
 
     if [[ -d "$CONFIG_DIR" ]]; then
-        rm -rf "$CONFIG_DIR"
-        echo "  removed: $CONFIG_DIR"
-    else
-        echo "  not found: $CONFIG_DIR"
+        echo "  kept:    $CONFIG_DIR (user config — remove manually if desired)"
     fi
 
     if $SYSTEM; then
