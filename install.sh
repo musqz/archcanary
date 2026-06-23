@@ -124,6 +124,11 @@ if $UNINSTALL; then
         echo "  removed: /usr/lib/archcanary, /etc/archcanary"
         sudo rm -f /usr/share/polkit-1/actions/org.archcanary.policy
         echo "  removed: /usr/share/polkit-1/actions/org.archcanary.policy"
+        sudo rm -f /etc/audit/rules.d/30-archcanary.rules \
+                   /etc/audit/rules.d/30-archcanary.conf \
+                   /etc/audit/rules.d/archcanary.conf
+        sudo augenrules --load 2>/dev/null || true
+        echo "  removed: /etc/audit/rules.d/30-archcanary.rules (auditd rules)"
     fi
 
     echo
@@ -278,11 +283,13 @@ EOF
 
     # Seed auditd rules when auditd is installed and file is absent or has no rules
     if command -v auditctl &>/dev/null; then
-        _audit_cfg=/etc/audit/rules.d/30-archcanary.conf
+        _audit_cfg=/etc/audit/rules.d/30-archcanary.rules
         sudo install -d -m 755 /etc/audit/rules.d
+        # Remove legacy .conf copy that augenrules ignores
+        sudo rm -f /etc/audit/rules.d/30-archcanary.conf /etc/audit/rules.d/archcanary.conf
         if ! grep -qE '^\s*-[waAbfe]' "$_audit_cfg" 2>/dev/null; then
             sudo install -m 644 "$REPO_DIR/configs/audit-rules.conf" "$_audit_cfg"
-            sudo systemctl restart auditd 2>/dev/null || true
+            sudo augenrules --load 2>/dev/null || true
             echo "  installed: $_audit_cfg (auditd rules — edit via GUI)"
         else
             echo "  kept:      $_audit_cfg (already has rules)"
