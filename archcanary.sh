@@ -511,6 +511,12 @@ run_doctor() {
                 "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
         fi
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
+        if command -v traur >/dev/null 2>&1; then
+            _opt_item "traur pacman hook (auto-runs on every install)" \
+                "$(_file /usr/share/libalpm/hooks/traur.hook)" \
+                "" \
+                "path: /usr/share/libalpm/hooks/traur.hook"
+        fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         _opt_item "yay hooks (auto-scan on yay install)" "$(_file "$real_home/.config/yay/init.lua")" "" "path: $real_home/.config/yay/init.lua"
         printf '\n'
