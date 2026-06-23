@@ -137,7 +137,7 @@ NEEDS_ROOT=(
     true
     false
     false
-    false
+    true
     false
 )
 
