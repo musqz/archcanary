@@ -685,6 +685,9 @@ run_action() {
         if [[ "$idx" -eq 17 ]]; then
             printf 'Running lynis audit system, please wait (1-2 minutes)...\n\n' >&8 || true
         fi
+        if [[ "$idx" -eq 20 ]]; then
+            printf 'Verifying installed file checksums — this may take 20-30 seconds...\n\n' >&8 || true
+        fi
 
         if [[ -n "$_xdotool_pid" ]]; then
             kill "$_xdotool_pid" 2>/dev/null || true
