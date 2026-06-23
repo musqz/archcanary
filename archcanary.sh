@@ -68,6 +68,7 @@ CHECK_LDSO=false
 CHECK_AUTOSTART=false
 CHECK_KMOD=false
 CHECK_LYNIS=false
+CHECK_PKGINTEG=false
 CHECK_FULL=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
@@ -106,7 +107,8 @@ for arg in "$@"; do
         --check-autostart)  CHECK_AUTOSTART=true ;;
         --check-kmod)       CHECK_KMOD=true ;;
         --check-lynis)      CHECK_LYNIS=true ;;
-        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_LYNIS=true; CHECK_FULL=true ;;
+        --check-pkginteg)   CHECK_PKGINTEG=true ;;
+        --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_LYNIS=true; CHECK_PKGINTEG=true; CHECK_FULL=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
@@ -139,6 +141,7 @@ for arg in "$@"; do
             echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
             echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
             echo "  --check-lynis      Parse Lynis hardening report (/var/log/lynis-report.dat)"
+            echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
             echo "  --run-lynis        Run a full Lynis audit (lynis audit system) and exit — not included in --full"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning"
@@ -209,7 +212,8 @@ _init_color
 FOCUSED_MODE=false
 if ! $CHECK_FULL && { $CHECK_SYSTEMD || $CHECK_EBPF || $CHECK_NPM_CACHE || \
     $CHECK_BUN_CACHE || $CHECK_YARN_CACHE || $CHECK_PNPM_CACHE || $CHECK_PKGBUILD || \
-    $CHECK_BPFTOOL || $CHECK_LDSO || $CHECK_AUTOSTART || $CHECK_KMOD || $CHECK_LYNIS; }; then
+    $CHECK_BPFTOOL || $CHECK_LDSO || $CHECK_AUTOSTART || $CHECK_KMOD || $CHECK_LYNIS || \
+    $CHECK_PKGINTEG; }; then
     FOCUSED_MODE=true
 fi
 
@@ -1811,6 +1815,43 @@ check_kmod() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 13: package file integrity via pacman -Qkk
+# ---------------------------------------------------------------------------
+# Verifies that files installed by pacman still match the stored checksums.
+# Filters: backup= files (expected to change), /factory/ paths, and
+# permission errors (unreadable files). Only SHA256 mismatches on regular
+# installed files are reported — those indicate post-install modification.
+check_pkginteg() {
+    echo "  Verifying installed file checksums against pacman database..."
+    echo "  (May take 30-60 seconds on large installs)"
+
+    local raw findings count
+    raw=$(/usr/bin/pacman -Qkk 2>/dev/null)
+
+    findings=$(
+        printf '%s\n' "$raw" \
+        | grep "SHA256 checksum mismatch" \
+        | grep -v "^backup file:" \
+        | grep -v "/factory/"
+    )
+
+    if [[ -z "$findings" ]]; then
+        echo "  All accessible installed files match pacman database checksums."
+        return 0
+    fi
+
+    count=$(wc -l <<< "$findings")
+    printf '  %d file(s) with unexpected checksum mismatch:\n\n' "$count"
+    while IFS= read -r line; do
+        printf '  * %s\n' "$line"
+    done <<< "$findings"
+    echo
+    echo "  Note: some mismatches are benign (app-managed config files, browser policies)."
+    echo "  Prioritise binaries in /usr/bin/, /usr/lib/, /usr/sbin/."
+    return 1
+}
+
+# ---------------------------------------------------------------------------
 # Check 12: Lynis hardening report
 # Parses /var/log/lynis-report.dat (written by: sudo lynis audit system).
 # Reports the hardening index and warnings from the last Lynis run.
@@ -2094,6 +2135,14 @@ if $CHECK_LYNIS; then
     check_lynis && ret=$? || ret=$?
     _apply_ret "$ret" lynis
     _rec "Lynis hardening" "$ret"
+    echo
+fi
+
+if $CHECK_PKGINTEG; then
+    echo "--- [13] Package file integrity ---"
+    check_pkginteg && ret=$? || ret=$?
+    _apply_ret "$ret" pkginteg
+    _rec "Package integrity" "$ret"
     echo
 fi
 

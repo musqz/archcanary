@@ -100,7 +100,8 @@ LABELS=(
     "Run Lynis audit"          # 17  root
     "Edit audit rules"         # 18
     "Edit Lynis config"        # 19
-    "About"                    # 20
+    "Package integrity"        # 20
+    "About"                    # 21
 )
 
 FLAGS=(
@@ -124,6 +125,7 @@ FLAGS=(
     "--run-lynis"
     "__audit_rules_edit__"
     "__lynis_config_edit__"
+    "--check-pkginteg --no-notify --no-summary"
     "__about__"
 )
 
@@ -133,6 +135,7 @@ NEEDS_ROOT=(
     false false false false
     true
     true
+    false
     false
     false
     false
@@ -774,6 +777,7 @@ build_list_args() {
     $HAS_AURSCAN && _row 14
     _row 15
     _row 20
+    _row 21
 }
 
 # Main loop
