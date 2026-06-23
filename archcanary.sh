@@ -257,8 +257,12 @@ run_doctor() {
     # The repo-relative fix sources only exist when run from a clone; degrade
     # gracefully to a hint when run from an installed copy.
     local installer="$repo_dir/install.sh" luasrc="$repo_dir/configs/yay-init.lua"
-    [[ -f $installer ]] || installer="install.sh   # (run from the archcanary repo)"
-    [[ -f $luasrc    ]] || luasrc="configs/yay-init.lua   # (from the archcanary repo)"
+    local installer_sys="$installer"
+    if [[ ! -f $installer ]]; then
+        installer="install.sh  # (cd to the archcanary repo first)"
+        installer_sys="install.sh --system  # (cd to the archcanary repo first)"
+    fi
+    [[ -f $luasrc ]] || luasrc="configs/yay-init.lua  # (from the archcanary repo)"
 
     # --- Section selection -------------------------------------------------
     # Sections are listed in install order (prerequisite chain) so a full run
@@ -405,7 +409,7 @@ run_doctor() {
                 _warn "$label" "${pfx}systemctl ${uarg}enable --now $unit" \
                     "state: present but disabled — not running automatically" ;;
             *)
-                _miss "$label" "${pfx}bash $installer --system" \
+                _miss "$label" "${pfx}bash $installer_sys" \
                     "state: not installed" ;;
         esac
     }
@@ -478,10 +482,10 @@ run_doctor() {
     # --- System install (root) --------------------------------------------
     if [[ -n ${want[system]:-} ]]; then
         printf '%sSystem install (root)%s\n' "$B" "$N"
-        _item "scanner script (/usr/lib/archcanary)"     "$(_file /usr/lib/archcanary/archcanary.sh)"          "sudo bash $installer --system" "path: /usr/lib/archcanary/archcanary.sh"
-        _item "root helper (enables root checks in GUI)" "$(_file /usr/lib/archcanary/root-helper)"           "sudo bash $installer --system" "path: /usr/lib/archcanary/root-helper"
-        _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "sudo bash $installer --system" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
-        _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "sudo bash $installer --system" "path: /etc/archcanary/dkms_allowlist.conf"
+        _item "scanner script (/usr/lib/archcanary)"     "$(_file /usr/lib/archcanary/archcanary.sh)"          "sudo bash $installer_sys" "path: /usr/lib/archcanary/archcanary.sh"
+        _item "root helper (enables root checks in GUI)" "$(_file /usr/lib/archcanary/root-helper)"           "sudo bash $installer_sys" "path: /usr/lib/archcanary/root-helper"
+        _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "sudo bash $installer_sys" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
+        _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "sudo bash $installer_sys" "path: /etc/archcanary/dkms_allowlist.conf"
         printf '\n'
     fi
 
