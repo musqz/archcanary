@@ -165,7 +165,10 @@ if $SYSTEM; then
         fi
     done
     sudo install -d -m 755 /usr/share/man/man1
-    sudo install -m 644 "$REPO_DIR/man/archcanary.1" /usr/share/man/man1/archcanary.1
+    _ver=$(cat "$REPO_DIR/version.txt" 2>/dev/null || echo "unknown")
+    sed "s/@VERSION@/$_ver/" "$REPO_DIR/man/archcanary.1" \
+        | sudo tee /usr/share/man/man1/archcanary.1 >/dev/null
+    sudo chmod 644 /usr/share/man/man1/archcanary.1
     echo "  installed: /usr/share/man/man1/archcanary.1"
 else
     mkdir -p "$USER_BIN"
@@ -183,7 +186,9 @@ else
     done
     MAN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/man/man1"
     mkdir -p "$MAN_DIR"
-    install -m 644 "$REPO_DIR/man/archcanary.1" "$MAN_DIR/archcanary.1"
+    _ver=$(cat "$REPO_DIR/version.txt" 2>/dev/null || echo "unknown")
+    sed "s/@VERSION@/$_ver/" "$REPO_DIR/man/archcanary.1" > "$MAN_DIR/archcanary.1"
+    chmod 644 "$MAN_DIR/archcanary.1"
     echo "  installed: $MAN_DIR/archcanary.1"
 fi
 
