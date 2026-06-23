@@ -114,11 +114,12 @@ if $UNINSTALL; then
                    /etc/systemd/system/archcanary-onchange.service \
                    /etc/systemd/system/archcanary.path
         sudo systemctl daemon-reload
-        sudo rm -rf /var/lib/archcanary
-        echo "  removed: systemd units (system scan + user notifier) and /var/lib/archcanary"
+        echo "  kept:    /var/lib/archcanary (scan history — remove manually if desired)"
+        echo "  removed: systemd units (system scan + user notifier)"
 
-        sudo rm -rf /usr/lib/archcanary /etc/archcanary
-        echo "  removed: /usr/lib/archcanary, /etc/archcanary"
+        sudo rm -rf /usr/lib/archcanary
+        echo "  removed: /usr/lib/archcanary"
+        echo "  kept:    /etc/archcanary (user config — remove manually if desired)"
         sudo rm -f /usr/share/polkit-1/actions/org.archcanary.policy
         echo "  removed: /usr/share/polkit-1/actions/org.archcanary.policy"
         sudo rm -f /etc/audit/rules.d/30-archcanary.rules \
