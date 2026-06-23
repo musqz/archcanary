@@ -153,7 +153,7 @@ STATUS[15]="   "  # extra lists — config dialog, no scan verdict
 STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
 STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
 STATUS[19]="   "  # Edit Lynis config — config dialog, no scan verdict
-STATUS[20]="   "  # About — no scan verdict
+STATUS[21]="   "  # About — no scan verdict
 unset _i
 
 # Derive full-scan status (row 0) from whichever individual checks have results.
