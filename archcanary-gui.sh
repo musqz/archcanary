@@ -100,7 +100,7 @@ LABELS=(
     "Run Lynis audit"          # 17  root
     "Edit audit rules"         # 18
     "Edit Lynis config"        # 19
-    "Package integrity"        # 20
+    "Pacman integrity"         # 20
     "About"                    # 21
 )
 
@@ -773,13 +773,13 @@ build_list_args() {
     _sep "Utilities"
     $HAS_LYNIS   && _row 16 "🔐  ${LABELS[16]}"
     $HAS_TRAUR   && _row 13
+    _row 20 "🔐  ${LABELS[20]}"
     _sep "Settings"
     $HAS_AUDITD  && _row 18
     $HAS_LYNIS   && _row 19
     _row 12
     $HAS_AURSCAN && _row 14
     _row 15
-    _row 20
     _row 21
 }
 
