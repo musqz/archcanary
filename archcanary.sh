@@ -1342,6 +1342,9 @@ check_pkgbuild_caches() {
 
     local found_count=0
     local scanned=0
+    # matches $'\x.. or $'\0.. (ANSI-C hex/octal quoting)
+    local re_ansi_c
+    re_ansi_c='\$'"'"'\\x|\$'"'"'\\0'
 
     while IFS= read -r file; do
         (( scanned++ )) || true
@@ -1387,6 +1390,21 @@ check_pkgbuild_caches() {
             # --- Pattern 5: variable-split command reassembly (a=bu; b=n; $a$b) ---
             if [[ "$line" =~ [a-z_]+=[a-zA-Z]+\;[[:space:]]*[a-z_]+=[a-zA-Z]+\;[[:space:]]*\$ ]]; then
                 echo "  WARNING: variable-split command reassembly in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 6: ANSI-C quoting with hex/octal ($'\x.. or $'\0..) ---
+            if [[ "$line" =~ $re_ansi_c ]]; then
+                echo "  WARNING: ANSI-C hex/octal quoting in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 7: rev/tr pipe-to-shell obfuscation ---
+            if [[ "$line" =~ \|[[:space:]]*(rev|tr)[[:space:]] ]] && \
+               [[ "$line" =~ \|[[:space:]]*(bash|sh|eval) ]]; then
+                echo "  WARNING: rev/tr pipe-to-shell obfuscation in $file:$lineno"
                 echo "    $line"
                 found_count=2
             fi
