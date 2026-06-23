@@ -159,6 +159,8 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-pkginteg` | Verify installed file checksums via `pacman -Qkk`. Reports SHA256 mismatches on non-backup, non-factory files. Backup files (pacman-managed configs expected to diverge) and `/factory/` paths are filtered out. Prioritise hits in `/usr/bin/`, `/usr/lib/`, `/usr/sbin/`. | Yes |
 | `--full` | All of the above | Partial |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc | — |
+| `--package-list=PATH` | Override the infected AUR package list | — |
+| `--extra-list=PATH_OR_URL` | Load an additional package list (file or `https://` URL); repeatable | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
 
 ### Exit Codes
