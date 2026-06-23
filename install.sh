@@ -129,8 +129,9 @@ if $UNINSTALL; then
                    /etc/audit/rules.d/archcanary.conf
         sudo augenrules --load 2>/dev/null || true
         echo "  removed: /etc/audit/rules.d/30-archcanary.rules (auditd rules)"
-        sudo rm -f /usr/share/lynis/plugins/plugin_archcanary_phase1.sh
-        echo "  removed: /usr/share/lynis/plugins/plugin_archcanary_phase1.sh (Lynis plugin)"
+        sudo rm -f /usr/share/lynis/plugins/plugin_archcanary_phase1 \
+                   /usr/share/lynis/plugins/plugin_archcanary_phase1.sh
+        echo "  removed: /usr/share/lynis/plugins/plugin_archcanary_phase1 (Lynis plugin)"
     fi
 
     echo
@@ -281,12 +282,18 @@ EOF
         else
             echo "  kept:      /etc/lynis/custom.prf (already exists)"
         fi
-        # Install plugin directly to Lynis's plugin dir — Lynis only loads from there,
-        # not from /etc/lynis/plugins or any other path without explicit profile config.
-        _lynis_plugin_dst="/usr/share/lynis/plugins/plugin_archcanary_phase1.sh"
-        sudo install -m 644 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" "$_lynis_plugin_dst"
+        # Install plugin directly to Lynis's plugin dir — Lynis only loads from there.
+        # Filename must have no extension (Lynis searches plugin_[a-z]*_phase1 without .sh).
+        # Permissions must be 640 or stricter (Lynis refuses world-readable plugins).
+        _lynis_plugin_dst="/usr/share/lynis/plugins/plugin_archcanary_phase1"
+        sudo install -m 640 "$REPO_DIR/configs/lynis-plugin-archcanary.sh" "$_lynis_plugin_dst"
         echo "  installed: $_lynis_plugin_dst (Lynis plugin — registers archcanary as malware scanner)"
         unset _lynis_plugin_dst
+        # Ensure plugin=archcanary is in the live custom.prf (in case it predates this entry)
+        if [[ -f /etc/lynis/custom.prf ]] && ! grep -q "^plugin=archcanary" /etc/lynis/custom.prf; then
+            echo "plugin=archcanary" | sudo tee -a /etc/lynis/custom.prf >/dev/null
+            echo "  updated:   /etc/lynis/custom.prf (added plugin=archcanary)"
+        fi
     fi
 
     # Seed auditd rules when auditd is installed and file is absent or has no rules
