@@ -41,19 +41,19 @@ As the tool grew to cover a much broader set of system checks — integrating a 
 
 archcanary integrates with and builds on the following:
 
-| Project | Role |
-|---------|------|
-| [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) | Origin — the aur-malware-check script archcanary started from |
-| [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay`/`paru` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan), adapted to read `~/.config/aurscan/env` for archcanary GUI integration |
-| [claude-code](https://code.claude.com/docs/en/setup) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs |
-| [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 5 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) |
-| [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log |
-| [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui` |
-| [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection |
-| [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | `notify-send` — desktop critical alert on infected scan result |
-| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI privilege escalation for root-requiring checks |
-| [lynis](https://cisofy.com/lynis/) | Optional — system hardening auditor; archcanary reads the last report and can trigger a new audit from the GUI; a plugin registers archcanary as a malware scanner in Lynis |
-| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional — kernel audit daemon; archcanary ships a default ruleset covering AUR builds, privilege escalation, and system config changes; editable from the GUI |
+| Project | Role | Required |
+|---------|------|----------|
+| [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) | Origin — the aur-malware-check script archcanary started from | — |
+| [musqz/aurscan](https://github.com/musqz/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay`/`paru` builds; fork of [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan), adapted to read `~/.config/aurscan/env` for archcanary GUI integration | Optional |
+| [claude-code](https://code.claude.com/docs/en/setup) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs | Optional (via aurscan) |
+| [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 5 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) | Optional |
+| [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log | Optional |
+| [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui` | GUI only |
+| [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection | Optional (`--check-bpftool`) |
+| [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | `notify-send` — desktop critical alert on infected scan result | Optional |
+| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI privilege escalation for root-requiring checks | GUI + `--system` install |
+| [lynis](https://cisofy.com/lynis/) | System hardening auditor; archcanary reads the last report and can trigger a new audit from the GUI; a plugin registers archcanary as a malware scanner in Lynis | Optional |
+| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Kernel audit daemon; archcanary ships a default ruleset covering AUR builds, privilege escalation, and system config changes; editable from the GUI | Optional |
 
 ### Detection Layers
 
