@@ -44,7 +44,7 @@ archcanary integrates with and builds on the following:
 | Project | Role | Required |
 |---------|------|----------|
 | [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) | Origin — the aur-malware-check script archcanary started from | — |
-| [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay`/`paru` builds; reads `~/.config/aurscan/env` for archcanary GUI integration; available on AUR as `aurscan-manticore-release-git` (source) or `aurscan-manticore-bin-release-git` (binary) | Optional |
+| [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay`/`paru` builds; reads `~/.config/aurscan/env` for archcanary GUI integration; install via AUR: `yay -S aurscan-manticore-git` | Optional |
 | [claude-code](https://code.claude.com/docs/en/setup) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs | Optional (via aurscan) |
 | [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 5 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) | Optional |
 | [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log | Optional |
@@ -201,11 +201,7 @@ See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.
 Install from the AUR:
 
 ```bash
-# source build (recommended)
-yay -S aurscan-manticore-release-git
-
-# pre-built binary
-yay -S aurscan-manticore-bin-release-git
+yay -S aurscan-manticore-git
 ```
 
 > **AUR helper compatibility:** aurscan integrates natively with both **yay** and **paru** — one-time setup, no wrapper alias needed. yay uses its Lua editor-gate (`aurscan --install-yay-hook`); paru uses its native `PreBuildCommand` config key (`aurscan --install-paru-hook`), which paru invokes in the PKGBUILD directory before every build. Other helpers (pikaur, aurutils) have no equivalent hook yet. archcanary's post-install detection (all other checks) works with any AUR helper.
