@@ -2,9 +2,9 @@
 
 [![Release](https://img.shields.io/github/v/release/musqz/archcanary?sort=semver)](https://github.com/musqz/archcanary/releases)
 
-> **BETA — under development.** Expect breaking changes, rough edges, and incomplete docs.
-> Designed and tested on Mabox Linux (Arch-based, Openbox).
-> Use on other Arch derivatives is not tested, but should work fine and build for it.
+> **BETA — actively seeking testing and feedback.** Expect breaking changes, rough edges, and incomplete docs.
+> Primarily developed and tested on Mabox Linux (Arch-based, Openbox). Testing on Manjaro and other Arch derivatives is in progress — it should work fine, but rough edges are expected.
+> If you run into anything, please open an [issue](https://github.com/musqz/archcanary/issues) or start a [discussion](https://github.com/musqz/archcanary/discussions).
 
 > **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything.
 > Remediation is left to you. The only writes are its own logs and config lists. `install.sh`, `--refresh`, and the DKMS allowlist editor are the exceptions — all explicit.
