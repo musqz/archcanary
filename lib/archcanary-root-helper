@@ -22,7 +22,7 @@ if [[ -n "${PKEXEC_UID:-}" ]]; then
     fi
 fi
 
-ALLOWED_FLAGS=(--full --refresh --check-kmod --check-bpftool --check-ebpf --check-lynis --run-lynis --no-notify --no-summary)
+ALLOWED_FLAGS=(--full --refresh --check-kmod --check-bpftool --check-ebpf --check-lynis --check-pkginteg --run-lynis --no-notify --no-summary)
 
 for _arg in "$@"; do
     _ok=false
