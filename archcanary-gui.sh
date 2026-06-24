@@ -270,12 +270,15 @@ edit_allowlist() {
 
 edit_audit_rules() {
     local cfg="/etc/audit/rules.d/30-archcanary.rules"
+    local legacy_cfg="/etc/audit/rules.d/30-archcanary.conf"
     local template="/usr/lib/archcanary/audit-rules.conf"
     local tmpin tmpout
     tmpin="$(mktemp /tmp/archcanary-XXXXXX.conf)"
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.conf)"
     if grep -qE '^\s*-[waAbfe]' "$cfg" 2>/dev/null; then
         cp "$cfg" "$tmpin"
+    elif grep -qE '^\s*-[waAbfe]' "$legacy_cfg" 2>/dev/null; then
+        cp "$legacy_cfg" "$tmpin"
     elif [[ -f "$template" ]]; then
         cp "$template" "$tmpin"
     else
@@ -291,7 +294,12 @@ edit_audit_rules() {
         --button="Save + restart auditd:0" \
         --button="Cancel:1" \
         > "$tmpout" 2>/dev/null; then
-        if [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
+        if [[ ! -s "$tmpout" ]]; then
+            yad --error --title="Archcanary" --window-icon=security-high \
+                --text="Not saved: rules file is empty." \
+                --width=420 2>/dev/null || true
+        elif [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
+            [[ -f "$legacy_cfg" ]] && "$PKEXEC" rm -f "$legacy_cfg" 2>/dev/null || true
             "$PKEXEC" systemctl restart auditd 2>/dev/null || true
         else
             yad --error --title="Archcanary" --window-icon=security-high \
