@@ -1185,8 +1185,11 @@ check_bpftool() {
                     echo "  INFO: eBPF hook types present ($non_lsm_stealth) — all loaded by systemd / AppArmor / SELinux."
                 fi
             elif [[ -z "$non_lsm_stealth" ]]; then
+                local loader_names
+                loader_names=$(sed 's/^\s*pids\s*//' <<<"$unknown_loaders" | paste -sd', ' -)
                 echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
-                echo "  Review: sudo bpftool prog show"
+                echo "  Unknown loaders: $loader_names"
+                echo "  If this looks like a false positive, report it at https://github.com/musqz/archcanary/issues"
                 worst_ret=1
             else
                 local warn_types="${non_lsm_stealth:-$stealth}"
