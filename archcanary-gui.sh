@@ -269,7 +269,7 @@ edit_allowlist() {
 }
 
 edit_audit_rules() {
-    local cfg="/etc/audit/rules.d/30-archcanary.conf"
+    local cfg="/etc/audit/rules.d/30-archcanary.rules"
     local template="/usr/lib/archcanary/audit-rules.conf"
     local tmpin tmpout
     tmpin="$(mktemp /tmp/archcanary-XXXXXX.conf)"
