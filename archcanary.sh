@@ -1171,20 +1171,23 @@ check_bpftool() {
 
         echo "  Loaded eBPF programs: $total"
         if [[ -n "$stealth" ]]; then
-            local non_lsm_stealth
+            local non_lsm_stealth unknown_loaders
             non_lsm_stealth=$(tr ',' '\n' <<<"$stealth" | grep -v '^lsm$' | paste -sd, -)
+            # systemd(1) and its child services (systemd-networkd, systemd-journald, etc.)
+            unknown_loaders=$(grep -E '^\s+pids ' <<<"$progs" \
+                | grep -Ev 'systemd[a-z-]*\([0-9]+\)|apparmor_parser\([0-9]+\)|selinuxd\([0-9]+\)' || true)
 
-            if [[ -z "$non_lsm_stealth" ]]; then
-                local unknown_loaders
-                unknown_loaders=$(grep -E '^\s+pids ' <<<"$progs" \
-                    | grep -Ev 'systemd\([0-9]+\)|apparmor_parser\([0-9]+\)|selinuxd\([0-9]+\)' || true)
-                if [[ -z "$unknown_loaders" ]]; then
+            if [[ -z "$unknown_loaders" ]]; then
+                # All programs (with pids) are owned by systemd / AppArmor / SELinux — safe regardless of type.
+                if [[ -z "$non_lsm_stealth" ]]; then
                     echo "  INFO: lsm eBPF programs present — expected (systemd sandboxing / AppArmor / SELinux)."
                 else
-                    echo "  WARNING: stealth-associated program types: $stealth (unknown loader)"
-                    echo "  Review: sudo bpftool prog show"
-                    worst_ret=1
+                    echo "  INFO: eBPF hook types present ($non_lsm_stealth) — all loaded by systemd / AppArmor / SELinux."
                 fi
+            elif [[ -z "$non_lsm_stealth" ]]; then
+                echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
+                echo "  Review: sudo bpftool prog show"
+                worst_ret=1
             else
                 local warn_types="${non_lsm_stealth:-$stealth}"
                 echo "  WARNING: stealth-associated program types present: $warn_types"
