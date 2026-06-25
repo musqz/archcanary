@@ -1185,12 +1185,40 @@ check_bpftool() {
                     echo "  INFO: eBPF hook types present ($non_lsm_stealth) — all loaded by systemd / AppArmor / SELinux."
                 fi
             elif [[ -z "$non_lsm_stealth" ]]; then
-                local loader_names
-                loader_names=$(sed 's/^\s*pids\s*//' <<<"$unknown_loaders" | paste -sd', ' -)
-                echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
-                echo "  Unknown loaders: $loader_names"
-                echo "  If this looks like a false positive, report it at https://github.com/musqz/archcanary/issues"
-                worst_ret=1
+                # Resolve each loader: if /proc/<pid>/exe is a pacman-owned binary, it's a known package
+                # (e.g. VPN daemons, security tools written in Python/Go/etc.) — downgrade to INFO.
+                local all_known=true resolved_entries=()
+                while IFS= read -r entry; do
+                    entry="${entry//[[:space:]]/}"
+                    [[ -z "$entry" ]] && continue
+                    local pid exe pkg
+                    pid=$(grep -oP '\(\K[0-9]+(?=\))' <<<"$entry" || true)
+                    if [[ -n "$pid" ]] && exe=$(readlink -f "/proc/$pid/exe" 2>/dev/null); then
+                        pkg=$(pacman -Qo "$exe" 2>/dev/null | awk '{print $5}' || true)
+                        if [[ -n "$pkg" ]]; then
+                            resolved_entries+=("$entry ($pkg)")
+                        else
+                            resolved_entries+=("$entry")
+                            all_known=false
+                        fi
+                    else
+                        resolved_entries+=("$entry")
+                        all_known=false
+                    fi
+                done < <(sed 's/^\s*pids\s*//' <<<"$unknown_loaders" | tr ',' '\n')
+
+                local resolved_str
+                resolved_str=$(IFS=', '; echo "${resolved_entries[*]}")
+
+                if [[ "$all_known" == true ]]; then
+                    echo "  INFO: lsm eBPF programs loaded by non-systemd process (pacman-owned binary)."
+                    echo "  Loaders: $resolved_str"
+                else
+                    echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
+                    echo "  Unknown loaders: $resolved_str"
+                    echo "  If this looks like a false positive, report it at https://github.com/musqz/archcanary/issues"
+                    worst_ret=1
+                fi
             else
                 local warn_types="${non_lsm_stealth:-$stealth}"
                 echo "  WARNING: stealth-associated program types present: $warn_types"
