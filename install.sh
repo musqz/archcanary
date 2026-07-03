@@ -283,12 +283,29 @@ EOF
 EOF
         sudo chmod 644 /etc/archcanary/systemd_allowlist.conf
     fi
+    # bpftool allowlist — same rationale and seeding rules as the DKMS/systemd
+    # allowlists above (mode 644, never clobber an existing /etc copy).
+    if [[ ! -f /etc/archcanary/bpftool_allowlist.conf ]]; then
+        sudo tee /etc/archcanary/bpftool_allowlist.conf >/dev/null << 'EOF'
+# eBPF loader binaries to skip during the bpftool LSM-loader check
+# (--check-bpftool), system-wide allowlist. One binary basename per line.
+# Everything after # is a comment.
+# Add loaders that are known-good but not pacman-owned (a self-built or
+# manually-installed security/monitoring tool that legitimately loads LSM
+# eBPF hooks) — matched against the basename of /proc/<pid>/exe.
+#
+# Example:
+# falco  # runtime security monitoring, installed from upstream binary release
+EOF
+        sudo chmod 644 /etc/archcanary/bpftool_allowlist.conf
+    fi
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /etc/archcanary/systemd_allowlist.conf (system-wide systemd allowlist for the persistence check)"
+    echo "  installed: /etc/archcanary/bpftool_allowlist.conf (system-wide bpftool allowlist for the eBPF loader check)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
     # Seed Lynis custom profile (only if lynis is installed and file not yet present)

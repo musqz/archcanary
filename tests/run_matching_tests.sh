@@ -522,6 +522,71 @@ test_check_kmod() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 14: check_bpftool — unknown LSM loader detection + allowlist
+# ---------------------------------------------------------------------------
+test_check_bpftool_allowlist() {
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --check-bpftool --no-notify
+    )
+    local out rc=0
+
+    # A real, long-running, non-pacman-owned binary so /proc/<pid>/exe
+    # resolves to something `pacman -Qo` genuinely doesn't own.
+    local tmpdir loader_bin loader_pid
+    tmpdir=$(mktemp -d)
+    loader_bin="$tmpdir/test-loader"
+    cp "$(command -v sleep)" "$loader_bin"
+    "$loader_bin" 30 &
+    loader_pid=$!
+    sleep 0.3
+
+    local fake_bpftool
+    fake_bpftool=$(mktemp)
+    cat > "$fake_bpftool" <<SCRIPT
+#!/bin/sh
+if [ "\$1" = "prog" ]; then
+  cat <<PROGS
+5: lsm  name my_hook  tag 1234567890abcdef  gpl
+        loaded_at 2026-07-03T12:00:00+0200  uid 0
+        xlated 100B  jited 100B  memlock 4096B
+        pids test-loader($loader_pid)
+PROGS
+fi
+SCRIPT
+    chmod +x "$fake_bpftool"
+
+    # Sub-test A: unknown non-pacman LSM loader, no allowlist → WARNING (exit 1)
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"WARNING"* && "$out" == *"test-loader"* ]]; then
+        pass "check_bpftool: unknown lsm loader → WARNING (exit 1)"
+    else
+        fail "check_bpftool: unknown lsm loader → expected WARNING+exit1, got rc=$rc, out: $out"
+    fi
+
+    # Sub-test B: same loader, allowlisted by basename → INFO only, exit 0
+    local allow_file
+    allow_file=$(mktemp)
+    printf 'test-loader\n' > "$allow_file"
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool" BPFTOOL_ALLOWLIST_FILE="$allow_file" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_bpftool: allowlisted lsm loader → INFO only, exit 0 (clean)"
+    else
+        fail "check_bpftool: allowlisted lsm loader → expected INFO+exit0, got rc=$rc, out: $out"
+    fi
+
+    kill "$loader_pid" 2>/dev/null || true
+    wait "$loader_pid" 2>/dev/null || true
+    rm -f "$fake_bpftool" "$allow_file"
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -566,6 +631,9 @@ test_pkgbuild_obfuscation
 
 $VERBOSE && msg "--- Test 13: check_kmod ---"
 test_check_kmod
+
+$VERBOSE && msg "--- Test 14: check_bpftool allowlist ---"
+test_check_bpftool_allowlist
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

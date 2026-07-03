@@ -186,8 +186,10 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── malicious_russian_spam_packages.txt
     └── root-helper                   # pkexec target (validates flags, restores XDG env)
 /etc/archcanary/
-    ├── dkms_allowlist.conf           # the single DKMS allowlist (edit via GUI/sudoedit)
-    └── systemd_allowlist.conf        # the single systemd unit allowlist (edit via GUI/sudoedit)
+    ├── dkms_allowlist.conf           # DKMS allowlist
+    ├── systemd_allowlist.conf        # systemd unit allowlist
+    └── bpftool_allowlist.conf        # bpftool eBPF loader allowlist
+                                       # (all three: GUI → Manage allowlists, or sudoedit directly)
 /usr/share/polkit-1/actions/
     └── org.archcanary.policy  # polkit policy allowing GUI to call root-helper
 

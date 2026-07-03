@@ -73,7 +73,7 @@ command -v auditctl &>/dev/null && HAS_AUDITD=true
 AUR_HELPER="yay"
 command -v yay  &>/dev/null || { command -v paru &>/dev/null && AUR_HELPER="paru"; } || AUR_HELPER="pacman"
 _SHOW_OUTPUT_INFECTED_PKGS=""
-_SHOW_OUTPUT_SYSTEMD_HINT=""
+_SHOW_OUTPUT_ALLOWLIST_HINT=""
 
 # True once the package list has been refreshed this session.
 # The first run of the full scan (idx 0) auto-adds --refresh and sets this.
@@ -93,7 +93,7 @@ LABELS=(
     "eBPF rootkit traces"       # 9  root
     "eBPF programs – bpftool"   # 10 root
     "Kernel modules"            # 11 root
-    "Edit DKMS allowlist"       # 12
+    "Manage allowlists"         # 12
     "Trust scan (traur)"        # 13
     "LLM settings (aurscan)"   # 14
     "Extra lists"               # 15
@@ -103,7 +103,6 @@ LABELS=(
     "Edit Lynis config"        # 19
     "Pacman integrity"         # 20
     "About"                    # 21
-    "Edit systemd allowlist"   # 22
 )
 
 FLAGS=(
@@ -119,7 +118,7 @@ FLAGS=(
     "--check-ebpf --no-summary"
     "--check-bpftool --no-summary"
     "--check-kmod --no-summary"
-    "__dkms_edit__"
+    "__manage_allowlists__"
     "__traur__"
     "__aurscan_settings__"
     "__extra_lists__"
@@ -129,7 +128,6 @@ FLAGS=(
     "__lynis_config_edit__"
     "--check-pkginteg --no-notify --no-summary"
     "__about__"
-    "__systemd_allowlist_edit__"
 )
 
 NEEDS_ROOT=(
@@ -142,7 +140,6 @@ NEEDS_ROOT=(
     false
     true
     false
-    false
 )
 
 # Per-session status for each check index.
@@ -150,7 +147,7 @@ NEEDS_ROOT=(
 declare -A STATUS
 for _i in "${!LABELS[@]}"; do STATUS[$_i]="  ?"; done
 STATUS[0]="   "   # Full scan — blank until first run
-STATUS[12]="   "  # Edit DKMS allowlist
+STATUS[12]="   "  # Manage allowlists — config dialog, no scan verdict
 STATUS[13]="   "  # traur — opens its own output window, no verdict here
 STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
 STATUS[15]="   "  # extra lists — config dialog, no scan verdict
@@ -158,7 +155,6 @@ STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdi
 STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
 STATUS[19]="   "  # Edit Lynis config — config dialog, no scan verdict
 STATUS[21]="   "  # About — no scan verdict
-STATUS[22]="   "  # Edit systemd allowlist — config dialog, no scan verdict
 unset _i
 
 # Derive full-scan status (row 0) from whichever individual checks have results.
@@ -219,12 +215,12 @@ _propagate_full_scan() {
 }
 
 _show_infected_dialog() {
-    local pkgs="${1:-}" systemd_hint="${2:-}"
+    local pkgs="${1:-}" allowlist_hint="${2:-}"
     local step1
     if [[ -n "$pkgs" ]]; then
         step1="Remove the package(s):\n      <tt>${AUR_HELPER} -R ${pkgs}</tt>"
-    elif [[ -n "$systemd_hint" ]]; then
-        step1="Review the flagged systemd unit(s) in the scan output above.\n      Known-good custom service, not an AUR package? Allowlist it instead\n      of removing it: <i>Edit systemd allowlist</i> (Settings menu)."
+    elif [[ -n "$allowlist_hint" ]]; then
+        step1="Review the flagged ${allowlist_hint} finding(s) in the scan output\n      above. Known-good and not an AUR package? Allowlist it instead of\n      removing it: <i>Manage allowlists</i> (Settings menu)."
     else
         step1="Review and remove/disable the flagged artifact(s) shown in the\n      scan output (systemd unit, eBPF program, autostart entry, etc.)."
     fi
@@ -248,24 +244,33 @@ _extract_infected_pkgs() {
     ' "$1" 2>/dev/null | grep -oP '^  - \K\S+' | head -20 | tr '\n' ' ' | sed 's/ $//' || true
 }
 
-# Non-empty if section [3] (systemd persistence check) reported a WARNING —
-# used by _show_infected_dialog to point at the systemd allowlist instead of
-# the generic "review the artifact" wording.
-_systemd_finding_present() {
-    awk '
-        /^--- \[3\] / { grab=1; next }
-        grab && /^--- \[/ { exit }
-        grab { print }
-    ' "$1" 2>/dev/null | grep -q 'WARNING' && echo 1 || true
+# Names the check (e.g. "systemd") if its section reported a WARNING — used by
+# _show_infected_dialog to point at "Manage allowlists" instead of the generic
+# "review the artifact" wording. Covers every check with a real allowlist
+# escape hatch; add a "tag:name" pair here when a new one gets one.
+_allowlistable_finding_present() {
+    local out="$1" pair tag desc
+    for pair in "3:systemd" "8:bpftool" "11:DKMS"; do
+        tag="${pair%%:*}" desc="${pair#*:}"
+        if awk -v t="$tag" '
+            $0 ~ ("^--- \\[" t "\\] ") { grab=1; next }
+            grab && /^--- \[/ { exit }
+            grab { print }
+        ' "$out" 2>/dev/null | grep -q 'WARNING'; then
+            printf '%s\n' "$desc"
+            return
+        fi
+    done
 }
 
-edit_allowlist() {
-    # Single system-wide allowlist (the kmod audit only runs as root). The file
-    # is world-readable, so yad loads it directly; the save writes back as root.
-    local cfg="/etc/archcanary/dkms_allowlist.conf"
+# Generic root-owned config-file editor: view/edit via yad text-info, write
+# back via pkexec. Shared by every allowlist editor (DKMS, systemd, bpftool,
+# ...) so adding a new allowlist never means copy-pasting this dialog again.
+_edit_conf_file() {
+    local title="$1" cfg="$2"
     if [[ ! -f "$cfg" ]]; then
         yad --warning \
-            --title="DKMS Allowlist — Archcanary" \
+            --title="$title — Archcanary" \
             --window-icon=security-high \
             --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> first to create it." \
             --width=440 2>/dev/null || true
@@ -274,7 +279,7 @@ edit_allowlist() {
     local tmpout
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
     if yad --text-info \
-        --title="DKMS Allowlist (system) — Archcanary" \
+        --title="$title (system) — Archcanary" \
         --window-icon=security-high \
         --filename="$cfg" \
         --width=640 --height=380 \
@@ -293,39 +298,28 @@ edit_allowlist() {
     rm -f "$tmpout"
 }
 
-edit_systemd_allowlist() {
-    # Single system-wide allowlist (mirrors edit_allowlist / DKMS above). The
-    # file is world-readable, so yad loads it directly; the save writes back
-    # as root.
-    local cfg="/etc/archcanary/systemd_allowlist.conf"
-    if [[ ! -f "$cfg" ]]; then
-        yad --warning \
-            --title="Systemd Allowlist — Archcanary" \
-            --window-icon=security-high \
-            --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> first to create it." \
-            --width=440 2>/dev/null || true
-        return
-    fi
-    local tmpout
-    tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
-    if yad --text-info \
-        --title="Systemd Allowlist (system) — Archcanary" \
+# Picker in front of _edit_conf_file — keeps the main menu at one row no
+# matter how many allowlist-backed checks exist. Add a new allowlist here,
+# not as another top-level LABELS/FLAGS row.
+manage_allowlists() {
+    local choice
+    choice=$(yad --list \
+        --title="Manage Allowlists — Archcanary" \
         --window-icon=security-high \
-        --filename="$cfg" \
-        --width=640 --height=380 \
-        --fontname="Monospace 10" \
-        --editable \
-        --button="Save (root):0" \
-        --button="Cancel:1" \
-        > "$tmpout" 2>/dev/null; then
-        # Write back to /etc as root — pkexec prompts via the polkit agent.
-        if [[ -z "$PKEXEC" ]] || ! "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
-            yad --error --title="Archcanary" --window-icon=security-high \
-                --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
-                --width=420 2>/dev/null || true
-        fi
-    fi
-    rm -f "$tmpout"
+        --width=460 --height=220 \
+        --no-headers \
+        --column="Allowlist" \
+        "DKMS (kernel modules)" \
+        "Systemd (persistence check)" \
+        "bpftool (eBPF loaders)" \
+        --button="Edit:0" --button="Close:1" \
+        --print-column=1 2>/dev/null) || return
+    choice="${choice%|}"
+    case "$choice" in
+        "DKMS"*)    _edit_conf_file "DKMS Allowlist"    /etc/archcanary/dkms_allowlist.conf ;;
+        "Systemd"*) _edit_conf_file "Systemd Allowlist" /etc/archcanary/systemd_allowlist.conf ;;
+        "bpftool"*) _edit_conf_file "bpftool Allowlist" /etc/archcanary/bpftool_allowlist.conf ;;
+    esac
 }
 
 edit_audit_rules() {
@@ -574,7 +568,7 @@ show_output() {
     wait "$yad_pid" 2>/dev/null || true
     exec 8>&-
     _SHOW_OUTPUT_INFECTED_PKGS="$(_extract_infected_pkgs "$tmpout")"
-    _SHOW_OUTPUT_SYSTEMD_HINT="$(_systemd_finding_present "$tmpout")"
+    _SHOW_OUTPUT_ALLOWLIST_HINT="$(_allowlistable_finding_present "$tmpout")"
     rm -f "$tmpout"
     return $scan_exit
 }
@@ -638,13 +632,8 @@ run_action() {
         return
     fi
 
-    if [[ "$flags" == "__dkms_edit__" ]]; then
-        edit_allowlist
-        return
-    fi
-
-    if [[ "$flags" == "__systemd_allowlist_edit__" ]]; then
-        edit_systemd_allowlist
+    if [[ "$flags" == "__manage_allowlists__" ]]; then
+        manage_allowlists
         return
     fi
 
@@ -811,21 +800,21 @@ run_action() {
         exec 8>&-
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit" "$tmpout"; fi
-        local _inf_pkgs="" _inf_systemd_hint=""
+        local _inf_pkgs="" _inf_allowlist_hint=""
         if [[ "$scan_exit" -eq 2 ]]; then
             _inf_pkgs="$(_extract_infected_pkgs "$tmpout")"
-            _inf_systemd_hint="$(_systemd_finding_present "$tmpout")"
+            _inf_allowlist_hint="$(_allowlistable_finding_present "$tmpout")"
         fi
         rm -f "$tmpout"
-        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog "$_inf_pkgs" "$_inf_systemd_hint"; fi
+        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog "$_inf_pkgs" "$_inf_allowlist_hint"; fi
     else
         local scan_exit=0
         _SHOW_OUTPUT_INFECTED_PKGS=""
-        _SHOW_OUTPUT_SYSTEMD_HINT=""
+        _SHOW_OUTPUT_ALLOWLIST_HINT=""
         show_output "$label" "$MAIN_SCRIPT" "${flag_arr[@]}" && scan_exit=0 || scan_exit=$?
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit"; fi
-        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog "$_SHOW_OUTPUT_INFECTED_PKGS" "$_SHOW_OUTPUT_SYSTEMD_HINT"; fi
+        if [[ "$scan_exit" -eq 2 ]]; then _show_infected_dialog "$_SHOW_OUTPUT_INFECTED_PKGS" "$_SHOW_OUTPUT_ALLOWLIST_HINT"; fi
     fi
 }
 
@@ -856,7 +845,6 @@ build_list_args() {
     $HAS_AUDITD  && _row 18
     $HAS_LYNIS   && _row 19
     _row 12
-    _row 22
     $HAS_AURSCAN && _row 14
     _row 15
     _row 21

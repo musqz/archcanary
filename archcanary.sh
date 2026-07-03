@@ -482,6 +482,7 @@ run_doctor() {
         _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "bash $installer_sys" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
         _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "bash $installer_sys" "path: /etc/archcanary/dkms_allowlist.conf"
         _item "systemd allowlist"                        "$(_file /etc/archcanary/systemd_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/systemd_allowlist.conf"
+        _item "bpftool allowlist"                        "$(_file /etc/archcanary/bpftool_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/bpftool_allowlist.conf"
         printf '\n'
     fi
 
@@ -702,6 +703,24 @@ if [[ -r "$_svc_cfg" ]]; then    # skip if missing/unreadable (don't abort under
     done < "$_svc_cfg"
 fi
 unset _svc_cfg _sl
+
+# Merge the bpftool allowlist into BPFTOOL_ALLOWLIST (colon-separated; the env
+# var, if set, takes precedence and is appended to). Same rationale as DKMS/
+# systemd above — for eBPF loader binaries that are legitimately not
+# pacman-owned (e.g. a self-built or manually-installed security/monitoring
+# tool that loads LSM hooks) and shouldn't trip the bpftool loader check.
+# Override the path with BPFTOOL_ALLOWLIST_FILE (used by the tests).
+BPFTOOL_ALLOWLIST="${BPFTOOL_ALLOWLIST:-}"
+_bpf_cfg="${BPFTOOL_ALLOWLIST_FILE:-/etc/archcanary/bpftool_allowlist.conf}"
+if [[ -r "$_bpf_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
+    while IFS= read -r _bl || [[ -n "$_bl" ]]; do
+        _bl="${_bl%%#*}"       # strip inline comments
+        read -r _bl _ <<< "$_bl"  # take first token only (ignores trailing descriptions)
+        [[ -z "$_bl" ]] && continue
+        BPFTOOL_ALLOWLIST="${BPFTOOL_ALLOWLIST:+${BPFTOOL_ALLOWLIST}:}${_bl}"
+    done < "$_bpf_cfg"
+fi
+unset _bpf_cfg _bl
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
     _bundled="$(dirname "$(realpath "$0")")/lists/malicious_npm_packages.txt"
@@ -1064,9 +1083,10 @@ _systemd_unit_name() {
     fi
 }
 
-# True if $1 (a unit name from _systemd_unit_name) is in the SYSTEMD_ALLOWLIST
-# array named $2 (passed by name since bash can't return arrays).
-_systemd_allowlisted() {
+# True if $1 (a name — unit, DKMS module, loader binary) is in the allowlist
+# array named $2 (passed by name since bash can't return arrays). Shared by
+# every allowlist-backed check (systemd, DKMS, bpftool).
+_allowlist_contains() {
     local name="$1" allow_arr_name="$2" _a
     local -n _allow="$allow_arr_name"
     for _a in "${_allow[@]}"; do
@@ -1115,7 +1135,7 @@ check_systemd() {
                 fi
                 local match
                 match=$(grep -oE "$re_restart" "$svc" | head -1)
-                if _systemd_allowlisted "$(_systemd_unit_name "$svc")" _svc_allow; then
+                if _allowlist_contains "$(_systemd_unit_name "$svc")" _svc_allow; then
                     echo "  INFO: systemd unit allowlisted (not vetted): $svc ($match)"
                     continue
                 fi
@@ -1138,7 +1158,7 @@ check_systemd() {
                 svc_file=$(_find_service_file "$target" "$dir") || svc_file=""
                 # Vetted target → benign timer; skip. Otherwise flag it.
                 [[ -n "$svc_file" ]] && _service_vetted "$svc_file" && continue
-                if _systemd_allowlisted "$(_systemd_unit_name "$timer")" _svc_allow; then
+                if _allowlist_contains "$(_systemd_unit_name "$timer")" _svc_allow; then
                     echo "  INFO: systemd timer allowlisted (not vetted): $timer (timer → ${target})"
                     continue
                 fi
@@ -1204,14 +1224,23 @@ check_ebpf() {
 #   (e.g. hide C2 traffic). On a typical Arch workstation this should be empty.
 # ---------------------------------------------------------------------------
 check_bpftool() {
-    if ! command -v bpftool &>/dev/null; then
+    # BPFTOOL_CMD overrides the real command for testing.
+    local bpftool_cmd="${BPFTOOL_CMD:-bpftool}"
+    # BPFTOOL_ALLOWLIST: colon-separated list of loader binary basenames that
+    # are known-good but not pacman-owned (a self-built or manually-installed
+    # security/monitoring tool that legitimately loads LSM eBPF hooks).
+    # Example: BPFTOOL_ALLOWLIST=falco:my-lsm-tool
+    local -a _bpf_allow
+    IFS=: read -ra _bpf_allow <<< "${BPFTOOL_ALLOWLIST:-}"
+
+    if ! command -v "$bpftool_cmd" &>/dev/null; then
         echo "  Skipped: bpftool not installed (pacman -S bpf)."
         return 0
     fi
 
     # Enumerating BPF objects requires CAP_BPF / CAP_SYS_ADMIN.
     local progs
-    if ! progs=$(bpftool prog show 2>/dev/null); then
+    if ! progs=$("$bpftool_cmd" prog show 2>/dev/null); then
         echo "  Cannot enumerate BPF programs — needs root."
         echo "  → Try: sudo $0 --check-bpftool"
         return 77
@@ -1256,6 +1285,8 @@ check_bpftool() {
                         pkg=$(pacman -Qo "$exe" 2>/dev/null | awk '{print $5}' || true)
                         if [[ -n "$pkg" ]]; then
                             resolved_entries+=("$entry ($pkg)")
+                        elif _allowlist_contains "$(basename "$exe")" _bpf_allow; then
+                            resolved_entries+=("$entry (allowlisted)")
                         else
                             resolved_entries+=("$entry")
                             all_known=false
@@ -1270,7 +1301,7 @@ check_bpftool() {
                 resolved_str=$(IFS=', '; echo "${resolved_entries[*]}")
 
                 if [[ "$all_known" == true ]]; then
-                    echo "  INFO: lsm eBPF programs loaded by non-systemd process (pacman-owned binary)."
+                    echo "  INFO: lsm eBPF programs loaded by non-systemd process (pacman-owned or allowlisted)."
                     echo "  Loaders: $resolved_str"
                 else
                     echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
@@ -1293,7 +1324,7 @@ check_bpftool() {
 
     # --- perf show: kprobe/tracepoint attachments with owning PID and target ---
     local perf_out
-    perf_out=$(bpftool perf show 2>/dev/null) || true
+    perf_out=$("$bpftool_cmd" perf show 2>/dev/null) || true
     if [[ -z "$perf_out" ]]; then
         echo "  Perf attachments (kprobe/tracepoint): none."
     else
@@ -1317,7 +1348,7 @@ check_bpftool() {
 
     # --- net show: XDP / TC programs attached to network interfaces ---
     local net_out
-    net_out=$(bpftool net show 2>/dev/null) || true
+    net_out=$("$bpftool_cmd" net show 2>/dev/null) || true
     local net_entries
     net_entries=$(grep -vE '^(xdp:|tc:|flow_dissector:|netfilter:|tcx:|netkit:)\s*$' <<<"$net_out" \
                   | grep -v '^\s*$' || true)
@@ -1887,12 +1918,7 @@ check_kmod() {
                 pkg_name=$(awk -F'[/,]' '{print $1}' <<< "$entry" | xargs)
                 # Skip if pacman-tracked
                 pacman -Qi "$pkg_name" &>/dev/null 2>&1 && continue
-                # Skip if in user-supplied allowlist
-                local allowed=false
-                for _a in "${_dkms_allow[@]}"; do
-                    [[ "$_a" == "$pkg_name" ]] && allowed=true && break
-                done
-                if $allowed; then
+                if _allowlist_contains "$pkg_name" _dkms_allow; then
                     echo "  INFO: DKMS module allowlisted (not pacman-tracked): $entry"
                 else
                     echo "  WARNING: DKMS module from untracked source: $entry"
