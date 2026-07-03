@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1.10 (2026-07-03)
+
+- New: `--check-pkginteg` — verifies installed file checksums via `pacman -Qkk`, filtering out backup-file and `/factory/` noise to surface real SHA256 mismatches on pacman-managed files. Included in `--full`; runs as root (a regular user silently skips unreadable files). GUI row moved to Utilities as "Pacman integrity".
+- New: **systemd unit allowlist** (`/etc/archcanary/systemd_allowlist.conf`) — mirrors the DKMS allowlist so a legitimate custom service (not pacman-owned, `Restart=always`, non-standard binary path) can be marked known-good instead of always flagged as persistence. Drop-in overrides resolve to their parent unit.
+- New: **bpftool eBPF-loader allowlist** (`/etc/archcanary/bpftool_allowlist.conf`) — same escape hatch for `check_bpftool`, for legitimate non-pacman VPN/security tools that load LSM eBPF programs. `_systemd_allowlisted` generalized to `_allowlist_contains` and reused by the DKMS lookup too.
+- New: GUI menu consolidation — the DKMS/systemd/bpftool allowlist editors merge into one "Manage allowlists" picker, and the audit-rules/Lynis-config/extra-lists editors merge into one "Edit config" picker, capping menu growth as more allowlists are added.
+- New: `version.txt` is now the single source of truth for the version string; `install.sh` stamps it into the man page at install time.
+- Fix: `check_bpftool` false positives — warnings now name the actual unknown loader processes inline, systemd child services (not just PID 1) are recognized as known-good loaders, and any remaining unknown loader whose binary resolves to a pacman-owned package is downgraded to INFO with the package name shown.
+- Fix: infected-package extraction was scanning every `- ` bullet line across all check sections, so a non-package finding (e.g. a flagged systemd unit) could be fed into `yay -R` as if it were an AUR package. Now scoped to the package-check section only.
+- Fix: closing "Manage allowlists" or "Edit config" without making a selection (Close button or window-close) killed the whole GUI instead of returning to the menu — a bare `return` after a failed `yad` call inherited its exit status, which `set -e` treated as fatal.
+- Fix: audit-rules editor — clearing all text and saving no longer truncates the rules file to zero bytes (guarded on non-empty save); legacy `30-archcanary.conf` is migrated to `.rules` on edit instead of shadowing it.
+- Fix: GUI audit-rules path realigned with the installer's `.conf` → `.rules` rename.
+- Fix: uninstall no longer removes user data — `~/.config/archcanary`, `/etc/archcanary`, and `/var/lib/archcanary` are preserved across reinstall/removal.
+- Fix: `--doctor` always shows the Dependencies section (previously hidden when all deps were OK, which read as "not checked"); its `--system` install hint no longer lands after a shell comment where it would be silently dropped on copy-paste; `sudo` removed from the `install.sh` fix hint since the installer blocks root execution and calls `sudo` internally.
+- Fix: GUI "About" row status indexing corrected after the Pacman integrity row shifted indices.
+- Docs: restored `--package-list`/`--extra-list` rows dropped from the README checks table.
+- Chore: Lynis plugin support was added and then removed again after confirming Lynis's built-in malware-scanner check is hardcoded to a fixed tool list and cannot be extended via plugins — net no externally visible change.
+
 ## v0.1.9 (2026-06-23)
 
 - New: **auditd post-build snapshot** — both scan services (`archcanary.service` and `archcanary-onchange.service`) now append `aur_build` audit events to `last-scan.log` after each run via `ExecStartPre`/`ExecStartPost`. Uses the mtime of the previous log as the implicit "last checked" timestamp; no extra state file needed. Bridges the gap between static pre-build PKGBUILD analysis and runtime kernel audit events.
