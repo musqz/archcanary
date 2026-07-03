@@ -14,7 +14,7 @@ done
 if [[ -z "$MAIN_SCRIPT" ]]; then
     yad --error \
         --title="Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --text="<b>archcanary not found.</b>\n\nRun <tt>./install.sh</tt> first." \
         --width=400
     exit 1
@@ -226,7 +226,7 @@ _show_infected_dialog() {
     fi
     yad --error \
         --title="Infected — Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --width=520 \
         --text="<b>Infected or compromised indicators detected.</b>\n\n<b>1.</b>  ${step1}\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
         --button="OK:0" 2>/dev/null || true
@@ -271,7 +271,7 @@ _edit_conf_file() {
     if [[ ! -f "$cfg" ]]; then
         yad --warning \
             --title="$title — Archcanary" \
-            --window-icon=security-high \
+            --window-icon=security-high --center \
             --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> first to create it." \
             --width=440 2>/dev/null || true
         return
@@ -280,7 +280,7 @@ _edit_conf_file() {
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
     if yad --text-info \
         --title="$title (system) — Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --filename="$cfg" \
         --width=640 --height=380 \
         --fontname="Monospace 10" \
@@ -290,7 +290,7 @@ _edit_conf_file() {
         > "$tmpout" 2>/dev/null; then
         # Write back to /etc as root — pkexec prompts via the polkit agent.
         if [[ -z "$PKEXEC" ]] || ! "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
-            yad --error --title="Archcanary" --window-icon=security-high \
+            yad --error --title="Archcanary" --window-icon=security-high --center \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -305,7 +305,7 @@ manage_allowlists() {
     local choice
     choice=$(yad --list \
         --title="Manage Allowlists — Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --width=460 --height=220 \
         --no-headers \
         --column="Allowlist" \
@@ -340,7 +340,7 @@ edit_audit_rules() {
     fi
     if yad --text-info \
         --title="Audit Rules — Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --filename="$tmpin" \
         --width=700 --height=520 \
         --fontname="Monospace 10" \
@@ -349,14 +349,14 @@ edit_audit_rules() {
         --button="Cancel:1" \
         > "$tmpout" 2>/dev/null; then
         if [[ ! -s "$tmpout" ]]; then
-            yad --error --title="Archcanary" --window-icon=security-high \
+            yad --error --title="Archcanary" --window-icon=security-high --center \
                 --text="Not saved: rules file is empty." \
                 --width=420 2>/dev/null || true
         elif [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
             [[ -f "$legacy_cfg" ]] && "$PKEXEC" rm -f "$legacy_cfg" 2>/dev/null || true
             "$PKEXEC" systemctl restart auditd 2>/dev/null || true
         else
-            yad --error --title="Archcanary" --window-icon=security-high \
+            yad --error --title="Archcanary" --window-icon=security-high --center \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -378,7 +378,7 @@ edit_lynis_config() {
     fi
     if yad --text-info \
         --title="Lynis Config — Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --filename="$tmpout" \
         --width=700 --height=520 \
         --fontname="Monospace 10" \
@@ -389,7 +389,7 @@ edit_lynis_config() {
         if [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout.new" >/dev/null 2>&1; then
             true
         else
-            yad --error --title="Archcanary" --window-icon=security-high \
+            yad --error --title="Archcanary" --window-icon=security-high --center \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -402,7 +402,7 @@ show_about() {
     version=$(grep -oP '(?<=SCRIPT_VERSION=")[^"]+' "$MAIN_SCRIPT" 2>/dev/null || echo "unknown")
     yad --info \
         --title="About Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --width=440 --height=240 \
         --no-wrap \
         --button="Close":0 \
@@ -450,7 +450,7 @@ aurscan_settings() {
         # (set -e exempts the left side of && from exit-on-error).
         result=$(yad --form \
             --title="LLM Settings — aurscan" \
-            --window-icon=security-high \
+            --window-icon=security-high --center \
             --width=540 \
             --separator="|" \
             --field="Backend:CB" "$backends" \
@@ -467,7 +467,7 @@ aurscan_settings() {
         if [[ $rc -eq 2 ]]; then
             yad --text-info \
                 --title="Local model guide — aurscan" \
-                --window-icon=security-high \
+                --window-icon=security-high --center \
                 --width=580 --height=440 \
                 --fontname="Monospace 10" \
                 --button="OK:0" \
@@ -528,7 +528,7 @@ GUIDE
 
     yad --info \
         --title="aurscan" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --text="Settings saved to\n<tt>$env_file</tt>" \
         --width=380 \
         --button="OK:0" 2>/dev/null || true
@@ -545,7 +545,7 @@ show_output() {
 
     yad --text-info \
         --title="$title — Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --width=1000 --height=660 \
         --fontname="Monospace 10" \
         --wrap --tail --editable \
@@ -595,7 +595,7 @@ CONF
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
     if yad --text-info \
         --title="Extra package lists — Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --width=600 --height=360 \
         --fontname="Monospace 10" \
         --editable \
@@ -608,7 +608,7 @@ CONF
         n=$(grep -c '^[^#[:space:]]' "$conf" 2>/dev/null || true)
         yad --info \
             --title="Extra lists — Archcanary" \
-            --window-icon=security-high \
+            --window-icon=security-high --center \
             --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Full scan</b> to fetch any new URLs." \
             --width=420 \
             --button="OK:0" 2>/dev/null || true
@@ -625,7 +625,7 @@ run_action() {
     if [[ "$idx" -eq 16 || "$idx" -eq 17 || "$idx" -eq 19 ]] && ! $HAS_LYNIS; then
         yad --info \
             --title="Lynis — Archcanary" \
-            --window-icon=security-high \
+            --window-icon=security-high --center \
             --text="<b>Lynis</b> is not installed.\n\nInstall from official repos:\n  <tt>sudo pacman -S lynis</tt>" \
             --width=420 \
             --button="OK:0" 2>/dev/null || true
@@ -666,7 +666,7 @@ run_action() {
         if ! $HAS_TRAUR; then
             yad --warning \
                 --title="traur not installed" \
-                --window-icon=security-high \
+                --window-icon=security-high --center \
                 --text="<b>traur</b> is not installed.\n\nInstall it from AUR:\n  <tt>${AUR_HELPER} -S traur</tt>" \
                 --width=360 2>/dev/null || true
             return
@@ -690,7 +690,7 @@ run_action() {
         if ! $HAS_ROOT; then
             yad --warning \
                 --title="Root helper not installed" \
-                --window-icon=security-high \
+                --window-icon=security-high --center \
                 --text="The system root helper is not installed.\n\nRun:\n  <b>./install.sh --system</b>\n\nto enable root-requiring checks." \
                 --width=440 2>/dev/null || true
             return
@@ -704,7 +704,7 @@ run_action() {
         mkfifo "$fifo"
         yad --text-info \
             --title="$label — Archcanary" \
-            --window-icon=security-high \
+            --window-icon=security-high --center \
             --width=1000 --height=660 \
             --fontname="Monospace 10" \
             --wrap --tail --editable \
@@ -772,7 +772,7 @@ run_action() {
             rm -f "$tmpout"
             [[ $pkexec_exit -ne 0 && $pkexec_exit -ne 126 ]] && \
                 yad --error --title="Archcanary" \
-                    --window-icon=security-high \
+                    --window-icon=security-high --center \
                     --text="pkexec failed (exit $pkexec_exit)" \
                     --width=360 2>/dev/null || true
             if [[ "$idx" -eq 0 ]]; then _infer_full_status; fi
@@ -858,7 +858,7 @@ while true; do
     selected=$(yad \
         --list \
         --title="Archcanary" \
-        --window-icon=security-high \
+        --window-icon=security-high --center \
         --width=440 --height=550 \
         --column="" \
         --column="Action" \
