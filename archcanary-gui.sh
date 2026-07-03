@@ -244,19 +244,30 @@ _extract_infected_pkgs() {
     ' "$1" 2>/dev/null | grep -oP '^  - \K\S+' | head -20 | tr '\n' ' ' | sed 's/ $//' || true
 }
 
-# Names the check (e.g. "systemd") if its section reported a WARNING — used by
-# _show_infected_dialog to point at "Manage allowlists" instead of the generic
-# "review the artifact" wording. Covers every check with a real allowlist
-# escape hatch; add a "tag:name" pair here when a new one gets one.
+# Names the check (e.g. "systemd") if its section reported a WARNING that the
+# allowlist can actually silence — used by _show_infected_dialog to point at
+# "Manage allowlists" instead of the generic "review the artifact" wording.
+# Each section's match pattern is scoped to ONLY its allowlist-gated warning
+# text — systemd's "found" list is entirely allowlist-gated so any WARNING
+# there qualifies, but bpftool and DKMS each also emit WARNINGs with no
+# allowlist escape hatch at all (bpftool: stealth program types, suspicious
+# kprobes, XDP/TC network attachments; DKMS: lsmod modules untraceable to
+# pacman/DKMS) — matching generic "WARNING" there would point the user at a
+# fix that doesn't apply to their finding. Add a "tag:name:pattern" entry here
+# when a new check gets a real allowlist; pattern must be unique to that
+# check's allowlist-gated branch, not shared with its unconditional WARNINGs.
 _allowlistable_finding_present() {
-    local out="$1" pair tag desc
-    for pair in "3:systemd" "8:bpftool" "11:DKMS"; do
-        tag="${pair%%:*}" desc="${pair#*:}"
+    local out="$1" pair tag rest desc pattern
+    for pair in "3:systemd:WARNING" "8:bpftool:unknown process" "11:DKMS:untracked source"; do
+        tag="${pair%%:*}"
+        rest="${pair#*:}"
+        desc="${rest%%:*}"
+        pattern="${rest#*:}"
         if awk -v t="$tag" '
             $0 ~ ("^--- \\[" t "\\] ") { grab=1; next }
             grab && /^--- \[/ { exit }
             grab { print }
-        ' "$out" 2>/dev/null | grep -q 'WARNING'; then
+        ' "$out" 2>/dev/null | grep -q "$pattern"; then
             printf '%s\n' "$desc"
             return
         fi
@@ -699,12 +710,17 @@ run_action() {
         tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
 
         # Open the output window immediately — no blank screen after clicking Run.
+        # Deliberately NOT --center: this window's focus behavior around the
+        # polkit dialog is fragile (see the xdotool loop + sleep below) and has
+        # regressed ~5 times in history; --center is an unvetted variable in
+        # that interaction on click-to-focus WMs (Openbox) and stays off here
+        # even though every other dialog in this file is centered.
         local fifo
         fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
         mkfifo "$fifo"
         yad --text-info \
             --title="$label — Archcanary" \
-            --window-icon=security-high --center \
+            --window-icon=security-high \
             --width=1000 --height=660 \
             --fontname="Monospace 10" \
             --wrap --tail --editable \
