@@ -266,11 +266,29 @@ EOF
         rm -f "$CONFIG_DIR/dkms_allowlist.conf"
         echo "  migrated:  ~/.config dkms_allowlist.conf → /etc (per-user copy removed)"
     fi
+    # systemd allowlist — same rationale and seeding rules as the DKMS allowlist
+    # above (mode 644, never clobber an existing /etc copy).
+    if [[ ! -f /etc/archcanary/systemd_allowlist.conf ]]; then
+        sudo tee /etc/archcanary/systemd_allowlist.conf >/dev/null << 'EOF'
+# systemd units to skip during the systemd persistence check (--check-systemd),
+# system-wide allowlist. One unit name per line. Everything after # is a comment.
+# Add units that are known-good but not tracked by pacman and not vetted by the
+# standard-prefix check (e.g. a self-hosted app installed from an upstream
+# binary release rather than a package). A .timer is matched by its OWN name,
+# not its target .service — allowlist both if you want to silence both findings.
+#
+# Example:
+# forgejo.service  # self-hosted git, installed from upstream binary release
+# forgejo.timer    # only needed if forgejo also ships a persistent timer
+EOF
+        sudo chmod 644 /etc/archcanary/systemd_allowlist.conf
+    fi
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
+    echo "  installed: /etc/archcanary/systemd_allowlist.conf (system-wide systemd allowlist for the persistence check)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
     # Seed Lynis custom profile (only if lynis is installed and file not yet present)

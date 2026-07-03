@@ -481,6 +481,7 @@ run_doctor() {
         _item "root helper (enables root checks in GUI)" "$(_file /usr/lib/archcanary/root-helper)"           "bash $installer_sys" "path: /usr/lib/archcanary/root-helper"
         _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "bash $installer_sys" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
         _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "bash $installer_sys" "path: /etc/archcanary/dkms_allowlist.conf"
+        _item "systemd allowlist"                        "$(_file /etc/archcanary/systemd_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/systemd_allowlist.conf"
         printf '\n'
     fi
 
@@ -683,6 +684,24 @@ if [[ -r "$_dkms_cfg" ]]; then    # skip if missing/unreadable (don't abort unde
     done < "$_dkms_cfg"
 fi
 unset _dkms_cfg _dl
+
+# Merge the systemd allowlist into SYSTEMD_ALLOWLIST (colon-separated; the env
+# var, if set, takes precedence and is appended to). Single system-wide file,
+# same rationale as the DKMS allowlist above — for unit names that are
+# legitimately unowned by pacman (self-hosted apps installed from upstream
+# binary releases, e.g. forgejo) and shouldn't trip the systemd persistence check.
+# Override the path with SYSTEMD_ALLOWLIST_FILE (used by the tests).
+SYSTEMD_ALLOWLIST="${SYSTEMD_ALLOWLIST:-}"
+_svc_cfg="${SYSTEMD_ALLOWLIST_FILE:-/etc/archcanary/systemd_allowlist.conf}"
+if [[ -r "$_svc_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
+    while IFS= read -r _sl || [[ -n "$_sl" ]]; do
+        _sl="${_sl%%#*}"       # strip inline comments
+        read -r _sl _ <<< "$_sl"  # take first token only (ignores trailing descriptions)
+        [[ -z "$_sl" ]] && continue
+        SYSTEMD_ALLOWLIST="${SYSTEMD_ALLOWLIST:+${SYSTEMD_ALLOWLIST}:}${_sl}"
+    done < "$_svc_cfg"
+fi
+unset _svc_cfg _sl
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
     _bundled="$(dirname "$(realpath "$0")")/lists/malicious_npm_packages.txt"
@@ -1030,9 +1049,41 @@ _find_service_file() {
     return 1
 }
 
+# Resolve a scanned .service/.timer/.conf path to the unit name a
+# SYSTEMD_ALLOWLIST entry would refer to it by. A drop-in override
+# (".../unitname.service.d/override.conf") resolves to "unitname.service" so
+# one allowlist entry covers the unit and all its drop-ins.
+_systemd_unit_name() {
+    local path="$1" base
+    base="$(basename "$path")"
+    if [[ "$base" == *.service || "$base" == *.timer ]]; then
+        printf '%s\n' "$base"
+    else
+        base="$(basename "$(dirname "$path")")"
+        printf '%s\n' "${base%.d}"
+    fi
+}
+
+# True if $1 (a unit name from _systemd_unit_name) is in the SYSTEMD_ALLOWLIST
+# array named $2 (passed by name since bash can't return arrays).
+_systemd_allowlisted() {
+    local name="$1" allow_arr_name="$2" _a
+    local -n _allow="$allow_arr_name"
+    for _a in "${_allow[@]}"; do
+        [[ "$_a" == "$name" ]] && return 0
+    done
+    return 1
+}
+
 check_systemd() {
     local found=()
     local re_restart='^Restart=(always|on-failure|on-abnormal|on-abort)'
+    # SYSTEMD_ALLOWLIST: colon-separated list of unit names that are known-good
+    # but not tracked by pacman and not vetted by the standard-prefix check
+    # (e.g. a self-hosted app installed from an upstream binary release).
+    # Example: SYSTEMD_ALLOWLIST=forgejo.service:forgejo.timer
+    local -a _svc_allow
+    IFS=: read -ra _svc_allow <<< "${SYSTEMD_ALLOWLIST:-}"
 
     IFS=: read -ra dirs <<< "${SYSTEMD_SCAN_DIRS:-/etc/systemd/system:$HOME/.config/systemd/user}"
 
@@ -1064,6 +1115,10 @@ check_systemd() {
                 fi
                 local match
                 match=$(grep -oE "$re_restart" "$svc" | head -1)
+                if _systemd_allowlisted "$(_systemd_unit_name "$svc")" _svc_allow; then
+                    echo "  INFO: systemd unit allowlisted (not vetted): $svc ($match)"
+                    continue
+                fi
                 found+=("$svc ($match)")
             fi
         done < <(find "$dir" \( -name '*.service' -o -name '*.conf' \) -type f 2>/dev/null)
@@ -1083,6 +1138,10 @@ check_systemd() {
                 svc_file=$(_find_service_file "$target" "$dir") || svc_file=""
                 # Vetted target → benign timer; skip. Otherwise flag it.
                 [[ -n "$svc_file" ]] && _service_vetted "$svc_file" && continue
+                if _systemd_allowlisted "$(_systemd_unit_name "$timer")" _svc_allow; then
+                    echo "  INFO: systemd timer allowlisted (not vetted): $timer (timer → ${target})"
+                    continue
+                fi
                 found+=("$timer (timer → ${target}${svc_file:+, unvetted})")
             fi
         done < <(find "$dir" -name '*.timer' -type f 2>/dev/null)

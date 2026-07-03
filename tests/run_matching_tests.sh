@@ -247,7 +247,7 @@ test_npm_cli_flag() {
 # ---------------------------------------------------------------------------
 test_actual_list_integrity() {
     local infected=()
-    load_list "$REPO_DIR/package_list.txt" infected
+    load_list "$REPO_DIR/lists/package_list.txt" infected
 
     if [[ ${#infected[@]} -gt 500 ]]; then
         pass "actual_list: parsed ${#infected[@]} packages from package_list.txt"
@@ -339,6 +339,21 @@ test_check_systemd_hardened() {
         fail "check_systemd: empty dir → expected clean, got: $out"
     fi
     rm -rf "$tmpdir"
+
+    # Sub-test D: allowlisted unit names → INFO, no WARNING, exit 0 (clean)
+    local allow_file
+    allow_file=$(mktemp)
+    printf 'fake-persist.service\nfake-persist.timer\n' > "$allow_file"
+    rc=0
+    out=$(SYSTEMD_SCAN_DIRS="$fixture_dir" SYSTEMD_ALLOWLIST_FILE="$allow_file" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: systemd unit allowlisted"* \
+          && "$out" == *"INFO: systemd timer allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_systemd: allowlisted unit/timer → INFO only, exit 0 (clean)"
+    else
+        fail "check_systemd: allowlisted unit/timer → expected INFO+exit0, got rc=$rc, out: $out"
+    fi
+    rm -f "$allow_file"
 }
 
 # ---------------------------------------------------------------------------

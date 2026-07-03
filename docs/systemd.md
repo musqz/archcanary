@@ -33,7 +33,7 @@ The root scan can't notify (no desktop session), so a user `.path` unit watches 
 
 ## Quick setup (recommended)
 
-`./install.sh --system` does all of this for you — it installs the system scan units, the user-level scan, and the notifier; creates `/var/lib/archcanary/`; seeds the package lists and the system-wide DKMS allowlist; enables the system timer + pacman-trigger, the user timer, and the notifier; and migrates away any old user-scope scan units:
+`./install.sh --system` does all of this for you — it installs the system scan units, the user-level scan, and the notifier; creates `/var/lib/archcanary/`; seeds the package lists and the system-wide DKMS and systemd allowlists; enables the system timer + pacman-trigger, the user timer, and the notifier; and migrates away any old user-scope scan units:
 
 ```bash
 ./install.sh --system
