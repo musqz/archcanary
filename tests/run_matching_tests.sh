@@ -247,7 +247,7 @@ test_npm_cli_flag() {
 # ---------------------------------------------------------------------------
 test_actual_list_integrity() {
     local infected=()
-    load_list "$REPO_DIR/package_list.txt" infected
+    load_list "$REPO_DIR/lists/package_list.txt" infected
 
     if [[ ${#infected[@]} -gt 500 ]]; then
         pass "actual_list: parsed ${#infected[@]} packages from package_list.txt"
