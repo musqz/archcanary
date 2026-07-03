@@ -7,7 +7,7 @@
 > If you run into anything, please open an [issue](https://github.com/musqz/archcanary/issues) or start a [discussion](https://github.com/musqz/archcanary/discussions).
 
 > **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything.
-> Remediation is left to you. The only writes are its own logs and config lists. `install.sh`, `--refresh`, and the DKMS allowlist editor are the exceptions — all explicit.
+> Remediation is left to you. The only writes are its own logs and config lists. `install.sh`, `--refresh`, and the DKMS/systemd allowlist editors are the exceptions — all explicit.
 
 > **Developed with Claude AI (Anthropic).** All AI-assisted code and documentation is reviewed by the developer before commit. Treat all detections as advisory, not authoritative.
 
