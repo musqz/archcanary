@@ -96,13 +96,11 @@ LABELS=(
     "Manage allowlists"         # 12
     "Trust scan (traur)"        # 13
     "LLM settings (aurscan)"   # 14
-    "Extra lists"               # 15
+    "Edit config"               # 15
     "Lynis hardening report"   # 16
     "Run Lynis audit"          # 17  root
-    "Edit audit rules"         # 18
-    "Edit Lynis config"        # 19
-    "Pacman integrity"         # 20
-    "About"                    # 21
+    "Pacman integrity"         # 18
+    "About"                    # 19
 )
 
 FLAGS=(
@@ -121,11 +119,9 @@ FLAGS=(
     "__manage_allowlists__"
     "__traur__"
     "__aurscan_settings__"
-    "__extra_lists__"
+    "__edit_config__"
     "--check-lynis --no-notify --no-summary"
     "--run-lynis"
-    "__audit_rules_edit__"
-    "__lynis_config_edit__"
     "--check-pkginteg --no-notify --no-summary"
     "__about__"
 )
@@ -136,8 +132,6 @@ NEEDS_ROOT=(
     false false false false
     true
     true
-    false
-    false
     true
     false
 )
@@ -150,11 +144,9 @@ STATUS[0]="   "   # Full scan — blank until first run
 STATUS[12]="   "  # Manage allowlists — config dialog, no scan verdict
 STATUS[13]="   "  # traur — opens its own output window, no verdict here
 STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
-STATUS[15]="   "  # extra lists — config dialog, no scan verdict
+STATUS[15]="   "  # Edit config — config dialog, no scan verdict
 STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
-STATUS[18]="   "  # Edit audit rules — config dialog, no scan verdict
-STATUS[19]="   "  # Edit Lynis config — config dialog, no scan verdict
-STATUS[21]="   "  # About — no scan verdict
+STATUS[19]="   "  # About — no scan verdict
 unset _i
 
 # Derive full-scan status (row 0) from whichever individual checks have results.
@@ -330,6 +322,37 @@ manage_allowlists() {
         "DKMS"*)    _edit_conf_file "DKMS Allowlist"    /etc/archcanary/dkms_allowlist.conf ;;
         "Systemd"*) _edit_conf_file "Systemd Allowlist" /etc/archcanary/systemd_allowlist.conf ;;
         "bpftool"*) _edit_conf_file "bpftool Allowlist" /etc/archcanary/bpftool_allowlist.conf ;;
+    esac
+}
+
+# Picker in front of the individual config editors below (audit rules, Lynis
+# config, extra malware lists) — same consolidation pattern as
+# manage_allowlists(), but each choice still calls its own distinct function
+# (different save targets/side-effects: pkexec+restart auditd, plain copy, a
+# user-owned file) rather than being forced through one generic editor.
+# Skips entries whose tool isn't installed, matching the old row-hiding
+# behavior. Add a new config editor here, not as another top-level row.
+edit_config() {
+    local -a choices=()
+    $HAS_AUDITD && choices+=("Audit rules")
+    $HAS_LYNIS  && choices+=("Lynis config")
+    choices+=("Extra malware lists")
+
+    local choice
+    choice=$(yad --list \
+        --title="Edit Config — Archcanary" \
+        --window-icon=security-high --center \
+        --width=460 --height=220 \
+        --no-headers \
+        --column="Config" \
+        "${choices[@]}" \
+        --button="Edit:0" --button="Close:1" \
+        --print-column=1 2>/dev/null) || return
+    choice="${choice%|}"
+    case "$choice" in
+        "Audit rules")        edit_audit_rules ;;
+        "Lynis config")       edit_lynis_config ;;
+        "Extra malware lists") extra_lists_manager ;;
     esac
 }
 
@@ -605,7 +628,7 @@ CONF
     local tmpout
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
     if yad --text-info \
-        --title="Extra package lists — Archcanary" \
+        --title="Extra Malware Lists — Archcanary" \
         --window-icon=security-high --center \
         --width=600 --height=360 \
         --fontname="Monospace 10" \
@@ -618,7 +641,7 @@ CONF
         local n
         n=$(grep -c '^[^#[:space:]]' "$conf" 2>/dev/null || true)
         yad --info \
-            --title="Extra lists — Archcanary" \
+            --title="Extra Malware Lists — Archcanary" \
             --window-icon=security-high --center \
             --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Full scan</b> to fetch any new URLs." \
             --width=420 \
@@ -633,7 +656,7 @@ run_action() {
     local flags="${FLAGS[$idx]}"
     local needs_root="${NEEDS_ROOT[$idx]}"
 
-    if [[ "$idx" -eq 16 || "$idx" -eq 17 || "$idx" -eq 19 ]] && ! $HAS_LYNIS; then
+    if [[ "$idx" -eq 16 || "$idx" -eq 17 ]] && ! $HAS_LYNIS; then
         yad --info \
             --title="Lynis — Archcanary" \
             --window-icon=security-high --center \
@@ -648,13 +671,8 @@ run_action() {
         return
     fi
 
-    if [[ "$flags" == "__audit_rules_edit__" ]]; then
-        edit_audit_rules
-        return
-    fi
-
-    if [[ "$flags" == "__lynis_config_edit__" ]]; then
-        edit_lynis_config
+    if [[ "$flags" == "__edit_config__" ]]; then
+        edit_config
         return
     fi
 
@@ -665,11 +683,6 @@ run_action() {
 
     if [[ "$flags" == "__aurscan_settings__" ]]; then
         aurscan_settings
-        return
-    fi
-
-    if [[ "$flags" == "__extra_lists__" ]]; then
-        extra_lists_manager
         return
     fi
 
@@ -856,14 +869,12 @@ build_list_args() {
     _sep "Utilities"
     $HAS_LYNIS   && _row 16 "🔐  ${LABELS[16]}"
     $HAS_TRAUR   && _row 13
-    _row 20 "🔐  ${LABELS[20]}"
+    _row 18 "🔐  ${LABELS[18]}"
     _sep "Settings"
-    $HAS_AUDITD  && _row 18
-    $HAS_LYNIS   && _row 19
     _row 12
-    $HAS_AURSCAN && _row 14
     _row 15
-    _row 21
+    $HAS_AURSCAN && _row 14
+    _row 19
 }
 
 # Main loop
