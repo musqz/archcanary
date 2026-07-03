@@ -215,23 +215,30 @@ _propagate_full_scan() {
 
 _show_infected_dialog() {
     local pkgs="${1:-}"
-    local remove_cmd
+    local step1
     if [[ -n "$pkgs" ]]; then
-        remove_cmd="${AUR_HELPER} -R ${pkgs}"
+        step1="Remove the package(s):\n      <tt>${AUR_HELPER} -R ${pkgs}</tt>"
     else
-        remove_cmd="${AUR_HELPER} -R &lt;package-name&gt;"
+        step1="Review and remove/disable the flagged artifact(s) shown in the\n      scan output (systemd unit, eBPF program, autostart entry, etc.)."
     fi
     yad --error \
         --title="Infected — Archcanary" \
         --window-icon=security-high \
         --width=520 \
-        --text="<b>Infected or compromised packages detected.</b>\n\n<b>1.</b>  Remove the package(s):\n      <tt>${remove_cmd}</tt>\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
+        --text="<b>Infected or compromised indicators detected.</b>\n\n<b>1.</b>  ${step1}\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
         --button="OK:0" 2>/dev/null || true
 }
 
-# Extract infected package names from scan output (lines: "  - pkgname (installed: ...)")
+# Extract infected package names from scan output (lines: "  - pkgname (installed: ...)").
+# Scoped to section [1] "Currently installed foreign packages" only — other checks
+# (systemd, ebpf, autostart, etc.) also emit "  - " lines via print_list, but those
+# aren't AUR package names and must never be fed to `yay -R`.
 _extract_infected_pkgs() {
-    grep -oP '^  - \K\S+' "$1" 2>/dev/null | head -20 | tr '\n' ' ' | sed 's/ $//' || true
+    awk '
+        /^--- \[1\] / { grab=1; next }
+        grab && /^--- \[/ { exit }
+        grab { print }
+    ' "$1" 2>/dev/null | grep -oP '^  - \K\S+' | head -20 | tr '\n' ' ' | sed 's/ $//' || true
 }
 
 edit_allowlist() {
