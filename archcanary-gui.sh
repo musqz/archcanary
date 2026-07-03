@@ -316,7 +316,7 @@ manage_allowlists() {
         "Systemd (persistence check)" \
         "bpftool (eBPF loaders)" \
         --button="Edit:0" --button="Close:1" \
-        --print-column=1 2>/dev/null) || return
+        --print-column=1 2>/dev/null) || return 0
     choice="${choice%|}"
     case "$choice" in
         "DKMS"*)    _edit_conf_file "DKMS Allowlist"    /etc/archcanary/dkms_allowlist.conf ;;
@@ -347,7 +347,7 @@ edit_config() {
         --column="Config" \
         "${choices[@]}" \
         --button="Edit:0" --button="Close:1" \
-        --print-column=1 2>/dev/null) || return
+        --print-column=1 2>/dev/null) || return 0
     choice="${choice%|}"
     case "$choice" in
         "Audit rules")        edit_audit_rules ;;
