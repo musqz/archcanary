@@ -2205,8 +2205,19 @@ printf '%s============================================================%s\n' "$_C
 
 if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
     if command -v notify-send &>/dev/null; then
+        # Only checks [1]/[2] (currently-installed / historically-installed foreign
+        # packages) confirm an actual malicious package. Other checks at this exit
+        # code (systemd, ebpf, autostart, etc.) flag suspicious artifacts, not
+        # packages, so the notification wording must not claim "package" for those.
+        _notify_title="archcanary: security indicator detected"
+        for _i in "${!_SUMMARY_NAMES[@]}"; do
+            case "${_SUMMARY_NAMES[$_i]}" in
+                "Package list "*|"pacman.log history")
+                    [[ "${_SUMMARY_CODES[$_i]}" -eq 2 ]] && _notify_title="archcanary: malicious package detected" ;;
+            esac
+        done
         notify-send -u critical -i dialog-warning \
-            "archcanary: malicious package detected" \
+            "$_notify_title" \
             "Indicators found. Open Archcanary to review."
     fi
 fi
