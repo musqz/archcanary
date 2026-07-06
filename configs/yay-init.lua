@@ -41,10 +41,10 @@ yay.create_autocmd("AURPreInstall", {
     local patterns = {
       "npm install atomic%-lockfile",   -- Atomic Arch campaign wave 1
       "bun install js%-digest",         -- wave 2
-      "curl.*|.*bash",
-      "curl.*|.*sh",
-      "wget.*|.*bash",
-      "wget.*|.*sh",
+      "curl[^\n]*|[^\n]*bash",
+      "curl[^\n]*|[^\n]*sh",
+      "wget[^\n]*|[^\n]*bash",
+      "wget[^\n]*|[^\n]*sh",
     }
 
     for _, pattern in ipairs(patterns) do
