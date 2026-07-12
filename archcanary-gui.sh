@@ -250,7 +250,7 @@ _extract_infected_pkgs() {
 # check's allowlist-gated branch, not shared with its unconditional WARNINGs.
 _allowlistable_finding_present() {
     local out="$1" pair tag rest desc pattern
-    for pair in "3:systemd:WARNING" "8:bpftool:unknown process" "11:DKMS:untracked source"; do
+    for pair in "3:systemd:WARNING" "8:bpftool:unknown process" "10:Autostart:suspicious autostart entry" "11:DKMS:untracked source"; do
         tag="${pair%%:*}"
         rest="${pair#*:}"
         desc="${rest%%:*}"
@@ -309,19 +309,21 @@ manage_allowlists() {
     choice=$(yad --list \
         --title="Manage Allowlists — Archcanary" \
         --window-icon=security-high --center \
-        --width=460 --height=220 \
+        --width=460 --height=250 \
         --no-headers \
         --column="Allowlist" \
         "DKMS (kernel modules)" \
         "Systemd (persistence check)" \
         "bpftool (eBPF loaders)" \
+        "Autostart (XDG persistence check)" \
         --button="Edit:0" --button="Close:1" \
         --print-column=1 2>/dev/null) || return 0
     choice="${choice%|}"
     case "$choice" in
-        "DKMS"*)    _edit_conf_file "DKMS Allowlist"    /etc/archcanary/dkms_allowlist.conf ;;
-        "Systemd"*) _edit_conf_file "Systemd Allowlist" /etc/archcanary/systemd_allowlist.conf ;;
-        "bpftool"*) _edit_conf_file "bpftool Allowlist" /etc/archcanary/bpftool_allowlist.conf ;;
+        "DKMS"*)      _edit_conf_file "DKMS Allowlist"      /etc/archcanary/dkms_allowlist.conf ;;
+        "Systemd"*)   _edit_conf_file "Systemd Allowlist"   /etc/archcanary/systemd_allowlist.conf ;;
+        "bpftool"*)   _edit_conf_file "bpftool Allowlist"   /etc/archcanary/bpftool_allowlist.conf ;;
+        "Autostart"*) _edit_conf_file "Autostart Allowlist" /etc/archcanary/autostart_allowlist.conf ;;
     esac
 }
 

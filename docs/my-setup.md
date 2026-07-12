@@ -188,8 +188,9 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 /etc/archcanary/
     ├── dkms_allowlist.conf           # DKMS allowlist
     ├── systemd_allowlist.conf        # systemd unit allowlist
-    └── bpftool_allowlist.conf        # bpftool eBPF loader allowlist
-                                       # (all three: GUI → Manage allowlists, or sudoedit directly)
+    ├── bpftool_allowlist.conf        # bpftool eBPF loader allowlist
+    └── autostart_allowlist.conf      # XDG autostart Exec= allowlist
+                                       # (all four: GUI → Manage allowlists, or sudoedit directly)
 /usr/share/polkit-1/actions/
     └── org.archcanary.policy  # polkit policy allowing GUI to call root-helper
 
