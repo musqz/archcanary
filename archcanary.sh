@@ -41,7 +41,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="0.1.10"
+SCRIPT_VERSION="0.1.11"
 
 # ---------------------------------------------------------------------------
 # Configuration

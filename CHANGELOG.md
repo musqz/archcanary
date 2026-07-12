@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.11 (2026-07-12)
+
+- New: **autostart allowlist** (`/etc/archcanary/autostart_allowlist.conf`) — mirrors the DKMS/systemd/bpftool allowlists for `check_autostart` entries that can't be auto-resolved. `check_autostart` also gained a non-PATH fallback (searches `/usr/lib`, `/usr/libexec`) before flagging a bare `Exec=` name as suspicious, fixing false positives for package-private helper binaries (e.g. `zeitgeist-datahub`) that never sit on `$PATH`.
+- Fix: glob-metacharacter injection in the new non-PATH fallback — an autostart entry like `Exec=*` could match an arbitrary executable and bypass the suspicious-autostart check entirely; `*`/`?`/`[`/`]`/`\` are now escaped before reaching `find -name`.
+- Fix: `notify-send` failing silently under Openbox terminals and root scans (`sudo archcanary --full`) — both lack `$DBUS_SESSION_BUS_ADDRESS`, so notify-send fell back to `dbus-launch --autolaunch`, which errors out instead of showing the alert. Falls back to the well-known `/run/user/<uid>/bus` socket for the non-root case, and resolves the invoking user via `SUDO_USER` for the root case.
+- Fix: curl/wget pipe-to-shell autostart/RC pattern now matches across newlines.
+- Docs: fixed several stale/duplicated explanations found during a documentation precision pass — README's detection-layers diagram was missing the `traur` pacman hook layer; `docs/overview.md`'s lifecycle diagram had the `PostInstall` yay hook in the wrong sequence position; README and `my-setup.md` both claimed traur has "5 weighted categories" (verified against the installed binary: it's 4); README's detection-layers diagram and Projects-Used table were redundant copies of `overview.md`/`my-setup.md`'s versions and are now trimmed to short pointers; `docs/systemd.md`'s "Why the split?" section repeated its own "Model" section almost verbatim.
+
 ## v0.1.10 (2026-07-03)
 
 - New: `--check-pkginteg` — verifies installed file checksums via `pacman -Qkk`, filtering out backup-file and `/factory/` noise to surface real SHA256 mismatches on pacman-managed files. Included in `--full`; runs as root (a regular user silently skips unreadable files). GUI row moved to Utilities as "Pacman integrity".
