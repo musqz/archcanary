@@ -211,4 +211,8 @@ systemctl --user status archcanary-user.timer archcanary-notify.path
 
 ## Why the split?
 
-The system scan runs `--check-kmod`, `--check-ebpf`, and `--check-bpftool`, which need root to read kernel-module attribution and enumerate loaded eBPF programs — run without root they're skipped and the scan reports `INCOMPLETE` (exit 1). The user-level checks (npm/bun/pkgbuild caches, autostart, shell RCs) are the opposite: they must run **as you** so they see your real `~/.cache`/`~/.config` and resolve `Exec=` names against your PATH. Run as root they'd scan `/root` — missing your data and false-flagging root's own session relics. Hence two scans, each in the right context.
+See [Model](#model) above for the root-vs-user rationale. Two details worth
+calling out that aren't in that summary: a root-only check skipped for lack
+of root doesn't silently pass — the scan reports `INCOMPLETE` (exit 1)
+instead of `CLEAN`; and the user-level autostart check specifically needs to
+run as you to resolve `Exec=` names against your real `$PATH`, not root's.

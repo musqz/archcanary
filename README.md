@@ -39,57 +39,34 @@ As the tool grew to cover a much broader set of system checks — integrating a 
 
 ## Projects Used
 
-archcanary integrates with and builds on the following:
+archcanary integrates with and builds on the following — see
+[docs/my-setup.md § Components](docs/my-setup.md#components) for what each one
+does and how it's wired in:
 
-| Project | Role | Required |
-|---------|------|----------|
-| [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) | Origin — the aur-malware-check script archcanary started from | — |
-| [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay`/`paru` builds; reads `~/.config/aurscan/env` for archcanary GUI integration; install via AUR: `yay -S aurscan-manticore-git` | Optional |
-| [claude-code](https://code.claude.com/docs/en/setup) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs | Optional (via aurscan) |
-| [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 4 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) | Optional |
-| [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log | Optional |
-| [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui` | GUI only |
-| [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection | Optional (`--check-bpftool`) |
-| [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | `notify-send` — desktop critical alert on infected scan result | Optional |
-| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI privilege escalation for root-requiring checks | GUI + `--system` install |
-| [lynis](https://cisofy.com/lynis/) | System hardening auditor; archcanary reads the last report and can trigger a new audit from the GUI | Optional |
-| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Kernel audit daemon; archcanary ships a default ruleset covering AUR builds, privilege escalation, and system config changes; editable from the GUI | Optional |
+| Project | Required |
+|---------|----------|
+| [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | Optional |
+| [traur](https://aur.archlinux.org/packages/traur) | Optional |
+| [yay](https://github.com/Jguer/yay) 13.0 | Optional |
+| [yad](https://github.com/v1cont/yad) | GUI only |
+| [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Optional (`--check-bpftool`) |
+| [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | Optional |
+| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI + `--system` install |
+| [lynis](https://cisofy.com/lynis/) | Optional |
+| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional |
+
+Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) — see [Attribution](#attribution) below.
 
 ### Detection Layers
 
-```
-yay -S pkg / yay -Syu / yay <term>   (transparent — aurscan is wired in as yay's editor-gate)
-    ├── aurscan-gate runs on each AUR PKGBUILD before build
-    │       ├── static rules (offline) — known campaign signatures
-    │       ├── Claude LLM reads PKGBUILD — novel/obfuscated patterns
-    │       └── non-CLEAN → build aborted;  CLEAN → build proceeds
-    ├── yay init.lua hooks (independent offline layer)
-    │       ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
-    │       ├── AURPreInstall  — offline pattern check
-    │       └── PostInstall    — logs AUR installs
-    └── traur pacman hook (PreTransaction — every pacman install/upgrade, incl. repo pkgs)
-            ├── 279 heuristic signals — maintainer/metadata trust score
-            └── low trust → transaction aborted
+Four automatic layers fire at AUR install time — yay's editor-gate
+(aurscan + Claude), yay's offline `init.lua` hooks, and traur's pacman
+`PreTransaction` hook — plus a continuous root scan (`archcanary --full`,
+weekly + on boot + after every pacman transaction), a desktop notifier on
+detection, and the on-demand GUI.
 
-systemd system timer (weekly + on boot + after each pacman transaction)
-    └── archcanary --full
-            ├── known-bad package list (JS campaign + CHAOS RAT + Russian spam)
-            ├── pacman.log history (compressed log support)
-            ├── systemd persistence (services, drop-ins, timers)
-            ├── eBPF rootkit traces + bpftool program enumeration
-            ├── npm/bun/yarn/pnpm cache scan
-            ├── PKGBUILD obfuscation patterns
-            ├── ld.so.preload injection
-            ├── XDG autostart + shell RC persistence
-            └── kernel module / DKMS audit
-                    └── writes /var/lib/archcanary/last-scan.log
-
-systemd user path unit
-    └── watches last-scan.log → notify-send critical alert on INFECTED
-
-archcanary-gui (on-demand)
-    └── yad grouped menu, per-session status, polkit for root checks
-```
+See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
+(at-a-glance table included).
 
 ---
 
