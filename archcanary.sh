@@ -483,6 +483,7 @@ run_doctor() {
         _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "bash $installer_sys" "path: /etc/archcanary/dkms_allowlist.conf"
         _item "systemd allowlist"                        "$(_file /etc/archcanary/systemd_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/systemd_allowlist.conf"
         _item "bpftool allowlist"                        "$(_file /etc/archcanary/bpftool_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/bpftool_allowlist.conf"
+        _item "autostart allowlist"                      "$(_file /etc/archcanary/autostart_allowlist.conf)"  "bash $installer_sys" "path: /etc/archcanary/autostart_allowlist.conf"
         printf '\n'
     fi
 
@@ -721,6 +722,25 @@ if [[ -r "$_bpf_cfg" ]]; then    # skip if missing/unreadable (don't abort under
     done < "$_bpf_cfg"
 fi
 unset _bpf_cfg _bl
+
+# Merge the autostart allowlist into AUTOSTART_ALLOWLIST (colon-separated; the
+# env var, if set, takes precedence and is appended to). Same rationale as
+# DKMS/systemd/bpftool above — for autostart Exec= binaries that are
+# legitimately not resolvable via $PATH or a standard system prefix (e.g. a
+# package-private helper the resolution fallback still can't find, or an
+# AppImage/Flatpak export) and shouldn't trip the XDG autostart check.
+# Override the path with AUTOSTART_ALLOWLIST_FILE (used by the tests).
+AUTOSTART_ALLOWLIST="${AUTOSTART_ALLOWLIST:-}"
+_auto_cfg="${AUTOSTART_ALLOWLIST_FILE:-/etc/archcanary/autostart_allowlist.conf}"
+if [[ -r "$_auto_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
+    while IFS= read -r _al || [[ -n "$_al" ]]; do
+        _al="${_al%%#*}"       # strip inline comments
+        read -r _al _ <<< "$_al"  # take first token only (ignores trailing descriptions)
+        [[ -z "$_al" ]] && continue
+        AUTOSTART_ALLOWLIST="${AUTOSTART_ALLOWLIST:+${AUTOSTART_ALLOWLIST}:}${_al}"
+    done < "$_auto_cfg"
+fi
+unset _auto_cfg _al
 
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
     _bundled="$(dirname "$(realpath "$0")")/lists/malicious_npm_packages.txt"
@@ -1747,6 +1767,22 @@ check_autostart() {
     # XDG autostart .desktop files
     # Flag absolute paths outside standard system prefixes; for bare names, resolve
     # via command -v and apply the same prefix check.
+    # AUTOSTART_ALLOWLIST: colon-separated list of Exec= names/basenames that
+    # are known-good but can't be resolved via $PATH or a standard prefix
+    # (e.g. an AppImage/Flatpak export, or a package-private helper the
+    # non-PATH fallback below still can't find).
+    # Example: AUTOSTART_ALLOWLIST=zeitgeist-datahub
+    local -a _autostart_allow
+    IFS=: read -ra _autostart_allow <<< "${AUTOSTART_ALLOWLIST:-}"
+    # Non-PATH dirs to search for a bare Exec= name before giving up.
+    # Many desktop packages (zeitgeist, various indicator/tray helpers) ship
+    # their autostart binary in a package-private dir like /usr/lib/<pkg>/ or
+    # /usr/libexec/ rather than on $PATH — command -v alone can't see those,
+    # producing a false "suspicious" verdict for a perfectly legitimate,
+    # pacman-owned binary. Override with AUTOSTART_LIBDIRS for testing.
+    local -a _autostart_libdirs
+    IFS=: read -ra _autostart_libdirs <<< "${AUTOSTART_LIBDIRS:-/usr/lib:/usr/libexec}"
+
     local desktop_dir="$home_dir/.config/autostart"
     if [[ -d "$desktop_dir" ]]; then
         while IFS= read -r desktop; do
@@ -1766,19 +1802,32 @@ check_autostart() {
                 else
                     local resolved
                     resolved=$(command -v "$exec_val" 2>/dev/null) || true
-                    if [[ -z "$resolved" ]]; then
-                        suspicious=true
-                    elif [[ "$resolved" != /usr/* && "$resolved" != /opt/* && \
-                            "$resolved" != /bin/* && "$resolved" != /sbin/* && \
-                            "$resolved" != /usr/local/* ]]; then
-                        suspicious=true
+                    if [[ -n "$resolved" ]]; then
+                        if [[ "$resolved" != /usr/* && "$resolved" != /opt/* && \
+                              "$resolved" != /bin/* && "$resolved" != /sbin/* && \
+                              "$resolved" != /usr/local/* ]]; then
+                            suspicious=true
+                        fi
+                    else
+                        # Not on $PATH — search the curated non-PATH system
+                        # libdirs. A hit there is trusted outright (that's
+                        # what the dir list represents); no prefix recheck.
+                        local libhit
+                        libhit=$(find "${_autostart_libdirs[@]}" -mindepth 1 -maxdepth 3 \
+                            -type f -name "$exec_val" -perm -u+x 2>/dev/null | head -1)
+                        [[ -z "$libhit" ]] && suspicious=true
                     fi
                 fi
 
                 if $suspicious; then
-                    echo "  WARNING: suspicious autostart entry: $desktop"
-                    echo "    Exec=$exec_val (outside standard system path)"
-                    found=2
+                    if _allowlist_contains "$exec_val" _autostart_allow; then
+                        echo "  INFO: autostart entry allowlisted (unresolved binary): $desktop"
+                        echo "    Exec=$exec_val"
+                    else
+                        echo "  WARNING: suspicious autostart entry: $desktop"
+                        echo "    Exec=$exec_val (outside standard system path)"
+                        found=2
+                    fi
                 fi
             done < "$desktop"
         done < <(find "$desktop_dir" -name '*.desktop' -type f 2>/dev/null)

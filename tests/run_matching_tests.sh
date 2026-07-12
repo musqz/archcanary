@@ -405,6 +405,65 @@ test_check_autostart() {
         fail "check_autostart: empty home → expected clean, got: $out"
     fi
     rm -rf "$tmpdir"
+
+    # Sub-test E: bare Exec= name unresolvable via $PATH but found in a
+    # non-PATH libdir (simulates e.g. /usr/lib/zeitgeist/zeitgeist-datahub) → clean
+    local tmpdir2 libdir
+    tmpdir2=$(mktemp -d)
+    libdir=$(mktemp -d)
+    mkdir -p "$tmpdir2/.config/autostart" "$libdir/fakepkg"
+    cat > "$tmpdir2/.config/autostart/fakepkg.desktop" << 'DESK'
+[Desktop Entry]
+Type=Application
+Name=FakePkg
+Exec=fakepkg-helper
+DESK
+    printf '#!/bin/sh\n' > "$libdir/fakepkg/fakepkg-helper"
+    chmod +x "$libdir/fakepkg/fakepkg-helper"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir2" AUTOSTART_LIBDIRS="$libdir" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: bare Exec= resolved via non-PATH libdir fallback → clean"
+    else
+        fail "check_autostart: non-PATH fallback resolution failed, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir2" "$libdir"
+
+    # Sub-test F: bare Exec= name unresolvable anywhere, not allowlisted → WARNING
+    local tmpdir3
+    tmpdir3=$(mktemp -d)
+    mkdir -p "$tmpdir3/.config/autostart"
+    cat > "$tmpdir3/.config/autostart/unresolved.desktop" << 'DESK'
+[Desktop Entry]
+Type=Application
+Name=Unresolved
+Exec=totally-unresolvable-binary
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir3" AUTOSTART_LIBDIRS="/nonexistent-dir-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: suspicious autostart entry"* ]]; then
+        pass "check_autostart: unresolved bare Exec=, not allowlisted → WARNING"
+    else
+        fail "check_autostart: unresolved bare Exec= regression, rc=$rc, out: $out"
+    fi
+
+    # Sub-test G: same unresolvable binary, but allowlisted → INFO only, exit 0
+    local allow_file2
+    allow_file2=$(mktemp)
+    printf 'totally-unresolvable-binary\n' > "$allow_file2"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir3" AUTOSTART_LIBDIRS="/nonexistent-dir-xyz" \
+        AUTOSTART_ALLOWLIST_FILE="$allow_file2" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: autostart entry allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: allowlisted unresolved Exec= → INFO only, exit 0 (clean)"
+    else
+        fail "check_autostart: allowlisted unresolved Exec= → expected INFO+exit0, got rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir3"
+    rm -f "$allow_file2"
 }
 
 # ---------------------------------------------------------------------------

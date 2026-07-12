@@ -299,6 +299,25 @@ EOF
 EOF
         sudo chmod 644 /etc/archcanary/bpftool_allowlist.conf
     fi
+    # autostart allowlist — same rationale and seeding rules as the DKMS/
+    # systemd/bpftool allowlists above (mode 644, never clobber an existing
+    # /etc copy).
+    if [[ ! -f /etc/archcanary/autostart_allowlist.conf ]]; then
+        sudo tee /etc/archcanary/autostart_allowlist.conf >/dev/null << 'EOF'
+# Autostart Exec= names to skip during the XDG autostart check
+# (--check-autostart), system-wide allowlist. One Exec= name/basename per
+# line. Everything after # is a comment.
+# Add entries that are known-good but can't be resolved via $PATH or a
+# standard system prefix — e.g. a package-private helper binary the
+# non-PATH fallback (search of /usr/lib, /usr/libexec) still can't find, or
+# an AppImage/Flatpak export. Matched against the bare Exec= value as
+# written in the .desktop file (not a resolved path).
+#
+# Example:
+# zeitgeist-datahub  # desktop activity logging, ships in a non-PATH libdir
+EOF
+        sudo chmod 644 /etc/archcanary/autostart_allowlist.conf
+    fi
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
@@ -306,6 +325,7 @@ EOF
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /etc/archcanary/systemd_allowlist.conf (system-wide systemd allowlist for the persistence check)"
     echo "  installed: /etc/archcanary/bpftool_allowlist.conf (system-wide bpftool allowlist for the eBPF loader check)"
+    echo "  installed: /etc/archcanary/autostart_allowlist.conf (system-wide autostart allowlist for the XDG persistence check)"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
     # Seed Lynis custom profile (only if lynis is installed and file not yet present)
