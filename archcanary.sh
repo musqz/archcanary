@@ -2349,6 +2349,26 @@ printf '%s============================================================%s\n' "$_C
 
 if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
     if command -v notify-send &>/dev/null; then
+        # Some terminals (Openbox, launch-from-menu) don't inherit
+        # DBUS_SESSION_BUS_ADDRESS, and a root scan (sudo archcanary --full)
+        # has no session bus of its own at all — same SUDO_USER pattern used
+        # elsewhere (check_autostart's home-dir resolution, log ownership
+        # around line 612). Without this, notify-send falls back to spawning
+        # dbus-launch --autolaunch, which fails outright in both contexts and
+        # prints "Failed to show notification" instead of popping up.
+        _notify_runner=()
+        _notify_uid="$EUID"
+        if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+            _notify_uid=$(id -u "$SUDO_USER" 2>/dev/null) || _notify_uid=""
+            if [[ -n "$_notify_uid" && -S "/run/user/$_notify_uid/bus" ]]; then
+                _notify_runner=(sudo -u "$SUDO_USER" env "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$_notify_uid/bus")
+            fi
+        elif [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+            _notify_xrd="/run/user/$_notify_uid"
+            [[ -S "$_notify_xrd/bus" ]] && export DBUS_SESSION_BUS_ADDRESS="unix:path=$_notify_xrd/bus"
+            unset _notify_xrd
+        fi
+        unset _notify_uid
         # Only checks [1]/[2] (currently-installed / historically-installed foreign
         # packages) confirm an actual malicious package. Other checks at this exit
         # code (systemd, ebpf, autostart, etc.) flag suspicious artifacts, not
@@ -2360,9 +2380,10 @@ if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
                     [[ "${_SUMMARY_CODES[$_i]}" -eq 2 ]] && _notify_title="archcanary: malicious package detected" ;;
             esac
         done
-        notify-send -u critical -i dialog-warning \
+        "${_notify_runner[@]}" notify-send -u critical -i dialog-warning \
             "$_notify_title" \
             "Indicators found. Open Archcanary to review."
+        unset _notify_runner
     fi
 fi
 
