@@ -14,12 +14,15 @@ flowchart TD
     end
 
     subgraph AT["2 · AT install — automatic"]
-        U["yay -S pkg / yay -Syu / yay &lt;term&gt;"] --> GATE["aurscan editor-gate<br/>static rules + Claude LLM"]
+        U["yay -S pkg / yay -Syu / yay &lt;term&gt;"] --> SEL["UpgradeSelect<br/>age warn"]
+        SEL --> GATE["aurscan editor-gate<br/>static rules + Claude LLM"]
         GATE -->|non-CLEAN| AB["build / install aborted"]
-        GATE -->|CLEAN| LUA["yay init.lua hooks<br/>age warn · pattern block · log"]
-        LUA --> TH["traur pacman hook<br/>trust score · AbortOnFail"]
+        GATE -->|CLEAN| PRI["AURPreInstall<br/>pattern block"]
+        PRI -->|blocked| AB
+        PRI -->|OK| TH["traur pacman hook<br/>trust score · AbortOnFail"]
         TH -->|low trust| AB
-        TH -->|OK| OK["package installed"]
+        TH -->|OK| POST["PostInstall<br/>log AUR installs"]
+        POST --> OK["package installed"]
     end
 
     subgraph AFTER["3 · AFTER install / always — automatic, root"]
