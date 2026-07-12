@@ -63,10 +63,13 @@ yay -S pkg / yay -Syu / yay <term>   (transparent — aurscan is wired in as yay
     │       ├── static rules (offline) — known campaign signatures
     │       ├── Claude LLM reads PKGBUILD — novel/obfuscated patterns
     │       └── non-CLEAN → build aborted;  CLEAN → build proceeds
-    └── yay init.lua hooks (independent offline layer)
-            ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
-            ├── AURPreInstall  — offline pattern check
-            └── PostInstall    — logs AUR installs
+    ├── yay init.lua hooks (independent offline layer)
+    │       ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
+    │       ├── AURPreInstall  — offline pattern check
+    │       └── PostInstall    — logs AUR installs
+    └── traur pacman hook (PreTransaction — every pacman install/upgrade, incl. repo pkgs)
+            ├── 279 heuristic signals — maintainer/metadata trust score
+            └── low trust → transaction aborted
 
 systemd system timer (weekly + on boot + after each pacman transaction)
     └── archcanary --full
