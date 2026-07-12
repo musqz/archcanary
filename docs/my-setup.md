@@ -72,19 +72,8 @@ traur — runs three ways:
           the GUI has no package name input
 
 yay install/upgrade  (yay -S <pkg>, yay -Syu, bare yay <term>)  — transparent, no alias
-    └── yay invokes its editor on each AUR PKGBUILD before building
-            ├── editor = aurscan-gate   (config.json editor= + editmenu=true)
-            │       └── aurscan-gate → aurscan-edit  (EDITOR/VISUAL cleared, gate-only)
-            │               ├── offline static rules — known campaign signatures
-            │               ├── Claude LLM reads the PKGBUILD — novel / obfuscated patterns
-            │               └── non-CLEAN → exit non-zero → yay aborts the build
-            │                              CLEAN → build proceeds (no manual editor opens)
-            └── yay 13.0 init.lua hooks (~/.config/yay/init.lua) — independent offline layer
-                    ├── UpgradeSelect  — warn if PKGBUILD modified < 3 days ago
-                    ├── AURPreInstall  — abort on malicious patterns
-                    │                    (npm atomic-lockfile, bun js-digest,
-                    │                     curl|bash / wget|sh download-exec)
-                    └── PostInstall    — log AUR installs (name + version)
+    └── editor-gate (aurscan / Claude) + yay init.lua hooks fire on every build
+            — see "yay 13.0 integration" below for the full breakdown
 
 standalone aurscan (manual — audit without installing)
     ├── aurscan <pkg>            — scan a single package
