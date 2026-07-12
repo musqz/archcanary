@@ -464,6 +464,33 @@ DESK
     fi
     rm -rf "$tmpdir3"
     rm -f "$allow_file2"
+
+    # Sub-test H: glob metacharacters in Exec= must not act as a find(1)
+    # wildcard — a literal "*" must not match an unrelated executable in the
+    # libdir and silently bypass the check (regression test for the
+    # glob-injection fix: find -name treats its argument as a pattern unless
+    # escaped, so an unescaped "*" would match the first executable found).
+    local tmpdir4 libdir2
+    tmpdir4=$(mktemp -d)
+    libdir2=$(mktemp -d)
+    mkdir -p "$tmpdir4/.config/autostart" "$libdir2/somepkg"
+    printf '#!/bin/sh\n' > "$libdir2/somepkg/some-real-helper"
+    chmod +x "$libdir2/somepkg/some-real-helper"
+    cat > "$tmpdir4/.config/autostart/glob.desktop" << 'DESK'
+[Desktop Entry]
+Type=Application
+Name=GlobAttempt
+Exec=*
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir4" AUTOSTART_LIBDIRS="$libdir2" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: suspicious autostart entry"* ]]; then
+        pass "check_autostart: glob metacharacter Exec=* does not bypass via find wildcard match"
+    else
+        fail "check_autostart: glob-injection regression — Exec=* should still WARNING, got rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir4" "$libdir2"
 }
 
 # ---------------------------------------------------------------------------

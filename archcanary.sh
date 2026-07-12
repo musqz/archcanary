@@ -1812,9 +1812,19 @@ check_autostart() {
                         # Not on $PATH — search the curated non-PATH system
                         # libdirs. A hit there is trusted outright (that's
                         # what the dir list represents); no prefix recheck.
+                        # find(1) -name treats its argument as a glob, not a
+                        # literal string — escape */?/[/] and backslash so an
+                        # attacker-controlled Exec=* (or similar) can't match
+                        # an arbitrary executable and bypass this check.
+                        local exec_glob_safe="$exec_val"
+                        exec_glob_safe="${exec_glob_safe//\\/\\\\}"
+                        exec_glob_safe="${exec_glob_safe//\*/\\*}"
+                        exec_glob_safe="${exec_glob_safe//\?/\\?}"
+                        exec_glob_safe="${exec_glob_safe//\[/\\[}"
+                        exec_glob_safe="${exec_glob_safe//\]/\\]}"
                         local libhit
                         libhit=$(find "${_autostart_libdirs[@]}" -mindepth 1 -maxdepth 3 \
-                            -type f -name "$exec_val" -perm -u+x 2>/dev/null | head -1)
+                            -type f -name "$exec_glob_safe" -perm -u+x 2>/dev/null | head -1)
                         [[ -z "$libhit" ]] && suspicious=true
                     fi
                 fi
