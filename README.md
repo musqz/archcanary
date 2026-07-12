@@ -46,7 +46,7 @@ archcanary integrates with and builds on the following:
 | [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) | Origin — the aur-malware-check script archcanary started from | — |
 | [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | LLM PKGBUILD scanner — Claude reads each PKGBUILD before `yay`/`paru` builds; reads `~/.config/aurscan/env` for archcanary GUI integration; install via AUR: `yay -S aurscan-manticore-git` | Optional |
 | [claude-code](https://code.claude.com/docs/en/setup) | `claude` CLI — LLM backend used by aurscan to analyse PKGBUILDs | Optional (via aurscan) |
-| [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 5 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) | Optional |
+| [traur](https://aur.archlinux.org/packages/traur) | Heuristic trust scanner — 279 signals across 4 weighted categories; runs automatically as a pacman PreTransaction hook (aborts the install on fail) and on demand (`traur scan <pkg>`) | Optional |
 | [yay](https://github.com/Jguer/yay) 13.0 | AUR helper with Lua hook support (`~/.config/yay/init.lua`) — upgrade age warnings, offline pattern check, install log | Optional |
 | [yad](https://github.com/v1cont/yad) | GTK dialog toolkit used by `archcanary-gui` | GUI only |
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Enumerates all loaded eBPF programs for rootkit detection | Optional (`--check-bpftool`) |

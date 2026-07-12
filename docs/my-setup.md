@@ -61,12 +61,12 @@ traur — runs three ways:
     │               └── useful as a periodic sweep alongside archcanary
     │
     └── terminal: traur scan <pkg>  (manually vet a package before installing)
-            └── 279 signals, 5 weighted categories
+            └── 279 signals, 4 weighted categories
                     ├── Pkgbuild (0.45)   — static analysis: shells, download-exec, obfuscation, exfil, miners
+                    │       └── Safety analysis sub-signals — char-by-char construction, high-entropy heredocs, indirect exec
                     ├── Behavioral (0.25) — maintainer: new account, batch creation, orphan takeover, typosquat
                     ├── Metadata (0.15)   — AUR page: votes, popularity, orphaned, flagged, missing URL
-                    ├── Temporal (0.15)   — git history: single commit, major rewrite, domain change, checksum drop
-                    └── Safety analysis   — char-by-char construction, high-entropy heredocs, indirect exec
+                    └── Temporal (0.15)   — git history: single commit, major rewrite, domain change, checksum drop
                             └── trust score + per-signal breakdown
     note: pre-install scan of a specific package requires the terminal —
           the GUI has no package name input
