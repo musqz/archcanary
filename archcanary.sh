@@ -2357,18 +2357,22 @@ if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
         # dbus-launch --autolaunch, which fails outright in both contexts and
         # prints "Failed to show notification" instead of popping up.
         _notify_runner=()
-        _notify_uid="$EUID"
         if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
             _notify_uid=$(id -u "$SUDO_USER" 2>/dev/null) || _notify_uid=""
             if [[ -n "$_notify_uid" && -S "/run/user/$_notify_uid/bus" ]]; then
                 _notify_runner=(sudo -u "$SUDO_USER" env "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$_notify_uid/bus")
             fi
-        elif [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-            _notify_xrd="/run/user/$_notify_uid"
+            unset _notify_uid
+        fi
+        # No SUDO_USER-targeted runner (not root, or the invoking user has no
+        # active session/runtime dir, or a systemd-timer root scan where
+        # SUDO_USER is unset) — fall back to our own uid's socket rather than
+        # leaving DBUS_SESSION_BUS_ADDRESS unset outright.
+        if [[ ${#_notify_runner[@]} -eq 0 && -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+            _notify_xrd="/run/user/$EUID"
             [[ -S "$_notify_xrd/bus" ]] && export DBUS_SESSION_BUS_ADDRESS="unix:path=$_notify_xrd/bus"
             unset _notify_xrd
         fi
-        unset _notify_uid
         # Only checks [1]/[2] (currently-installed / historically-installed foreign
         # packages) confirm an actual malicious package. Other checks at this exit
         # code (systemd, ebpf, autostart, etc.) flag suspicious artifacts, not
