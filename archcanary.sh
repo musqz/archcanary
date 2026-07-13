@@ -627,23 +627,42 @@ if [[ $EUID -eq 0 ]]; then
     unset _invoker_home
 fi
 
+# Resolves to the invoking user's login name when this script itself is
+# running as root (sudo's SUDO_USER, or pkexec's PKEXEC_UID — resolved via
+# getent since chown/sudo both reject a bare numeric "UID:" spec). Shared by
+# _chown_to_invoker and _run_as_invoker below.
+_invoker_user() {
+    [[ $EUID -ne 0 ]] && return 0
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+        printf '%s' "$SUDO_USER"
+    elif [[ -n "${PKEXEC_UID:-}" ]]; then
+        getent passwd "$PKEXEC_UID" | cut -d: -f1
+    fi
+}
+
 # When running under sudo or pkexec, chown a written file back to the invoking
-# user so that user-space config/log files are not left owned by root. Mirrors
-# the SUDO_USER/PKEXEC_UID resolution used for _invoker_home above — the
+# user so that user-space config/log files are not left owned by root — the
 # pkexec root-helper execs straight into this script with no code path of its
 # own left to fix ownership afterward.
 _chown_to_invoker() {
-    [[ $EUID -ne 0 ]] && return 0
-    local _invoker=""
-    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
-        _invoker="$SUDO_USER"
-    elif [[ -n "${PKEXEC_UID:-}" ]]; then
-        # chown rejects a bare numeric "UID:" spec ("invalid spec") — resolve
-        # to the login name first so the trailing-colon group reset works.
-        _invoker="$(getent passwd "$PKEXEC_UID" | cut -d: -f1)"
-    fi
+    local _invoker
+    _invoker="$(_invoker_user)"
     [[ -n "$_invoker" ]] && chown "$_invoker": "$1" 2>/dev/null
     return 0
+}
+
+# Runs a read-only command as the invoking user instead of root when this
+# script itself is running as root — e.g. `npm config get cache` doesn't need
+# root, and running it as root just leaves root-owned debug logs under the
+# invoking user's ~/.npm/_logs. No-op passthrough otherwise.
+_run_as_invoker() {
+    local _invoker
+    _invoker="$(_invoker_user)"
+    if [[ -n "$_invoker" ]]; then
+        sudo -u "$_invoker" "$@"
+    else
+        "$@"
+    fi
 }
 
 # systemd *system* services (and some cron contexts) start with no $HOME, which
@@ -1409,25 +1428,32 @@ check_npm_cache() {
     local pkgs=("${MALICIOUS_NPM_PKGS[@]}")
     local found_count=0
 
+    # Hoisted out of the loop: each is invariant per run (same output
+    # regardless of which package name is being checked), so calling them
+    # once per package was firing 2-3x redundant npm subprocesses per entry
+    # in the list — and, under sudo/pkexec, each one left a root-owned debug
+    # log in the invoking user's ~/.npm/_logs (npm 7+ logs every invocation).
+    local npm_cache global_root npm_cache_dir
+    npm_cache=$(_run_as_invoker npm cache ls 2>/dev/null)
+    global_root=$(_run_as_invoker npm root -g 2>/dev/null)
+    npm_cache_dir=$(_run_as_invoker npm config get cache 2>/dev/null)
+
     for pkg in "${pkgs[@]}"; do
-        local npm_cache
-        npm_cache=$(npm cache ls 2>/dev/null | grep "$pkg" || true)
-        if [[ -n "$npm_cache" ]]; then
+        local hit
+        hit=$(grep "$pkg" <<< "$npm_cache" || true)
+        if [[ -n "$hit" ]]; then
             echo "  WARNING: $pkg found in npm cache:"
             # shellcheck disable=SC2001
-            sed 's/^/    /' <<< "$npm_cache"
+            sed 's/^/    /' <<< "$hit"
             found_count=2
         fi
 
-        local global_mod
-        global_mod=$(npm root -g 2>/dev/null)/"$pkg"
+        local global_mod="$global_root/$pkg"
         if [[ -d "$global_mod" ]]; then
             echo "  WARNING: $pkg found in global node_modules"
             found_count=2
         fi
 
-        local npm_cache_dir
-        npm_cache_dir=$(npm config get cache 2>/dev/null)
         if [[ -d "$npm_cache_dir" ]]; then
             local cached
             cached=$(find "$npm_cache_dir" -name "*${pkg}*" -type d 2>/dev/null | head -5 || true)
