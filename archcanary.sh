@@ -627,11 +627,19 @@ if [[ $EUID -eq 0 ]]; then
     unset _invoker_home
 fi
 
-# When running under sudo, chown a written file back to the invoking user so
-# that user-space config files are not left owned by root.
+# When running under sudo or pkexec, chown a written file back to the invoking
+# user so that user-space config/log files are not left owned by root. Mirrors
+# the SUDO_USER/PKEXEC_UID resolution used for _invoker_home above — the
+# pkexec root-helper execs straight into this script with no code path of its
+# own left to fix ownership afterward.
 _chown_to_invoker() {
-    [[ $EUID -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]] \
-        && chown "$SUDO_USER" "$1" 2>/dev/null || true
+    [[ $EUID -ne 0 ]] && return 0
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+        chown "$SUDO_USER" "$1" 2>/dev/null
+    elif [[ -n "${PKEXEC_UID:-}" ]]; then
+        chown "$PKEXEC_UID" "$1" 2>/dev/null
+    fi
+    return 0
 }
 
 # systemd *system* services (and some cron contexts) start with no $HOME, which
@@ -2395,5 +2403,9 @@ if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
         unset _notify_runner
     fi
 fi
+
+# Log was created while running as root (sudo/pkexec) but lives under the
+# invoking user's ~/.cache — hand it back so it isn't left root-owned there.
+_chown_to_invoker "$LOG_FILE"
 
 exit "$EXIT_CODE"
