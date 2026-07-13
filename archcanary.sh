@@ -126,6 +126,10 @@ for arg in "$@"; do
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
         --run-lynis)             RUN_LYNIS=true ;;
+        --version|-V)
+            echo "Archcanary v${SCRIPT_VERSION}"
+            exit 0
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -164,6 +168,7 @@ for arg in "$@"; do
             echo "                            (tool names like aurscan/traur/yad also map to a section)"
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
+            echo "  --version, -V             Show version and exit"
             echo "  --help, -h                Show this help"
             exit 0
             ;;
