@@ -634,11 +634,15 @@ fi
 # own left to fix ownership afterward.
 _chown_to_invoker() {
     [[ $EUID -ne 0 ]] && return 0
+    local _invoker=""
     if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
-        chown "$SUDO_USER": "$1" 2>/dev/null
+        _invoker="$SUDO_USER"
     elif [[ -n "${PKEXEC_UID:-}" ]]; then
-        chown "$PKEXEC_UID": "$1" 2>/dev/null
+        # chown rejects a bare numeric "UID:" spec ("invalid spec") — resolve
+        # to the login name first so the trailing-colon group reset works.
+        _invoker="$(getent passwd "$PKEXEC_UID" | cut -d: -f1)"
     fi
+    [[ -n "$_invoker" ]] && chown "$_invoker": "$1" 2>/dev/null
     return 0
 }
 
