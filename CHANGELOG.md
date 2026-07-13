@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.1.12 (2026-07-13)
 
-- Fix: `sudo archcanary ...` and GUI root scans (pkexec) left their log file — and, via the same `_chown_to_invoker` gap, the package-list cache and config-editor writes — owned by root inside the invoking user's `~/.cache`/`~/.config`. `_chown_to_invoker` only checked `SUDO_USER`, so the pkexec path (`PKEXEC_UID` only) was a silent no-op, and `LOG_FILE` itself was never passed through it at all. Users upgrading should run `sudo chown $USER:$USER ~/.cache/archcanary/*.log` once to clean up logs left behind by earlier versions.
+- Fix: `sudo archcanary ...` and GUI root scans (pkexec) left their log file — and, via the same `_chown_to_invoker` gap, the package-list cache and config-editor writes — owned by root inside the invoking user's `~/.cache`/`~/.config`. `_chown_to_invoker` only checked `SUDO_USER`, so the pkexec path (`PKEXEC_UID` only) was a silent no-op, and `LOG_FILE` itself was never passed through it at all. Also fixed: the chown only reset owner, not group (`chown user:` now resets both), and the `PKEXEC_UID` branch resolves to a login name via `getent passwd` first since `chown` rejects a bare numeric `UID:` spec outright (`invalid spec`). Users upgrading should run `sudo chown $USER:$USER ~/.cache/archcanary/*.log` once to clean up logs left behind by earlier versions.
 
 ## v0.1.11 (2026-07-12)
 
