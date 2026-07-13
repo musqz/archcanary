@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: `sudo archcanary ...` and GUI root scans (pkexec) left their log file — and, via the same `_chown_to_invoker` gap, the package-list cache and config-editor writes — owned by root inside the invoking user's `~/.cache`/`~/.config`. `_chown_to_invoker` only checked `SUDO_USER`, so the pkexec path (`PKEXEC_UID` only) was a silent no-op, and `LOG_FILE` itself was never passed through it at all. Users upgrading should run `sudo chown $USER:$USER ~/.cache/archcanary/*.log` once to clean up logs left behind by earlier versions.
+
 ## v0.1.11 (2026-07-12)
 
 - New: **autostart allowlist** (`/etc/archcanary/autostart_allowlist.conf`) — mirrors the DKMS/systemd/bpftool allowlists for `check_autostart` entries that can't be auto-resolved. `check_autostart` also gained a non-PATH fallback (searches `/usr/lib`, `/usr/libexec`) before flagging a bare `Exec=` name as suspicious, fixing false positives for package-private helper binaries (e.g. `zeitgeist-datahub`) that never sit on `$PATH`.
