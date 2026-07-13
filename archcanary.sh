@@ -635,9 +635,9 @@ fi
 _chown_to_invoker() {
     [[ $EUID -ne 0 ]] && return 0
     if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
-        chown "$SUDO_USER" "$1" 2>/dev/null
+        chown "$SUDO_USER": "$1" 2>/dev/null
     elif [[ -n "${PKEXEC_UID:-}" ]]; then
-        chown "$PKEXEC_UID" "$1" 2>/dev/null
+        chown "$PKEXEC_UID": "$1" 2>/dev/null
     fi
     return 0
 }
