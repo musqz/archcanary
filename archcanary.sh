@@ -1829,6 +1829,15 @@ check_autostart() {
     local desktop_dir="$home_dir/.config/autostart"
     if [[ -d "$desktop_dir" ]]; then
         while IFS= read -r desktop; do
+            # Hidden=true / X-GNOME-Autostart-enabled=false is how DE autostart
+            # managers (incl. Mabox's) disable an entry without deleting the
+            # file — per the XDG spec, it must be treated as if the file does
+            # not exist. Such an entry can never actually execute, so there is
+            # nothing to warn about regardless of whether Exec= resolves.
+            if grep -qE '^[[:space:]]*Hidden[[:space:]]*=[[:space:]]*true[[:space:]]*$' "$desktop" 2>/dev/null || \
+               grep -qE '^[[:space:]]*X-GNOME-Autostart-enabled[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$desktop" 2>/dev/null; then
+                continue
+            fi
             while IFS= read -r line; do
                 [[ "$line" =~ ^Exec= ]] || continue
                 local exec_val="${line#Exec=}"

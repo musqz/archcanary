@@ -491,6 +491,51 @@ DESK
         fail "check_autostart: glob-injection regression — Exec=* should still WARNING, got rc=$rc, out: $out"
     fi
     rm -rf "$tmpdir4" "$libdir2"
+
+    # Sub-test I: Hidden=true entry with an unresolvable Exec= must NOT warn —
+    # per the XDG spec this is how DE autostart managers (Mabox included)
+    # disable an entry without deleting the file; it can never execute, so
+    # there is nothing to flag regardless of whether Exec= resolves.
+    local tmpdir5
+    tmpdir5=$(mktemp -d)
+    mkdir -p "$tmpdir5/.config/autostart"
+    cat > "$tmpdir5/.config/autostart/hidden.desktop" << 'DESK'
+[Desktop Entry]
+Type=Application
+Name=Hidden
+Exec=totally-unresolvable-binary
+Hidden=true
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir5" AUTOSTART_LIBDIRS="/nonexistent-dir-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: Hidden=true entry skipped even with unresolvable Exec="
+    else
+        fail "check_autostart: Hidden=true entry should be skipped, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir5"
+
+    # Sub-test J: X-GNOME-Autostart-enabled=false behaves the same as Hidden=true
+    local tmpdir6
+    tmpdir6=$(mktemp -d)
+    mkdir -p "$tmpdir6/.config/autostart"
+    cat > "$tmpdir6/.config/autostart/gnome-disabled.desktop" << 'DESK'
+[Desktop Entry]
+Type=Application
+Name=GnomeDisabled
+Exec=totally-unresolvable-binary
+X-GNOME-Autostart-enabled=false
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir6" AUTOSTART_LIBDIRS="/nonexistent-dir-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: X-GNOME-Autostart-enabled=false entry skipped"
+    else
+        fail "check_autostart: X-GNOME-Autostart-enabled=false should be skipped, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir6"
 }
 
 # ---------------------------------------------------------------------------
