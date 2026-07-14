@@ -12,7 +12,7 @@ for candidate in \
 done
 
 if [[ -z "$MAIN_SCRIPT" ]]; then
-    yad --error \
+    yad --image=dialog-error \
         --title="Archcanary" \
         --window-icon=security-high --center \
         --text="<b>archcanary not found.</b>\n\nRun <tt>./install.sh</tt> first." \
@@ -216,7 +216,7 @@ _show_infected_dialog() {
     else
         step1="Review and remove/disable the flagged artifact(s) shown in the\n      scan output (systemd unit, eBPF program, autostart entry, etc.)."
     fi
-    yad --error \
+    yad --image=dialog-error \
         --title="Infected — Archcanary" \
         --window-icon=security-high --center \
         --width=520 \
@@ -272,7 +272,7 @@ _allowlistable_finding_present() {
 _edit_conf_file() {
     local title="$1" cfg="$2"
     if [[ ! -f "$cfg" ]]; then
-        yad --warning \
+        yad --image=dialog-warning \
             --title="$title — Archcanary" \
             --window-icon=security-high --center \
             --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> first to create it." \
@@ -293,7 +293,7 @@ _edit_conf_file() {
         > "$tmpout" 2>/dev/null; then
         # Write back to /etc as root — pkexec prompts via the polkit agent.
         if [[ -z "$PKEXEC" ]] || ! "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
-            yad --error --title="Archcanary" --window-icon=security-high --center \
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -385,14 +385,14 @@ edit_audit_rules() {
         --button="Cancel:1" \
         > "$tmpout" 2>/dev/null; then
         if [[ ! -s "$tmpout" ]]; then
-            yad --error --title="Archcanary" --window-icon=security-high --center \
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
                 --text="Not saved: rules file is empty." \
                 --width=420 2>/dev/null || true
         elif [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
             [[ -f "$legacy_cfg" ]] && "$PKEXEC" rm -f "$legacy_cfg" 2>/dev/null || true
             "$PKEXEC" systemctl restart auditd 2>/dev/null || true
         else
-            yad --error --title="Archcanary" --window-icon=security-high --center \
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -425,7 +425,7 @@ edit_lynis_config() {
         if [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout.new" >/dev/null 2>&1; then
             true
         else
-            yad --error --title="Archcanary" --window-icon=security-high --center \
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -436,11 +436,10 @@ edit_lynis_config() {
 show_about() {
     local version repo="https://github.com/musqz/archcanary"
     version=$(grep -oP '(?<=SCRIPT_VERSION=")[^"]+' "$MAIN_SCRIPT" 2>/dev/null || echo "unknown")
-    yad --info \
+    yad --image=dialog-information \
         --title="About Archcanary" \
         --window-icon=security-high --center \
         --width=440 --height=240 \
-        --no-wrap \
         --button="Close":0 \
         --text="<b>Archcanary</b>  v${version}
 
@@ -563,7 +562,7 @@ GUIDE
         [[ -n "$new_timeout" && "$new_timeout" != "180" ]] && printf 'AURSCAN_TIMEOUT=%s\n' "$new_timeout"
     } > "$env_file"
 
-    yad --info \
+    yad --image=dialog-information \
         --title="aurscan" \
         --window-icon=security-high --center \
         --text="Settings saved to\n<tt>$env_file</tt>" \
@@ -643,7 +642,7 @@ CONF
         cp "$tmpout" "$conf"
         local n
         n=$(grep -c '^[^#[:space:]]' "$conf" 2>/dev/null || true)
-        yad --info \
+        yad --image=dialog-information \
             --title="Extra Malware Lists — Archcanary" \
             --window-icon=security-high --center \
             --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Full scan</b> to fetch any new URLs." \
@@ -660,7 +659,7 @@ run_action() {
     local needs_root="${NEEDS_ROOT[$idx]}"
 
     if [[ "$idx" -eq 16 || "$idx" -eq 17 ]] && ! $HAS_LYNIS; then
-        yad --info \
+        yad --image=dialog-information \
             --title="Lynis — Archcanary" \
             --window-icon=security-high --center \
             --text="<b>Lynis</b> is not installed.\n\nInstall from official repos:\n  <tt>sudo pacman -S lynis</tt>" \
@@ -691,7 +690,7 @@ run_action() {
 
     if [[ "$flags" == "__traur__" ]]; then
         if ! $HAS_TRAUR; then
-            yad --warning \
+            yad --image=dialog-warning \
                 --title="traur not installed" \
                 --window-icon=security-high --center \
                 --text="<b>traur</b> is not installed.\n\nInstall it from AUR:\n  <tt>${AUR_HELPER} -S traur</tt>" \
@@ -715,7 +714,7 @@ run_action() {
 
     if [[ "$needs_root" == "true" ]]; then
         if ! $HAS_ROOT; then
-            yad --warning \
+            yad --image=dialog-warning \
                 --title="Root helper not installed" \
                 --window-icon=security-high --center \
                 --text="The system root helper is not installed.\n\nRun:\n  <b>./install.sh --system</b>\n\nto enable root-requiring checks." \
@@ -803,7 +802,7 @@ run_action() {
             wait "$yad_pid" 2>/dev/null || true
             rm -f "$tmpout"
             [[ $pkexec_exit -ne 0 && $pkexec_exit -ne 126 ]] && \
-                yad --error --title="Archcanary" \
+                yad --image=dialog-error --title="Archcanary" \
                     --window-icon=security-high --center \
                     --text="pkexec failed (exit $pkexec_exit)" \
                     --width=360 2>/dev/null || true
