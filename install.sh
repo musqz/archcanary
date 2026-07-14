@@ -223,7 +223,7 @@ if $SYSTEM; then
     echo
     echo "Installing system components (requires root)..."
     SYSTEM_LIB="/usr/lib/archcanary"
-    sudo mkdir -p "$SYSTEM_LIB"
+    sudo install -d -m 755 "$SYSTEM_LIB"
     sudo cp "$REPO_DIR/archcanary.sh" "$SYSTEM_LIB/archcanary.sh"
     sudo chmod 755 "$SYSTEM_LIB/archcanary.sh"
     sudo cp "$REPO_DIR/lib/archcanary-root-helper" "$SYSTEM_LIB/root-helper"
