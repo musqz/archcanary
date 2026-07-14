@@ -448,7 +448,8 @@ Security scanner for Arch Linux — detects malicious packages,
 suspicious systemd units, eBPF backdoors, rogue kernel modules,
 and more.
 
-Source: <a href=\"${repo}\">${repo}</a>"
+Source: <a href=\"${repo}\">${repo}</a>" \
+        2>/dev/null || true
 }
 
 aurscan_settings() {
