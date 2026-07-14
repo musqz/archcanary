@@ -195,9 +195,14 @@ test_cli_flag() {
     log_file=$(mktemp)
 
     # Run via env var (existing path)
+    # Pin chaos-rat/russian-spam lists to an empty fixture so the count isn't
+    # inflated by real lists cached under this machine's ~/.config/archcanary.
     local result=0
     PACKAGE_LIST_FILE="$SCRIPT_DIR/fake_package_lists/simple.txt" \
-    "$REPO_DIR/archcanary.sh" --log-file="$log_file" >/dev/null 2>&1 || true
+    "$REPO_DIR/archcanary.sh" \
+        --chaos-rat-list="$SCRIPT_DIR/fake_package_lists/empty.txt" \
+        --russian-spam-list="$SCRIPT_DIR/fake_package_lists/empty.txt" \
+        --log-file="$log_file" >/dev/null 2>&1 || true
     grep -q "Packages checked: 10" "$log_file" || result=$?
 
     if [[ $result -eq 0 ]]; then
@@ -207,6 +212,8 @@ test_cli_flag() {
         result=0
         "$REPO_DIR/archcanary.sh" \
             --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
+            --chaos-rat-list="$SCRIPT_DIR/fake_package_lists/empty.txt" \
+            --russian-spam-list="$SCRIPT_DIR/fake_package_lists/empty.txt" \
             --log-file="$log_file" >/dev/null 2>&1 || true
         grep -q "Packages checked: 10" "$log_file" || result=$?
         if [[ $result -eq 0 ]]; then
