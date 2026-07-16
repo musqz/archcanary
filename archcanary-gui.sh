@@ -435,7 +435,7 @@ edit_lynis_config() {
 
 show_about() {
     local version repo="https://github.com/musqz/archcanary"
-    version=$(grep -oP '(?<=SCRIPT_VERSION=")[^"]+' "$MAIN_SCRIPT" 2>/dev/null || echo "unknown")
+    version=$("$MAIN_SCRIPT" --version 2>/dev/null | grep -oP '(?<=Archcanary v).+' || echo "unknown")
     yad --image=dialog-information \
         --title="About Archcanary" \
         --window-icon=security-high --center \
