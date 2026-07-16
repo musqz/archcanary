@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: `archcanary -V`/`--version` and the GUI's About dialog reported a stale version after upgrading — `archcanary.sh` carried its own hardcoded `SCRIPT_VERSION`, separate from `version.txt`, and the v0.1.12 bump only updated `version.txt`. `install.sh` now stamps the real version from `version.txt` into every installed copy of `archcanary.sh` (user bin, system bin, and `/usr/lib/archcanary`) at install time, making `version.txt` the actual single source of truth; running the script unstamped straight from a git checkout falls back to reading the sibling `version.txt` directly. The GUI's About dialog now calls `archcanary --version` instead of grepping the script's source for `SCRIPT_VERSION=`.
+
 ## v0.1.12 (2026-07-13)
 
 - Fix: `sudo archcanary ...` and GUI root scans (pkexec) left their log file — and, via the same `_chown_to_invoker` gap, the package-list cache and config-editor writes — owned by root inside the invoking user's `~/.cache`/`~/.config`. `_chown_to_invoker` only checked `SUDO_USER`, so the pkexec path (`PKEXEC_UID` only) was a silent no-op, and `LOG_FILE` itself was never passed through it at all. Also fixed: the chown only reset owner, not group (`chown user:` now resets both), and the `PKEXEC_UID` branch resolves to a login name via `getent passwd` first since `chown` rejects a bare numeric `UID:` spec outright (`invalid spec`). Users upgrading should run `sudo chown $USER:$USER ~/.cache/archcanary/*.log` once to clean up logs left behind by earlier versions.

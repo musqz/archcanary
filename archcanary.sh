@@ -41,7 +41,15 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="0.1.11"
+SCRIPT_VERSION="@VERSION@"
+if [[ "$SCRIPT_VERSION" == *"@"* ]]; then
+    # Unstamped — running straight from a git checkout rather than an
+    # install.sh-installed copy. Fall back to the sibling version.txt.
+    # (Checked via a literal "@" rather than comparing against "@VERSION@"
+    # itself — install.sh's sed for the placeholder would otherwise also
+    # rewrite that string here and break the check on stamped copies.)
+    SCRIPT_VERSION=$(cat "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/version.txt" 2>/dev/null || echo "unknown")
+fi
 
 # ---------------------------------------------------------------------------
 # Configuration

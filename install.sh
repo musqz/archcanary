@@ -18,6 +18,7 @@ if [[ $EUID -eq 0 ]]; then
 fi
 
 REPO_DIR="$(dirname "$(realpath "$0")")"
+_ver=$(cat "$REPO_DIR/version.txt" 2>/dev/null || echo "unknown")
 
 # Determine install dir: prefer the XDG ~/.local/bin, fall back to ~/bin
 DEFAULT_BIN=""
@@ -152,6 +153,7 @@ mkdir -p "$CONFIG_DIR"
 if $SYSTEM; then
     sudo install -m 755 "$REPO_DIR/archcanary.sh"    "$SYSTEM_BIN/archcanary"
     sudo install -m 755 "$REPO_DIR/archcanary-gui.sh" "$SYSTEM_BIN/archcanary-gui"
+    sudo sed -i "s/@VERSION@/$_ver/" "$SYSTEM_BIN/archcanary"
     echo "  installed: $SYSTEM_BIN/archcanary"
     echo "  installed: $SYSTEM_BIN/archcanary-gui"
     _removed_user=false
@@ -163,7 +165,6 @@ if $SYSTEM; then
         fi
     done
     sudo install -d -m 755 /usr/share/man/man1
-    _ver=$(cat "$REPO_DIR/version.txt" 2>/dev/null || echo "unknown")
     sed "s/@VERSION@/$_ver/" "$REPO_DIR/man/archcanary.1" \
         | sudo tee /usr/share/man/man1/archcanary.1 >/dev/null
     sudo chmod 644 /usr/share/man/man1/archcanary.1
@@ -172,6 +173,7 @@ else
     mkdir -p "$USER_BIN"
     install -m 755 "$REPO_DIR/archcanary.sh"    "$USER_BIN/archcanary"
     install -m 755 "$REPO_DIR/archcanary-gui.sh" "$USER_BIN/archcanary-gui"
+    sed -i "s/@VERSION@/$_ver/" "$USER_BIN/archcanary"
     echo "  installed: $USER_BIN/archcanary"
     echo "  installed: $USER_BIN/archcanary-gui"
     _removed_system=false
@@ -184,7 +186,6 @@ else
     done
     MAN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/man/man1"
     mkdir -p "$MAN_DIR"
-    _ver=$(cat "$REPO_DIR/version.txt" 2>/dev/null || echo "unknown")
     sed "s/@VERSION@/$_ver/" "$REPO_DIR/man/archcanary.1" > "$MAN_DIR/archcanary.1"
     chmod 644 "$MAN_DIR/archcanary.1"
     echo "  installed: $MAN_DIR/archcanary.1"
@@ -225,6 +226,7 @@ if $SYSTEM; then
     SYSTEM_LIB="/usr/lib/archcanary"
     sudo install -d -m 755 "$SYSTEM_LIB"
     sudo cp "$REPO_DIR/archcanary.sh" "$SYSTEM_LIB/archcanary.sh"
+    sudo sed -i "s/@VERSION@/$_ver/" "$SYSTEM_LIB/archcanary.sh"
     sudo chmod 755 "$SYSTEM_LIB/archcanary.sh"
     sudo cp "$REPO_DIR/lib/archcanary-root-helper" "$SYSTEM_LIB/root-helper"
     sudo chown root:root "$SYSTEM_LIB/root-helper"
