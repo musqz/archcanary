@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.13 (2026-07-16)
 
 - Fix: `archcanary -V`/`--version` and the GUI's About dialog reported a stale version after upgrading — `archcanary.sh` carried its own hardcoded `SCRIPT_VERSION`, separate from `version.txt`, and the v0.1.12 bump only updated `version.txt`. `install.sh` now stamps the real version from `version.txt` into every installed copy of `archcanary.sh` (user bin, system bin, and `/usr/lib/archcanary`) at install time, making `version.txt` the actual single source of truth; running the script unstamped straight from a git checkout falls back to reading the sibling `version.txt` directly. The GUI's About dialog now calls `archcanary --version` instead of grepping the script's source for `SCRIPT_VERSION=`.
 
