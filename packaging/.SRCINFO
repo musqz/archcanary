@@ -1,0 +1,21 @@
+pkgbase = archcanary
+	pkgdesc = Layered security detection stack for Arch Linux — malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering
+	pkgver = 0.1.14
+	pkgrel = 1
+	url = https://github.com/musqz/archcanary
+	install = archcanary.install
+	arch = any
+	license = MIT
+	depends = bash
+	depends = pacman
+	optdepends = yad: GTK GUI frontend (archcanary-gui)
+	optdepends = libnotify: desktop alerts on infected scan result
+	optdepends = polkit: GUI privilege escalation for root checks
+	optdepends = bpf: bpftool for eBPF rootkit detection
+	optdepends = yay: AUR helper with Lua hook support
+	optdepends = aurscan: LLM-based PKGBUILD scanner (pre-install gate)
+	backup = etc/archcanary/dkms_allowlist.conf
+	source = archcanary-0.1.14.tar.gz::https://github.com/musqz/archcanary/archive/v0.1.14.tar.gz
+	sha256sums = ca35d9680f184cc6e337fcd5ecd4634bd877d56f9a7650c257681a8375a32459
+
+pkgname = archcanary
