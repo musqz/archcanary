@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.14 (2026-07-18)
+
+- Fix: `archcanary.service` (root system scan, triggered by `archcanary.timer` on boot/weekly) failed on every fresh `--system`/AUR install with `ERROR: Malicious npm package list not found`. The repo-layout reorg (#40) had updated `archcanary.sh`'s bundled-list fallback to expect a `lists/` subdir, but `install.sh --system` and the AUR `PKGBUILD` both deploy the lists flat into `/usr/lib/archcanary/`, alongside the script — root's `$HOME` is deliberately never seeded, so the root scan had no working fallback and exited 1 immediately. `_bundled_list_path()` now checks the flat (installed) layout first, then the `lists/` (repo checkout) layout.
+
 ## v0.1.13 (2026-07-16)
 
 - Fix: `archcanary -V`/`--version` and the GUI's About dialog reported a stale version after upgrading — `archcanary.sh` carried its own hardcoded `SCRIPT_VERSION`, separate from `version.txt`, and the v0.1.12 bump only updated `version.txt`. `install.sh` now stamps the real version from `version.txt` into every installed copy of `archcanary.sh` (user bin, system bin, and `/usr/lib/archcanary`) at install time, making `version.txt` the actual single source of truth; running the script unstamped straight from a git checkout falls back to reading the sibling `version.txt` directly. The GUI's About dialog now calls `archcanary --version` instead of grepping the script's source for `SCRIPT_VERSION=`.
