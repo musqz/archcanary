@@ -23,6 +23,12 @@ sha256sums=('ca35d9680f184cc6e337fcd5ecd4634bd877d56f9a7650c257681a8375a32459')
 package() {
   cd "$srcdir/$pkgname-$pkgver"
 
+  # Stamp the real version into the placeholder install.sh normally sed's at
+  # install time — package() bypasses install.sh entirely, so without this
+  # every installed copy keeps the literal "@VERSION@" and -V/About show
+  # "unknown" (archcanary-gui's About dialog runs `archcanary --version`).
+  sed -i "s/@VERSION@/$pkgver/" archcanary.sh
+
   # Main user-facing binaries
   install -Dm755 archcanary.sh    "$pkgdir/usr/bin/archcanary"
   install -Dm755 archcanary-gui.sh "$pkgdir/usr/bin/archcanary-gui"
