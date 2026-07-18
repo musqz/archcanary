@@ -786,9 +786,24 @@ if [[ -r "$_auto_cfg" ]]; then    # skip if missing/unreadable (don't abort unde
 fi
 unset _auto_cfg _al
 
+# Resolves a bundled data file next to the running script. Checks the flat
+# layout first (/usr/lib/archcanary/<file> — how install.sh --system and the
+# AUR package deploy it, since root's $HOME isn't seeded) and falls back to
+# the lists/ subdir layout (repo checkout, ./archcanary.sh run in place).
+_bundled_list_path() {
+    local _dir _f
+    _dir="$(dirname "$(realpath "$0")")"
+    for _f in "$_dir/$1" "$_dir/lists/$1"; do
+        if [[ -f "$_f" ]]; then
+            printf '%s' "$_f"
+            return 0
+        fi
+    done
+    return 1
+}
+
 if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
-    _bundled="$(dirname "$(realpath "$0")")/lists/malicious_npm_packages.txt"
-    if [[ -f "$_bundled" ]]; then
+    if _bundled="$(_bundled_list_path malicious_npm_packages.txt)"; then
         cp "$_bundled" "$MALICIOUS_NPM_LIST"
     else
         echo >&2 "ERROR: Malicious npm package list not found: $MALICIOUS_NPM_LIST"
@@ -798,13 +813,11 @@ if [[ ! -f "$MALICIOUS_NPM_LIST" ]]; then
 fi
 
 if [[ ! -f "$CHAOS_RAT_LIST" ]]; then
-    _bundled="$(dirname "$(realpath "$0")")/lists/chaos_rat_packages.txt"
-    [[ -f "$_bundled" ]] && cp "$_bundled" "$CHAOS_RAT_LIST"
+    _bundled="$(_bundled_list_path chaos_rat_packages.txt)" && cp "$_bundled" "$CHAOS_RAT_LIST"
 fi
 
 if [[ ! -f "$RUSSIAN_SPAM_LIST" ]]; then
-    _bundled="$(dirname "$(realpath "$0")")/lists/malicious_russian_spam_packages.txt"
-    [[ -f "$_bundled" ]] && cp "$_bundled" "$RUSSIAN_SPAM_LIST"
+    _bundled="$(_bundled_list_path malicious_russian_spam_packages.txt)" && cp "$_bundled" "$RUSSIAN_SPAM_LIST"
 fi
 
 if [[ ! -f "$EXTRA_LISTS_CONF" ]]; then
@@ -889,8 +902,7 @@ load_packages() {
     fi
 
     if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
-        _bundled="$(dirname "$(realpath "$0")")/lists/package_list.txt"
-        if [[ -f "$_bundled" ]]; then
+        if _bundled="$(_bundled_list_path package_list.txt)"; then
             cp "$_bundled" "$PACKAGE_LIST_FILE"
         else
             echo >&2 "ERROR: Package list not found: $PACKAGE_LIST_FILE"
