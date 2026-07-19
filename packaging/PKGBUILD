@@ -18,7 +18,7 @@ optdepends=(
 backup=('etc/archcanary/dkms_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/musqz/$pkgname/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('f4e38716f4a0129bd3293c4d519eb2f07deaaf756193f83f3b92f1ce8d29bc7e')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
