@@ -166,11 +166,25 @@ Every scan prints a per-check summary before the final verdict:
 ./install.sh uninstall --system
 ```
 
-`--system` sets up:
+`--system` sets up and **enables**:
 - Root system timer: weekly + on boot + after each pacman transaction
 - User notifier: watches `/var/lib/archcanary/last-scan.log`, fires a desktop alert on `INFECTED`
 - pkexec root helper for GUI-triggered root checks (eBPF, bpftool, kmod, Lynis)
 - auditd ruleset at `/etc/audit/rules.d/30-archcanary.rules` when auditd is installed (seeded from template, editable via GUI)
+
+### Package install (pacman / AUR)
+
+Installing the built package (`makepkg -si`, or via an AUR helper) drops all the same files, but — per Arch packaging convention — **never auto-enables services**. You must enable the timers yourself after install:
+
+```bash
+# Root system timer (weekly + on boot + after each pacman transaction)
+sudo systemctl enable --now archcanary.timer archcanary.path
+
+# User-scope scan and desktop notifier
+systemctl --user enable --now archcanary-user.timer archcanary-notify.path
+```
+
+Until you run these, `archcanary --doctor` will correctly show `[WARN]` for all four automation entries — that's expected, not a bug. Re-run `--doctor` after enabling to confirm they flip to `[ OK ]`.
 
 See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.md](docs/my-setup.md) for the full personal stack and reinstall steps.
 
