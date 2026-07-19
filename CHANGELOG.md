@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.15 (2026-07-19)
+
+- Fix: `--doctor`'s "User install" section reported `[MISS]` for `~/.local/bin/archcanary` and `~/.local/bin/archcanary-gui` on every pacman/AUR install. `system_installed` detection only checked `/usr/local/bin/archcanary` (the manual `install.sh --system` path), never `/usr/bin/archcanary` (where the PKGBUILD actually installs it) — so package installs always failed the check and got flagged for per-user copies that were never expected to exist alongside a system-wide package.
+
 ## v0.1.14 (2026-07-18)
 
 - Fix: `archcanary.service` (root system scan, triggered by `archcanary.timer` on boot/weekly) failed on every fresh `--system`/AUR install with `ERROR: Malicious npm package list not found`. The repo-layout reorg (#40) had updated `archcanary.sh`'s bundled-list fallback to expect a `lists/` subdir, but `install.sh --system` and the AUR `PKGBUILD` both deploy the lists flat into `/usr/lib/archcanary/`, alongside the script — root's `$HOME` is deliberately never seeded, so the root scan had no working fallback and exited 1 immediately. `_bundled_list_path()` now checks the flat (installed) layout first, then the `lists/` (repo checkout) layout.
