@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.16 (2026-07-19)
 
 - Change: `install.sh --system` no longer auto-enables the systemd timers (`archcanary.timer`, `archcanary.path`, `archcanary-user.timer`, `archcanary-notify.path`) — it now installs the units and prints the same `systemctl enable --now` commands the pacman/AUR package's `post_install` prints, so both install paths require the same explicit, manual activation step instead of one silently enabling behind the user's back.
 
