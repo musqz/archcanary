@@ -379,8 +379,7 @@ EOF
             "$REPO_DIR"/systemd/system/archcanary.path \
             /etc/systemd/system/
     sudo systemctl daemon-reload
-    sudo systemctl enable --now archcanary.timer archcanary.path
-    echo "  installed: /etc/systemd/system/archcanary.{service,timer,path} + -onchange.service (enabled)"
+    echo "  installed: /etc/systemd/system/archcanary.{service,timer,path} + -onchange.service (not enabled — see below)"
 
     # User-scope units: the user-level scan (npm/bun/pkgbuild caches, autostart —
     # run as you so they see your real home) + the notifier that watches the root
@@ -398,19 +397,18 @@ EOF
         sed -i "s|%h/.local/bin/archcanary|$SYSTEM_BIN/archcanary|g" \
             "$USER_UNITS/archcanary-user.service"
     fi
-    if systemctl --user daemon-reload 2>/dev/null; then
-        systemctl --user enable --now archcanary-notify.path 2>/dev/null || true
-        systemctl --user enable --now archcanary-user.timer 2>/dev/null || true
-        echo "  installed: $USER_UNITS/archcanary-user.{service,timer} + notify.{path,service} (enabled)"
-    else
-        echo "  installed: $USER_UNITS/archcanary-user.{service,timer} + notify.{path,service}"
-        echo "             (no user systemd session detected — enable later with:"
-        echo "              systemctl --user enable --now archcanary-user.timer archcanary-notify.path)"
-    fi
+    systemctl --user daemon-reload 2>/dev/null || true
+    echo "  installed: $USER_UNITS/archcanary-user.{service,timer} + notify.{path,service} (not enabled — see below)"
 
     echo
     echo "Root-requiring checks are also available in the GUI via pkexec."
     echo "Automated scan: weekly + on boot + after each pacman transaction (see docs/systemd.md)."
+    echo
+    echo "Enable the automated system scan (runs as root — weekly + on boot + after pacman):"
+    echo "  sudo systemctl enable --now archcanary.timer archcanary.path"
+    echo
+    echo "Enable the user-scope scan and result notifier (run as your user):"
+    echo "  systemctl --user enable --now archcanary-user.timer archcanary-notify.path"
 fi
 
 echo
