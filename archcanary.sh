@@ -265,7 +265,7 @@ run_doctor() {
     user_bin="$real_home/.local/bin"
     user_sd="${XDG_CONFIG_HOME:-$real_home/.config}/systemd/user"
     local system_installed=false
-    [[ -f /usr/local/bin/archcanary ]] && system_installed=true
+    [[ -f /usr/local/bin/archcanary || -f /usr/bin/archcanary ]] && system_installed=true
 
     # The repo-relative fix sources only exist when run from a clone; degrade
     # gracefully to a hint when run from an installed copy.
