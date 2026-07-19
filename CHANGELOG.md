@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Change: `install.sh --system` no longer auto-enables the systemd timers (`archcanary.timer`, `archcanary.path`, `archcanary-user.timer`, `archcanary-notify.path`) — it now installs the units and prints the same `systemctl enable --now` commands the pacman/AUR package's `post_install` prints, so both install paths require the same explicit, manual activation step instead of one silently enabling behind the user's back.
+
 ## v0.1.15 (2026-07-19)
 
 - Fix: `--doctor`'s "User install" section reported `[MISS]` for `~/.local/bin/archcanary` and `~/.local/bin/archcanary-gui` on every pacman/AUR install. `system_installed` detection only checked `/usr/local/bin/archcanary` (the manual `install.sh --system` path), never `/usr/bin/archcanary` (where the PKGBUILD actually installs it) — so package installs always failed the check and got flagged for per-user copies that were never expected to exist alongside a system-wide package.
