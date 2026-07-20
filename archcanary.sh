@@ -354,6 +354,8 @@ run_doctor() {
     }
     _have() { command -v "$1" >/dev/null 2>&1 && echo 0 || echo 1; }
     _file() { [[ -e $1 ]] && echo 0 || echo 1; }
+    # _marker PATTERN FILE — does FILE contain PATTERN (fixed string)? echo 0/1.
+    _marker() { grep -qF -- "$1" "$2" 2>/dev/null && echo 0 || echo 1; }
     # _dep LABEL CMD PKG PURPOSE FIX [VERSION_ARGS] — like _item but, in detail
     # mode, also reports the resolved path and version of an installed dep.
     # VERSION_ARGS is the EXACT version invocation (default "--version"); never
@@ -522,6 +524,15 @@ run_doctor() {
     if [[ -n ${want[external]:-} ]]; then
         printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
         local yay_init_lua="${XDG_CONFIG_HOME:-$real_home/.config}/yay/init.lua"
+        # Markers below are coupled to two OTHER projects' internal, unexported
+        # conventions (not a public API either project has committed to):
+        # aurscan's yayHookBegin/hookMarker constants (internal/yay/{yayhook,paru}.go)
+        # and archcanary's own configs/yay-init.lua header comment. If either
+        # project changes its string, update it here too — these checks fail
+        # silently (report a working hook as missing) rather than erroring out.
+        local _AURSCAN_YAY_MARKER='-- >>> aurscan begin'
+        local _AURSCAN_PARU_MARKER='# added by aurscan'
+        local _ARCHCANARY_LUA_MARKER='yay 13.0 Lua hooks for the AUR security stack'
         _opt_item "aurscan (pre-install PKGBUILD scanner)" \
             "$(command -v aurscan >/dev/null 2>&1 && echo 0 || echo 1)" \
             "" \
@@ -533,16 +544,16 @@ run_doctor() {
                 "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
             if command -v yay >/dev/null 2>&1; then
                 _opt_item "aurscan yay hook (AURPostDownload pre-build scan)" \
-                    "$(grep -q -- '-- >>> aurscan begin' "$yay_init_lua" 2>/dev/null && echo 0 || echo 1)" \
+                    "$(_marker "$_AURSCAN_YAY_MARKER" "$yay_init_lua")" \
                     "aurscan --install-yay-hook" \
-                    "marker: '-- >>> aurscan begin' in $yay_init_lua — without this, aurscan is installed but never runs"
+                    "marker: '$_AURSCAN_YAY_MARKER' in $yay_init_lua — without this, aurscan is installed but never runs"
             fi
             if command -v paru >/dev/null 2>&1; then
                 local paru_conf="${XDG_CONFIG_HOME:-$real_home/.config}/paru/paru.conf"
                 _opt_item "aurscan paru hook (PreBuildCommand pre-build scan)" \
-                    "$(grep -q -- '# added by aurscan' "$paru_conf" 2>/dev/null && echo 0 || echo 1)" \
+                    "$(_marker "$_AURSCAN_PARU_MARKER" "$paru_conf")" \
                     "aurscan --install-paru-hook" \
-                    "marker: '# added by aurscan' in $paru_conf — without this, aurscan is installed but never runs"
+                    "marker: '$_AURSCAN_PARU_MARKER' in $paru_conf — without this, aurscan is installed but never runs"
             fi
         fi
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
@@ -553,7 +564,7 @@ run_doctor() {
                 "path: /usr/share/libalpm/hooks/traur.hook"
         fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
-        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, install log)" "$(_file "$yay_init_lua")" "" "path: $yay_init_lua"
+        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, install log)" "$(_marker "$_ARCHCANARY_LUA_MARKER" "$yay_init_lua")" "" "path: $yay_init_lua"
         printf '\n'
     fi
 
