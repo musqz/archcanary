@@ -812,14 +812,20 @@ if [[ -r "$_auto_cfg" ]]; then    # skip if missing/unreadable (don't abort unde
 fi
 unset _auto_cfg _al
 
-# Resolves a bundled data file next to the running script. Checks the flat
-# layout first (/usr/lib/archcanary/<file> — how install.sh --system and the
-# AUR package deploy it, since root's $HOME isn't seeded) and falls back to
-# the lists/ subdir layout (repo checkout, ./archcanary.sh run in place).
+# Resolves a bundled data file. Checks two locations relative to the running
+# script first (flat layout — $0 is /usr/lib/archcanary/archcanary.sh, the
+# root-scan copy; then the lists/ subdir layout — repo checkout,
+# ./archcanary.sh run in place), then falls back to the fixed system path
+# /usr/lib/archcanary/<file>. That last fallback is required when $0 is
+# /usr/bin/archcanary (the plain user-facing binary both install.sh and the
+# AUR PKGBUILD install) — it has no data files next to it; only
+# /usr/lib/archcanary/ does, since root's $HOME isn't seeded and needs its own
+# copy regardless of which entry point the user actually runs.
+# ARCHCANARY_SYSTEM_LIB overrides the fixed path for testing.
 _bundled_list_path() {
     local _dir _f
     _dir="$(dirname "$(realpath "$0")")"
-    for _f in "$_dir/$1" "$_dir/lists/$1"; do
+    for _f in "$_dir/$1" "$_dir/lists/$1" "${ARCHCANARY_SYSTEM_LIB:-/usr/lib/archcanary}/$1"; do
         if [[ -f "$_f" ]]; then
             printf '%s' "$_f"
             return 0
