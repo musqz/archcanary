@@ -170,7 +170,7 @@ for arg in "$@"; do
   --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --color=auto|always|never Control symbol/color output (default: auto; also obeys NO_COLOR env)"
             echo "  --doctor                  Report install/config status of every stack element"
-            echo "                            (deps, install, systemd, aurscan, traur, yay hooks) and exit"
+            echo "                            (deps, install, systemd, aurscan, traur, yay/paru hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
             echo "                            Sections: platform, deps, user, system, systemd, external"
             echo "                            (tool names like aurscan/traur/yad also map to a section)"
@@ -295,7 +295,7 @@ run_doctor() {
                 system|system_install|system-install|root) want[system]=1 ;;
                 systemd|automation|timer|timers)    want[systemd]=1 ;;
                 external|external_tools|external-tools|tools|preinstall|pre-install) want[external]=1 ;;
-                aurscan|traur|yay|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
+                aurscan|traur|yay|paru|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
                 platform|plat|distro)               want[platform]=1 ;;
                 all)                                for s in "${ordered[@]}"; do want[$s]=1; done ;;
                 *)
@@ -325,15 +325,16 @@ run_doctor() {
     _ok()   { _mark "$G" "[ OK ]" "$1" "" "${2:-}"; }
     _warn() { _mark "$Y" "[WARN]" "$1" "${2:-}" "${3:-}"; fail=1; _record "$1" "${2:-}"; }
     _miss() { _mark "$R" "[MISS]" "$1" "${2:-}" "${3:-}"; fail=1; _record "$1" "${2:-}"; }
-    _opt()  { _mark "$C" "[OPT ]" "$1" "" "${2:-}"; }  # optional addon — absent is not a failure
+    _opt()  { _mark "$C" "[OPT ]" "$1" "${2:-}" "${3:-}"; }  # optional addon — absent is not a failure
     # _item LABEL TEST-EXIT [FIX] [DETAIL]  — binary present/absent helper
     _item() {
         if [[ $2 -eq 0 ]]; then _ok "$1" "${4:-}"; else _miss "$1" "${3:-}" "${4:-}"; fi
         return 0
     }
-    # _opt_item / _opt_dep — like _item/_dep but missing → [OPT ] not [MISS]; never sets fail
+    # _opt_item / _opt_dep — like _item/_dep but missing → [OPT ] not [MISS]; never sets fail.
+    # _opt_item forwards its FIX arg ($3) into the "↳ fix:" line, same as _item.
     _opt_item() {
-        if [[ $2 -eq 0 ]]; then _ok "$1" "${4:-}"; else _opt "$1" "${4:-}"; fi
+        if [[ $2 -eq 0 ]]; then _ok "$1" "${4:-}"; else _opt "$1" "${3:-}" "${4:-}"; fi
         return 0
     }
     _opt_dep() {
@@ -348,7 +349,7 @@ run_doctor() {
                 d="pkg: $pkg ($purpose)"
             fi
         fi
-        if command -v "$cmd" >/dev/null 2>&1; then _ok "$label" "$d"; else _opt "$label" "$d"; fi
+        if command -v "$cmd" >/dev/null 2>&1; then _ok "$label" "$d"; else _opt "$label" "" "$d"; fi
         return 0
     }
     _have() { command -v "$1" >/dev/null 2>&1 && echo 0 || echo 1; }
@@ -520,6 +521,7 @@ run_doctor() {
     # --- Pre-install layer (external) -------------------------------------
     if [[ -n ${want[external]:-} ]]; then
         printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
+        local yay_init_lua="${XDG_CONFIG_HOME:-$real_home/.config}/yay/init.lua"
         _opt_item "aurscan (pre-install PKGBUILD scanner)" \
             "$(command -v aurscan >/dev/null 2>&1 && echo 0 || echo 1)" \
             "" \
@@ -529,6 +531,19 @@ run_doctor() {
                 "$(command -v claude >/dev/null 2>&1 && echo 0 || echo 1)" \
                 "" \
                 "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
+            if command -v yay >/dev/null 2>&1; then
+                _opt_item "aurscan yay hook (AURPostDownload pre-build scan)" \
+                    "$(grep -q -- '-- >>> aurscan begin' "$yay_init_lua" 2>/dev/null && echo 0 || echo 1)" \
+                    "aurscan --install-yay-hook" \
+                    "marker: '-- >>> aurscan begin' in $yay_init_lua — without this, aurscan is installed but never runs"
+            fi
+            if command -v paru >/dev/null 2>&1; then
+                local paru_conf="${XDG_CONFIG_HOME:-$real_home/.config}/paru/paru.conf"
+                _opt_item "aurscan paru hook (PreBuildCommand pre-build scan)" \
+                    "$(grep -q -- '# added by aurscan' "$paru_conf" 2>/dev/null && echo 0 || echo 1)" \
+                    "aurscan --install-paru-hook" \
+                    "marker: '# added by aurscan' in $paru_conf — without this, aurscan is installed but never runs"
+            fi
         fi
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
         if command -v traur >/dev/null 2>&1; then
@@ -538,7 +553,7 @@ run_doctor() {
                 "path: /usr/share/libalpm/hooks/traur.hook"
         fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
-        _opt_item "yay hooks (auto-scan on yay install)" "$(_file "$real_home/.config/yay/init.lua")" "" "path: $real_home/.config/yay/init.lua"
+        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, install log)" "$(_file "$yay_init_lua")" "" "path: $yay_init_lua"
         printf '\n'
     fi
 
