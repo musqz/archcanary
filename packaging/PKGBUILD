@@ -1,7 +1,7 @@
 # Maintainer: musqz <gummy-fang-deputy@duck.com>
 pkgname=archcanary
 pkgver=0.1.16
-pkgrel=1
+pkgrel=2
 pkgdesc="Layered security detection stack for Arch Linux — malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering"
 arch=('any')
 url="https://github.com/musqz/archcanary"
@@ -15,7 +15,10 @@ optdepends=(
   'yay: AUR helper with Lua hook support'
   'aurscan: LLM-based PKGBUILD scanner (pre-install gate)'
 )
-backup=('etc/archcanary/dkms_allowlist.conf')
+backup=('etc/archcanary/dkms_allowlist.conf'
+        'etc/archcanary/systemd_allowlist.conf'
+        'etc/archcanary/bpftool_allowlist.conf'
+        'etc/archcanary/autostart_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/musqz/$pkgname/archive/v$pkgver.tar.gz")
 sha256sums=('f8dbb7087c65f58aa757b83e5d4d96f1824a1ed2fc36fabdd5c934e97ff9dc39')
@@ -28,10 +31,14 @@ package() {
   # every installed copy keeps the literal "@VERSION@" and -V/About show
   # "unknown" (archcanary-gui's About dialog runs `archcanary --version`).
   sed -i "s/@VERSION@/$pkgver/" archcanary.sh
+  sed -i "s/@VERSION@/$pkgver/" man/archcanary.1
 
   # Main user-facing binaries
   install -Dm755 archcanary.sh    "$pkgdir/usr/bin/archcanary"
   install -Dm755 archcanary-gui.sh "$pkgdir/usr/bin/archcanary-gui"
+
+  # Man page
+  install -Dm644 man/archcanary.1 "$pkgdir/usr/share/man/man1/archcanary.1"
 
   # System lib: scanner + root helper + threat lists (used by the root scan)
   install -dm755 "$pkgdir/usr/lib/archcanary"
@@ -41,6 +48,8 @@ package() {
                chaos_rat_packages.txt malicious_russian_spam_packages.txt; do
     install -Dm644 "lists/$_list" "$pkgdir/usr/lib/archcanary/$_list"
   done
+  install -Dm644 configs/lynis-custom.prf \
+    "$pkgdir/usr/lib/archcanary/lynis-custom.prf"
 
   # Polkit policy (authorises root-helper via pkexec)
   install -Dm644 configs/org.archcanary.policy \
@@ -66,7 +75,8 @@ package() {
     install -Dm644 "$_unit" "$pkgdir/usr/lib/systemd/user/$(basename "$_unit")"
   done
 
-  # DKMS allowlist — seeded as a commented template; users edit in place
+  # Allowlists — seeded as commented templates; users edit in place. pacman's
+  # backup=() array (see above) preserves local edits across upgrades.
   install -dm755 "$pkgdir/etc/archcanary"
   cat > "$pkgdir/etc/archcanary/dkms_allowlist.conf" << 'EOF'
 # DKMS modules to skip during --check-kmod (system-wide allowlist).
@@ -78,5 +88,44 @@ package() {
 # v4l2loopback    # virtual camera (OBS, video conferencing)
 # vboxdrv         # VirtualBox host kernel module
 # vmmon           # VMware Workstation
+EOF
+
+  cat > "$pkgdir/etc/archcanary/systemd_allowlist.conf" << 'EOF'
+# systemd units to skip during the systemd persistence check (--check-systemd),
+# system-wide allowlist. One unit name per line. Everything after # is a comment.
+# Add units that are known-good but not tracked by pacman and not vetted by the
+# standard-prefix check (e.g. a self-hosted app installed from an upstream
+# binary release rather than a package). A .timer is matched by its OWN name,
+# not its target .service — allowlist both if you want to silence both findings.
+#
+# Example:
+# forgejo.service  # self-hosted git, installed from upstream binary release
+# forgejo.timer    # only needed if forgejo also ships a persistent timer
+EOF
+
+  cat > "$pkgdir/etc/archcanary/bpftool_allowlist.conf" << 'EOF'
+# eBPF loader binaries to skip during the bpftool LSM-loader check
+# (--check-bpftool), system-wide allowlist. One binary basename per line.
+# Everything after # is a comment.
+# Add loaders that are known-good but not pacman-owned (a self-built or
+# manually-installed security/monitoring tool that legitimately loads LSM
+# eBPF hooks) — matched against the basename of /proc/<pid>/exe.
+#
+# Example:
+# falco  # runtime security monitoring, installed from upstream binary release
+EOF
+
+  cat > "$pkgdir/etc/archcanary/autostart_allowlist.conf" << 'EOF'
+# Autostart Exec= names to skip during the XDG autostart check
+# (--check-autostart), system-wide allowlist. One Exec= name/basename per
+# line. Everything after # is a comment.
+# Add entries that are known-good but can't be resolved via $PATH or a
+# standard system prefix — e.g. a package-private helper binary the
+# non-PATH fallback (search of /usr/lib, /usr/libexec) still can't find, or
+# an AppImage/Flatpak export. Matched against the bare Exec= value as
+# written in the .desktop file (not a resolved path).
+#
+# Example:
+# zeitgeist-datahub  # desktop activity logging, ships in a non-PATH libdir
 EOF
 }

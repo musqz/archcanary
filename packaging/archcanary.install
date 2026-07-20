@@ -1,4 +1,12 @@
 post_install() {
+  # Seed Lynis's false-positive-suppression profile, but only if lynis is
+  # actually installed and the target has no custom.prf of its own yet —
+  # mirrors install.sh's runtime check, which package() cannot do at build time.
+  if command -v lynis &>/dev/null && [[ ! -f /etc/lynis/custom.prf ]]; then
+    install -Dm644 /usr/lib/archcanary/lynis-custom.prf /etc/lynis/custom.prf
+    echo "  installed: /etc/lynis/custom.prf (Lynis false-positive suppressions — edit to enable)"
+  fi
+
   echo ""
   echo "==> archcanary installed."
   echo ""
@@ -11,7 +19,14 @@ post_install() {
   echo "  Run a manual full scan:"
   echo "    archcanary --refresh --full --all-time"
   echo ""
-  echo "  Optional add-ons: aurscan (LLM PKGBUILD scanner), yay (Lua hooks)."
+  echo "  This package installs the system-wide pieces (binaries, systemd units,"
+  echo "  polkit policy, /etc allowlists). Per-user setup can't be done from here"
+  echo "  since it has to run as YOUR user, not the pacman transaction — run:"
+  echo "    archcanary --doctor"
+  echo "  to see exactly what's still missing (yay/paru hooks, aurscan, lynis)"
+  echo "  and the precise command to fix each one."
+  echo ""
+  echo "  Optional add-ons: aurscan (LLM PKGBUILD scanner), yay/paru (Lua/PreBuildCommand hooks)."
   echo "  See: https://github.com/musqz/archcanary"
   echo ""
 }
