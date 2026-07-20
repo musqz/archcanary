@@ -725,6 +725,38 @@ SCRIPT
 }
 
 # ---------------------------------------------------------------------------
+# Test 15: _bundled_list_path falls back to the system-lib dir when the
+#          running script has no bundled data files next to it (the
+#          /usr/bin/archcanary packaged layout — only /usr/lib/archcanary/
+#          carries the bundled lists, not /usr/bin/).
+# ---------------------------------------------------------------------------
+test_bundled_list_path_usr_bin_layout() {
+    local isolated_bin sys_lib fake_home
+    isolated_bin=$(mktemp -d)
+    sys_lib=$(mktemp -d)
+    fake_home=$(mktemp -d)
+
+    cp "$REPO_DIR/archcanary.sh" "$isolated_bin/archcanary.sh"
+    chmod +x "$isolated_bin/archcanary.sh"
+    cp "$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" "$sys_lib/malicious_npm_packages.txt"
+
+    local out rc=0
+    out=$(HOME="$fake_home" XDG_CONFIG_HOME="$fake_home/.config" \
+        ARCHCANARY_SYSTEM_LIB="$sys_lib" \
+        "$isolated_bin/archcanary.sh" \
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
+        --no-notify 2>&1) || rc=$?
+
+    if [[ "$out" == *"Packages checked:"* && "$out" != *"Malicious npm package list not found"* ]]; then
+        pass "bundled_list_path: /usr/bin-style layout resolves npm list via system-lib fallback"
+    else
+        fail "bundled_list_path: expected fallback resolution to succeed, got: $out"
+    fi
+
+    rm -rf "$isolated_bin" "$sys_lib" "$fake_home"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -772,6 +804,9 @@ test_check_kmod
 
 $VERBOSE && msg "--- Test 14: check_bpftool allowlist ---"
 test_check_bpftool_allowlist
+
+$VERBOSE && msg "--- Test 15: bundled_list_path /usr/bin layout ---"
+test_bundled_list_path_usr_bin_layout
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
