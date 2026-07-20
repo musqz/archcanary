@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.17 (2026-07-20)
+
+- Change: `--doctor` now detects whether aurscan's own yay/paru pre-build hooks are actually wired up, not just whether the `aurscan` binary is installed — greps for aurscan's managed marker in `~/.config/yay/init.lua` and `paru.conf`, shown only when the respective AUR helper is present, with the exact `aurscan --install-yay-hook`/`--install-paru-hook` fix command surfaced. Added `paru` as a recognized `--doctor=SECTION` alias. Also fixed `_opt_item` silently dropping its fix-hint for every optional check that passed one, and switched the "archcanary's own hooks" check from bare file existence to an actual content check so it can no longer report clean when the hooks were stripped out by hand.
+- Fix: the AUR `PKGBUILD` only ever seeded `dkms_allowlist.conf` — a plain `pacman -U` package install was missing `systemd_allowlist.conf`, `bpftool_allowlist.conf`, `autostart_allowlist.conf`, `lynis-custom.prf`, and the man page entirely, so a package-only install still required a manual `install.sh --system` run afterward to be complete. All five are now included in `package()`.
+
 ## v0.1.16 (2026-07-19)
 
 - Change: `install.sh --system` no longer auto-enables the systemd timers (`archcanary.timer`, `archcanary.path`, `archcanary-user.timer`, `archcanary-notify.path`) — it now installs the units and prints the same `systemctl enable --now` commands the pacman/AUR package's `post_install` prints, so both install paths require the same explicit, manual activation step instead of one silently enabling behind the user's back.
