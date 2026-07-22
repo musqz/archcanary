@@ -3,7 +3,8 @@
 [![Release](https://img.shields.io/github/v/release/musqz/archcanary?sort=semver)](https://github.com/musqz/archcanary/releases)
 
 > **BETA — actively seeking testing and feedback.** Expect rough edges and incomplete docs as we finetune and fix bugs.
-> Primarily developed and tested on Mabox Linux (Arch-based, Openbox). Testing on Manjaro and other Arch derivatives is in progress — it should work fine, but rough edges are expected.
+> Primarily developed and tested on Mabox Linux (Arch-based, Openbox). Testing on Manjaro and other Arch derivatives is in progress — it should work fine.
+> 
 > If you run into anything, please open an [issue](https://github.com/musqz/archcanary/issues) or start a [discussion](https://github.com/musqz/archcanary/discussions).
 
 > **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything.
