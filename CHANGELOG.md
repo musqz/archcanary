@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.18 (2026-07-23)
+
+- Fix: `lists/at_risk_accounts.json`, `lists/iocs.txt`, and `lists/malicious_russian_spam_packages.txt` had been frozen since the `aur-malware-check` rename and never resynced against upstream `lenucksi/aur-malware-check`. Added 6 wave-2 attacker accounts, 2 missing russian-spam packages (`obd-auto-doctor`, `peksystray`), the sudo-password-grabber IOC, the `ansi-colors` companion-package note, and a "Malicious Git Commits" section. Also fixed a stale `ioctl.fail` source URL in `iocs.txt`/`SOURCES.md` that pointed at a nonexistent slug. These three files are reference/analyst data only — never read by `archcanary.sh` at scan time, unlike the four detection lists that are.
+
 ## v0.1.17 (2026-07-20)
 
 - Change: `--doctor` now detects whether aurscan's own yay/paru pre-build hooks are actually wired up, not just whether the `aurscan` binary is installed — greps for aurscan's managed marker in `~/.config/yay/init.lua` and `paru.conf`, shown only when the respective AUR helper is present, with the exact `aurscan --install-yay-hook`/`--install-paru-hook` fix command surfaced. Added `paru` as a recognized `--doctor=SECTION` alias. Also fixed `_opt_item` silently dropping its fix-hint for every optional check that passed one, and switched the "archcanary's own hooks" check from bare file existence to an actual content check so it can no longer report clean when the hooks were stripped out by hand.
