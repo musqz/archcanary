@@ -25,7 +25,7 @@ Numbered and structured references for the atomic-lockfile / js-digest supply-ch
 ## 2. Technical Analysis
 
 ### 2.1 ioctl.fail — Preliminary Analysis
-- **URL:** https://ioctl.fail/preliminary-analysis-of-archcanary/
+- **URL:** https://ioctl.fail/preliminary-analysis-of-aur-malware/
 - **Date:** 2026-06-11
 - **Content:** Detailed technical analysis. IOCs, eBPF rootkit details (CAP_BPF, hides processes/files/socket inodes), C2 extraction via Tor onion service, systemd persistence, credential theft targeting Discord/GitHub/npm/Slack/SSH/Vault.
 - **Relevant for:** Malware capabilities, IoCs, persistence mechanisms.

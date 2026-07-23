@@ -1,6 +1,7 @@
 # Indicators of Compromise (IOCs) - AUR Malware Campaign June 2026
-# Sources: https://ioctl.fail/preliminary-analysis-of-archcanary/
+# Sources: https://ioctl.fail/preliminary-analysis-of-aur-malware/
 #          https://gist.github.com/Kidev/59bf9f5fb53ab5eee99f19a6a2fc3992
+#          https://github.com/lenucksi/aur-malware-check/issues/24
 
 ## File Hashes
 ELF Payload (deps - atomic-lockfile variant):
@@ -37,6 +38,14 @@ Additional sample (cryptominer - atomic-lockfile variant):
   Payload:    embedded ELF (same SHA256 as atomic-lockfile variant)
   Publisher:  herbsobering (same NPM account)
   Source:     Sonatype blog post
+
+### ansi-colors (bun companion — NOT in automated scan list)
+  Name:       ansi-colors
+  Installer:  bun add ansi-colors (injected via obfuscated .install hooks alongside nextfile-js)
+  Note:       Shares name with legitimate popular npm package (~500M downloads).
+              Used as cover alongside nextfile-js in htbrowser-bin attack.
+              Excluded from malicious_npm_packages.txt to avoid false positives.
+  Source:     https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/TND7HA2KBQ46OHHUMMIAHKGXZE4WALM6/  (Nicolas Boichat, 2026-06-14)
 
 ## Network Indicators (C2)
   Onion:  olrh4mibs62l6kkuvvjyc5lrercqg5tz543r4lsw3o6mh5qb7g7sneid.onion
@@ -75,6 +84,16 @@ Additional sample (cryptominer - atomic-lockfile variant):
   /usr/bin/monero-wallet-gui (potential cryptominer)
   ~/.npm/_cacache/ (npm cache of malicious npm packages — see malicious_npm_packages.txt)
   ~/.bun/install/cache/ (bun cache — bun variant of the attack)
+  ~/.local/bin/sudo (sudo password grabber)
+  /tmp/.cache (captured sudo passwords)
+
+## Artifact Details
+### sudo password grabber
+  Path:     ~/.local/bin/sudo
+  SHA256:   fd4852334ce1c2d7c9bf0e1c91dbf274a1247989b4827d4f7758cbf3bf42ebfe
+  Source:   https://github.com/lenucksi/aur-malware-check/issues/24
+  Behavior: Intercepts sudo calls, captures password to /tmp/.cache, then
+            removes itself after successful authentication.
 
 ## Attacker Accounts
   AUR:  krisztinavarga (malicious maintainer for alvr)
@@ -83,6 +102,16 @@ Additional sample (cryptominer - atomic-lockfile variant):
   Git:  PLYSHKA (commit author name used for impersonation)
   NPM:  herbsobering
   GH:   fardewoak (container registry: herbsobering430)
+  AUR:  meryemplath (took over pypiserver, anythingllm-cli-bin, python-dbapi-compliance)
+  AUR:  laurentbavaud (banned — zathura-gruvbox-git, python2-mutagen, fastoggenc)
+  AUR:  vitoriapires (confirmed malicious by Fabio Loli)
+  AUR:  catringiess (confirmed malicious by Fabio Loli)
+  AUR:  dominikgross (confirmed malicious by Fabio Loli)
+  AUR:  skarbricat (all PKGBUILDs contained malicious code — Jason Marinaro)
+
+## Malicious Git Commits
+  htbrowser-bin: 462c21877fe6d2f563ed6620ef227e06ac8c51c8 (obfuscated bun payload)
+  Attacker email: annikkitikkanen@gmail.com
 
 ## Impersonated Accounts
   AUR:  arojas (legitimate Arch Linux maintainer — identity forged by attacker via git commit forgery; see Impersonation Clarification in README)

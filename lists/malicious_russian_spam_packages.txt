@@ -41,10 +41,13 @@ nikto-git
 nodejs-serverless
 nodejs-uglifycss
 nullfs-dkms-git
+# Issue #20: pingwin840 packages (Remco R., 2026-06-14)
+obd-auto-doctor
 onivim2-git
 onvifviewer
 pcb
 pcmanx-gtk2-git
+peksystray
 perl-xml-filter-domfilter-libxml
 pfqueue
 pgdbf
