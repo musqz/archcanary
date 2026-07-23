@@ -1,7 +1,7 @@
 # Maintainer: musqz <gummy-fang-deputy@duck.com>
 pkgname=archcanary
 pkgver=0.1.18
-pkgrel=1
+pkgrel=2
 pkgdesc="Layered security detection stack for Arch Linux — malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering"
 arch=('any')
 url="https://github.com/musqz/archcanary"
@@ -13,7 +13,8 @@ optdepends=(
   'polkit: GUI privilege escalation for root checks'
   'bpf: bpftool for eBPF rootkit detection'
   'yay: AUR helper with Lua hook support'
-  'aurscan: LLM-based PKGBUILD scanner (pre-install gate)'
+  'aurscan-manticore-release-git: LLM-based PKGBUILD scanner (pre-install gate), builds from source'
+  'aurscan-manticore-bin-release-git: LLM-based PKGBUILD scanner (pre-install gate), pre-built binary'
 )
 backup=('etc/archcanary/dkms_allowlist.conf'
         'etc/archcanary/systemd_allowlist.conf'
