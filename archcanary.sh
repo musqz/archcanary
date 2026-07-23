@@ -536,7 +536,7 @@ run_doctor() {
         _opt_item "aurscan (pre-install PKGBUILD scanner)" \
             "$(command -v aurscan >/dev/null 2>&1 && echo 0 || echo 1)" \
             "" \
-            "binary: $(command -v aurscan 2>/dev/null || echo 'not found — yay -S aurscan-manticore-git')"
+            "binary: $(command -v aurscan 2>/dev/null || echo 'not found — yay -S aurscan-manticore-release-git (or aurscan-manticore-bin-release-git)')"
         if command -v aurscan >/dev/null 2>&1; then
             _opt_item "claude CLI (aurscan LLM backend)" \
                 "$(command -v claude >/dev/null 2>&1 && echo 0 || echo 1)" \

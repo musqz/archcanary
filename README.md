@@ -196,10 +196,11 @@ See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.
 
 [aurscan](https://github.com/manticore-projects/aurscan) scans PKGBUILDs with an LLM before `yay` or `paru` builds them. The GUI exposes its backend configuration under **Settings → LLM settings**.
 
-Install from the AUR:
+Install from the AUR (two variants — pick one):
 
 ```bash
-yay -S aurscan-manticore-git
+yay -S aurscan-manticore-release-git       # builds from source, needs Go
+yay -S aurscan-manticore-bin-release-git   # pre-built binary, no toolchain needed
 ```
 
 > **AUR helper compatibility:** aurscan integrates natively with both **yay** and **paru** — one-time setup, no wrapper alias needed. yay uses its Lua editor-gate (`aurscan --install-yay-hook`); paru uses its native `PreBuildCommand` config key (`aurscan --install-paru-hook`), which paru invokes in the PKGBUILD directory before every build. Other helpers (pikaur, aurutils) have no equivalent hook yet. archcanary's post-install detection (all other checks) works with any AUR helper.
