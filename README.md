@@ -165,6 +165,9 @@ Every scan prints a per-check summary before the final verdict:
 
 # Uninstall
 ./install.sh uninstall --system
+
+# man page
+man archcanary
 ```
 
 `--system` (and, equivalently, installing the built package via `makepkg -si` or an AUR helper) sets up:
