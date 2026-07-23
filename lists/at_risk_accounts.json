@@ -90,6 +90,70 @@
         "16 adopted orphaned packages (details unknown)"
       ],
       "notes": "Account 3 days old, adopted 16 orphaned packages. No malicious commits found yet — under observation."
+    },
+    "meryemplath": {
+      "first_reported": "2026-06-13T00:00:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/NHRO2RT3VRXHQ7O4WQCPTNGNIOQQQAWX/",
+      "reported_by": "aur-general mailing list",
+      "status": "confirmed",
+      "packages": [
+        "pypiserver",
+        "anythingllm-cli-bin",
+        "python-dbapi-compliance"
+      ],
+      "notes": "Took over multiple orphaned packages and injected malicious code."
+    },
+    "laurentbavaud": {
+      "first_reported": "2026-06-13T00:00:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/NHRO2RT3VRXHQ7O4WQCPTNGNIOQQQAWX/",
+      "reported_by": "aur-general mailing list",
+      "status": "confirmed",
+      "packages": [
+        "zathura-gruvbox-git",
+        "python2-mutagen",
+        "fastoggenc"
+      ],
+      "notes": "Banned. Associated with malicious commits in multiple packages."
+    },
+    "vitoriapires": {
+      "first_reported": "2026-06-11T17:31:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/",
+      "reported_by": "Fabio Loli",
+      "status": "confirmed",
+      "packages": [
+        "Multiple AUR packages (npm shenanigans)"
+      ],
+      "notes": "Confirmed malicious by Fabio Loli via update notification checks."
+    },
+    "catringiess": {
+      "first_reported": "2026-06-11T17:31:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/",
+      "reported_by": "Fabio Loli",
+      "status": "confirmed",
+      "packages": [
+        "Multiple AUR packages (npm shenanigans)"
+      ],
+      "notes": "Confirmed malicious by Fabio Loli via update notification checks."
+    },
+    "dominikgross": {
+      "first_reported": "2026-06-11T17:31:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/LVYB62N3FPAWUHNJ5Z5GXG6OIR7S5P3F/",
+      "reported_by": "Fabio Loli",
+      "status": "confirmed",
+      "packages": [
+        "Multiple AUR packages (npm shenanigans)"
+      ],
+      "notes": "Confirmed malicious by Fabio Loli via update notification checks."
+    },
+    "skarbricat": {
+      "first_reported": "2026-06-13T00:00:00+00:00",
+      "source": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/NHRO2RT3VRXHQ7O4WQCPTNGNIOQQQAWX/",
+      "reported_by": "Jason Marinaro",
+      "status": "confirmed",
+      "packages": [
+        "All PKGBUILDs contained malicious code"
+      ],
+      "notes": "All packages under this account confirmed malicious by Jason Marinaro."
     }
   }
 }
