@@ -51,6 +51,7 @@ does and how it's wired in:
 | [traur](https://aur.archlinux.org/packages/traur) | Optional |
 | [yay](https://github.com/Jguer/yay) 13.0 | Optional |
 | [yad](https://github.com/v1cont/yad) | GUI only |
+| [noto-fonts-emoji](https://archlinux.org/packages/extra/any/noto-fonts-emoji/) | GUI only (🔐 icons) |
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Optional (`--check-bpftool`) |
 | [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | Optional |
 | [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI + `--system` install |
