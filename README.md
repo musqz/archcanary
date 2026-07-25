@@ -4,7 +4,8 @@
 
 > **BETA — actively seeking testing and feedback.** Expect rough edges and incomplete docs as we finetune and fix bugs.
 > Primarily developed and tested on Mabox Linux (Arch-based, Openbox). Testing on Manjaro and other Arch derivatives is in progress — it should work fine.
-> 
+> The beta label is staying on deliberately for now, to give the project a solid stretch of real-world testing rather than dropping it early — not a sign of unresolved blockers.
+>
 > If you run into anything, please open an [issue](https://github.com/musqz/archcanary/issues) or start a [discussion](https://github.com/musqz/archcanary/discussions).
 
 > **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything.
