@@ -145,6 +145,22 @@ Every scan prints a per-check summary before the final verdict:
 | `--extra-list=PATH_OR_URL` | Load an additional package list (file or `https://` URL); repeatable | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
 
+### Lynis on a desktop system
+
+Lynis was originally built for server hardening, so a chunk of its
+"Suggestions" count doesn't apply to a single-user desktop (mail-relay ACLs,
+multi-user auditing policy, firewall rules for exposed services). Don't treat
+the suggestion count as a to-do list to clear to zero.
+
+That said, plenty of its checks are just as relevant on a desktop: kernel
+`sysctl` hardening (ASLR, `kptr_restrict`, `ptrace_scope`), file-permission
+audits (world-writable files, SUID/SGID binaries), a GRUB bootloader password
+(arguably more relevant on a laptop than a rack-mounted server — physical
+access is the bigger threat model), outdated/vulnerable packages, and
+PAM/login policy. archcanary includes Lynis for those overlaps, not because
+this is a server tool bolted on — read the suggestions, skip the ones that
+don't apply to your setup.
+
 ### Exit Codes
 
 | Code | Meaning |
