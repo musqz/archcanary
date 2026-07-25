@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.19 (2026-07-25)
+
+- Fix: the AUR package `aurscan-manticore-git` no longer exists — upstream split it into `aurscan-manticore-release-git` (source build) and `aurscan-manticore-bin-release-git` (prebuilt binary). Updated every install command/optdepend pointing at the old name, including the `PKGBUILD`'s own `optdepends="aurscan: ..."`, which never matched anyway since no AUR package is literally named `aurscan`.
+
 ## v0.1.18 (2026-07-23)
 
 - Fix: `lists/at_risk_accounts.json`, `lists/iocs.txt`, and `lists/malicious_russian_spam_packages.txt` had been frozen since the `aur-malware-check` rename and never resynced against upstream `lenucksi/aur-malware-check`. Added 6 wave-2 attacker accounts, 2 missing russian-spam packages (`obd-auto-doctor`, `peksystray`), the sudo-password-grabber IOC, the `ansi-colors` companion-package note, and a "Malicious Git Commits" section. Also fixed a stale `ioctl.fail` source URL in `iocs.txt`/`SOURCES.md` that pointed at a nonexistent slug. These three files are reference/analyst data only — never read by `archcanary.sh` at scan time, unlike the four detection lists that are.
