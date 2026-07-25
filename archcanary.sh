@@ -207,6 +207,7 @@ _init_color() {
         _SYM_WARNINGS="${_CY}⚠   warnings${_CN}"
         _SYM_INFECTED_TXT="${_CR}${_CB}❌  INFECTED${_CN}"
         _SYM_SKIPPED="⚠   skipped (needs root)"
+        _SYM_SKIPPED_MISSING="⚠   skipped (not installed)"
         _SEP55="$(printf '─%.0s' $(seq 1 55))"
     else
         _CG='' _CY='' _CR='' _CB='' _CN='' _CC=''
@@ -214,6 +215,7 @@ _init_color() {
         _SYM_WARNINGS="[!!]   warnings"
         _SYM_INFECTED_TXT="[!!]   INFECTED"
         _SYM_SKIPPED="[--]   skipped (needs root)"
+        _SYM_SKIPPED_MISSING="[--]   skipped (not installed)"
         _SEP55="$(printf '%0.s-' $(seq 1 55))"
     fi
 }
@@ -2144,7 +2146,7 @@ check_lynis() {
 
     if ! command -v lynis &>/dev/null; then
         echo "  Skipped: lynis not installed (pacman -S lynis)."
-        return 0
+        return 78
     fi
 
     if [[ ! -f "$report_file" ]]; then
@@ -2206,11 +2208,16 @@ EXIT_CODE=0
 # them so the final result is reported as INCOMPLETE (and exit 1) instead of a
 # misleading CLEAN — a scan that skipped checks is not a clean bill of health.
 SKIPPED_ROOT=()
+# Same idea, but for optional tools that aren't installed (e.g. lynis).
+SKIPPED_MISSING=()
 
-# Fold a check's return code into EXIT_CODE; 77 means "skipped, needs root".
+# Fold a check's return code into EXIT_CODE; 77 means "skipped, needs root",
+# 78 means "skipped, optional tool not installed".
 _apply_ret() { # $1=return code  $2=check label
     if [[ "$1" -eq 77 ]]; then
         SKIPPED_ROOT+=("$2")
+    elif [[ "$1" -eq 78 ]]; then
+        SKIPPED_MISSING+=("$2")
     elif [[ "$1" -gt $EXIT_CODE ]]; then
         EXIT_CODE="$1"
     fi
@@ -2233,6 +2240,7 @@ _print_summary() {
             1)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_WARNINGS" ;;
             2)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_INFECTED_TXT" ;;
             77) printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_SKIPPED" ;;
+            78) printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
         esac
     done
     printf ' %s\n' "$_SEP55"
@@ -2427,9 +2435,10 @@ if $CHECK_PKGINTEG; then
     echo
 fi
 
-# A scan that skipped root checks is incomplete, not clean — surface it and
-# escalate a would-be CLEAN (0) to WARNINGS (1) so it isn't read as all-clear.
-if [[ ${#SKIPPED_ROOT[@]} -gt 0 && $EXIT_CODE -lt 1 ]]; then
+# A scan that skipped root or missing-tool checks is incomplete, not clean —
+# surface it and escalate a would-be CLEAN (0) to WARNINGS (1) so it isn't
+# read as all-clear.
+if [[ ( ${#SKIPPED_ROOT[@]} -gt 0 || ${#SKIPPED_MISSING[@]} -gt 0 ) && $EXIT_CODE -lt 1 ]]; then
     EXIT_CODE=1
 fi
 
@@ -2448,6 +2457,9 @@ if [[ ${#SKIPPED_ROOT[@]} -gt 0 ]]; then
     else
         printf ' Re-run with sudo for the full picture: sudo %s --full\n' "$0"
     fi
+fi
+if [[ ${#SKIPPED_MISSING[@]} -gt 0 ]]; then
+    printf ' INCOMPLETE: %d optional check(s) skipped (tool not installed): %s\n' "${#SKIPPED_MISSING[@]}" "${SKIPPED_MISSING[*]}"
 fi
 printf '%s============================================================%s\n' "$_CB" "$_CN"
 
