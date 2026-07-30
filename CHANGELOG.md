@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added: `--refresh` now also syncs the black/red package lists from the third-party [aur-audit.wtako.net](https://wtako.net/services/aur-audit) service (continuous community AUR scan feed, free/unauthenticated API). Hits merge into the existing infected-package check, annotated `[aur-audit: black]`/`[aur-audit: red]`. Yellow (qualitative/minor) findings are not synced. Purely additive — no new dependency, no network call outside `--refresh`, no CLI overrides.
+- Added: new `AURPreInstall` yay hook in `configs/yay-init.lua` checks the about-to-build package against the synced aur-audit black/red lists — aborts on black, warns on red. Gives pre-build protection against known-bad AUR packages without requiring aurscan/an LLM. No new systemd unit: the existing weekly/on-boot `archcanary.timer` already keeps the lists fresh via `--refresh`.
 
 ## v0.1.19 (2026-07-25)
 

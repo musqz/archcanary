@@ -264,6 +264,8 @@ archcanary detects these via `malicious_russian_spam_packages.txt` (shown in the
 
 `--refresh` also syncs the black/red package lists published by the third-party [aur-audit.wtako.net](https://wtako.net/services/aur-audit) service, which continuously scans all of AUR and publishes verdicts via a free, unauthenticated API. Black (confirmed malicious) and red (high-risk) hits are merged into the same infected-package check as the lists above, annotated `[aur-audit: black]` / `[aur-audit: red]` so you can tell the source of a hit. Yellow (minor/qualitative findings) is intentionally not synced — too noisy for an automated check. This is a best-effort, third-party feed, not a guarantee — same caveat as any heuristic scanner.
 
+The same synced lists also gate installs directly: the `AURPreInstall` yay hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) aborts a build on a black hit and warns on a red hit — a pre-build check that doesn't need aurscan or an LLM.
+
 ---
 
 ## What to Do If Infected

@@ -195,10 +195,14 @@ test_cli_flag() {
     log_file=$(mktemp)
 
     # Run via env var (existing path)
-    # Pin chaos-rat/russian-spam lists to an empty fixture so the count isn't
-    # inflated by real lists cached under this machine's ~/.config/archcanary.
+    # Pin chaos-rat/russian-spam/aur-audit lists to an empty fixture so the
+    # count isn't inflated by real lists cached under this machine's
+    # ~/.config/archcanary (aur-audit has no CLI override flag by design —
+    # env var is the only pin point, same as PACKAGE_LIST_FILE below).
     local result=0
     PACKAGE_LIST_FILE="$SCRIPT_DIR/fake_package_lists/simple.txt" \
+    AUR_AUDIT_BLACK_LIST="$SCRIPT_DIR/fake_package_lists/empty.txt" \
+    AUR_AUDIT_RED_LIST="$SCRIPT_DIR/fake_package_lists/empty.txt" \
     "$REPO_DIR/archcanary.sh" \
         --chaos-rat-list="$SCRIPT_DIR/fake_package_lists/empty.txt" \
         --russian-spam-list="$SCRIPT_DIR/fake_package_lists/empty.txt" \
@@ -210,6 +214,8 @@ test_cli_flag() {
     else
         # Try with direct --package-list flag
         result=0
+        AUR_AUDIT_BLACK_LIST="$SCRIPT_DIR/fake_package_lists/empty.txt" \
+        AUR_AUDIT_RED_LIST="$SCRIPT_DIR/fake_package_lists/empty.txt" \
         "$REPO_DIR/archcanary.sh" \
             --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
             --chaos-rat-list="$SCRIPT_DIR/fake_package_lists/empty.txt" \

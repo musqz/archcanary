@@ -55,6 +55,43 @@ yay.create_autocmd("AURPreInstall", {
   end,
 })
 
+local function _archcanary_config_dir()
+  local xdg = os.getenv("XDG_CONFIG_HOME")
+  if xdg and xdg ~= "" then return xdg .. "/archcanary" end
+  return os.getenv("HOME") .. "/.config/archcanary"
+end
+
+local function _archcanary_load_pkg_set(path)
+  local set = {}
+  local f = io.open(path, "r")
+  if not f then return set end
+  for line in f:lines() do
+    if not line:match("^#") and line:match("%S") then
+      set[line] = true
+    end
+  end
+  f:close()
+  return set
+end
+
+-- aur-audit.wtako.net black/red check (complements the pattern block above;
+-- lists are synced by `archcanary --refresh`, already run weekly by
+-- archcanary.timer — see docs/my-setup.md)
+yay.create_autocmd("AURPreInstall", {
+  desc = "aur-audit.wtako.net black/red check",
+  callback = function(event)
+    local dir = _archcanary_config_dir()
+    local black = _archcanary_load_pkg_set(dir .. "/aur_audit_black.txt")
+    local red   = _archcanary_load_pkg_set(dir .. "/aur_audit_red.txt")
+
+    if black[event.match] then
+      yay.abort(event.match .. ": aur-audit flagged BLACK (confirmed malicious) — https://aur-audit.wtako.net")
+    elseif red[event.match] then
+      yay.log.warn(event.match .. ": aur-audit flagged RED (high-risk, unconfirmed) — review before continuing")
+    end
+  end,
+})
+
 -- Log AUR installs
 yay.create_autocmd("PostInstall", {
   desc = "log AUR installs",

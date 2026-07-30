@@ -566,7 +566,7 @@ run_doctor() {
                 "path: /usr/share/libalpm/hooks/traur.hook"
         fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
-        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, install log)" "$(_marker "$_ARCHCANARY_LUA_MARKER" "$yay_init_lua")" "" "path: $yay_init_lua"
+        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)" "$(_marker "$_ARCHCANARY_LUA_MARKER" "$yay_init_lua")" "" "path: $yay_init_lua"
         printf '\n'
     fi
 
