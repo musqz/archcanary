@@ -151,6 +151,8 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── malicious_npm_packages.txt         # static lists, auto-seeded on first run
     ├── chaos_rat_packages.txt
     ├── malicious_russian_spam_packages.txt
+    ├── aur_audit_black.txt                # synced via --refresh only (no bundled fallback —
+    ├── aur_audit_red.txt                  #   third-party live feed, not ours to snapshot)
     └── extra_lists.conf                   # optional extra list subscriptions (paths/URLs)
 
 ~/.config/yay/

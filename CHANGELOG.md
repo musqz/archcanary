@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added: `--refresh` now also syncs the black/red package lists from the third-party [aur-audit.wtako.net](https://wtako.net/services/aur-audit) service (continuous community AUR scan feed, free/unauthenticated API). Hits merge into the existing infected-package check, annotated `[aur-audit: black]`/`[aur-audit: red]`. Yellow (qualitative/minor) findings are not synced. Purely additive — no new dependency, no network call outside `--refresh`, no CLI overrides.
+
 ## v0.1.19 (2026-07-25)
 
 - Fix: the AUR package `aurscan-manticore-git` no longer exists — upstream split it into `aurscan-manticore-release-git` (source build) and `aurscan-manticore-bin-release-git` (prebuilt binary). Updated every install command/optdepend pointing at the old name, including the `PKGBUILD`'s own `optdepends="aurscan: ..."`, which never matched anyway since no AUR package is literally named `aurscan`.
