@@ -80,9 +80,15 @@ if $UNINSTALL; then
     if $SYSTEM; then
         sudo rm -f /usr/share/man/man1/archcanary.1
         echo "  removed: /usr/share/man/man1/archcanary.1"
+        sudo rm -f /usr/share/bash-completion/completions/archcanary \
+                   /usr/share/bash-completion/completions/canary
+        echo "  removed: /usr/share/bash-completion/completions/{archcanary,canary}"
     else
         rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/archcanary.1"
         echo "  removed: ${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/archcanary.1"
+        rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/archcanary" \
+              "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/canary"
+        echo "  removed: ${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/{archcanary,canary}"
     fi
 
     desktop_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications/archcanary.desktop"
@@ -169,6 +175,11 @@ if $SYSTEM; then
         | sudo tee /usr/share/man/man1/archcanary.1 >/dev/null
     sudo chmod 644 /usr/share/man/man1/archcanary.1
     echo "  installed: /usr/share/man/man1/archcanary.1"
+    sudo install -d -m 755 /usr/share/bash-completion/completions
+    sudo install -m 644 "$REPO_DIR/configs/archcanary-completion.bash" \
+        /usr/share/bash-completion/completions/archcanary
+    sudo ln -sf archcanary /usr/share/bash-completion/completions/canary
+    echo "  installed: /usr/share/bash-completion/completions/{archcanary,canary}"
 else
     mkdir -p "$USER_BIN"
     install -m 755 "$REPO_DIR/archcanary.sh"    "$USER_BIN/archcanary"
@@ -189,6 +200,11 @@ else
     sed "s/@VERSION@/$_ver/" "$REPO_DIR/man/archcanary.1" > "$MAN_DIR/archcanary.1"
     chmod 644 "$MAN_DIR/archcanary.1"
     echo "  installed: $MAN_DIR/archcanary.1"
+    COMPLETION_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
+    mkdir -p "$COMPLETION_DIR"
+    install -m 644 "$REPO_DIR/configs/archcanary-completion.bash" "$COMPLETION_DIR/archcanary"
+    ln -sf archcanary "$COMPLETION_DIR/canary"
+    echo "  installed: $COMPLETION_DIR/{archcanary,canary}"
 fi
 
 # Install desktop entry

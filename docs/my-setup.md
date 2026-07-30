@@ -241,6 +241,12 @@ Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "
 
 > The two layers are complementary: the editor-gate (aurscan/Claude) catches novel or obfuscated payloads; the Lua hooks are a fast offline backstop for known campaign signatures and stale-rewrite upgrades, and run even if the LLM call is unavailable.
 
+## Shell completion and the `canary` alias
+
+Both install paths (`install.sh` and the AUR package) drop a bash-completion script into `/usr/share/bash-completion/completions/archcanary` (system) or `~/.local/share/bash-completion/completions/archcanary` (user), plus a `canary` symlink alongside it — both load automatically via the `bash-completion` package, no `.bashrc` edits required. `archcanary --<TAB>` lists every flag; `--doctor=<TAB>`, `--color=<TAB>`, and the `--*-list=<TAB>`/`--log-file=<TAB>` flags complete their values (section names, `auto|always|never`, and file paths respectively).
+
+The `canary` completion works standalone, but `canary` itself is only a *name* until you actually alias it — add `alias canary=archcanary` to `.bashrc`/`.zshrc` yourself if you want the shorter command; `install.sh` deliberately doesn't inject this (same "never touch the user's shell rc" rule as everything else here).
+
 ## Known false positives
 
 See [false-positives.md](false-positives.md) for documented signals that fire on benign packages and how to verify them.
