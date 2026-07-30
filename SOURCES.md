@@ -261,3 +261,15 @@ All threads on https://lists.archlinux.org/archives/list/aur-general@lists.archl
 - **Detection method:** `git grep --files-with-matches 'NoServices'` across all AUR remote refs.
 - **Status:** Reported to Arch DevOps, cleanup in progress.
 - **Relevant for:** Independent threat vector requiring separate detection patterns (shell config injection ≠ JS package manager detection).
+
+---
+
+## 9. aur-audit.wtako.net Feed
+
+- **URL:** https://wtako.net/services/aur-audit
+- **API docs:** https://wtako.net/services/aur-audit/docs
+- **Author:** wtako.net (third-party, independent of archcanary)
+- **Content:** Free, unauthenticated JSON API publishing continuous automated scan verdicts for AUR packages, categorized black (confirmed malicious), red (high-risk), and yellow (minor/qualitative). Paginated via `GET /packages?filter=black|red&before=&limit=`.
+- **Detection method:** `--refresh` pages through the `black` and `red` filters and stores the package names in `aur_audit_black.txt`/`aur_audit_red.txt`. Yellow is intentionally not synced — too noisy for an automated check without incident history to justify it.
+- **Status:** Live, continuously updated by the upstream service — not a static snapshot.
+- **Relevant for:** Community-scale, continuously-updated denylist supplementing archcanary's own hand-curated lists. Best-effort third-party data, not a guarantee — same caveat as any heuristic scanner.

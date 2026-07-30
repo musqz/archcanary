@@ -141,10 +141,12 @@ Every scan prints a per-check summary before the final verdict:
 | `--run-lynis` | Run `lynis audit system`, stream output | Yes |
 | `--check-pkginteg` | Verify installed file checksums via `pacman -Qkk`. Reports SHA256 mismatches on non-backup, non-factory files. Backup files (pacman-managed configs expected to diverge) and `/factory/` paths are filtered out. Prioritise hits in `/usr/bin/`, `/usr/lib/`, `/usr/sbin/`. | Yes |
 | `--full` | All of the above | Partial |
-| `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc | — |
+| `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam lists and the aur-audit black/red feed | — |
 | `--package-list=PATH` | Override the infected AUR package list | — |
 | `--extra-list=PATH_OR_URL` | Load an additional package list (file or `https://` URL); repeatable | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
+
+Both `install.sh` and the AUR package install bash tab-completion for every flag above (`archcanary --<TAB>`), loaded automatically via the `bash-completion` package — no `.bashrc` edits needed. If you'd rather type `canary`, add `alias canary=archcanary` to your `.bashrc`/`.zshrc`; the completion is already registered for that name too, so it works immediately.
 
 ### Lynis on a desktop system
 
@@ -259,6 +261,12 @@ Three waves:
 A separate campaign ([reported by Sid Karunaratne](https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/2YQSHTC27MOKDDKHZTH2BJGTEN2CYC7W/)) in which 75 AUR package PKGBUILDs were modified to inject Russian-language spam `echo` statements into `~/.bashrc`, `~/.zshrc`, and other shell configs at install time. No credential theft or persistence — nuisance/propaganda payload. Reported to Arch DevOps; cleanup was in progress as of 2026-06-14.
 
 archcanary detects these via `malicious_russian_spam_packages.txt` (shown in the scan header alongside the JS campaign count).
+
+### aur-audit.wtako.net feed
+
+`--refresh` also syncs the black/red package lists published by the third-party [aur-audit.wtako.net](https://wtako.net/services/aur-audit) service, which continuously scans all of AUR and publishes verdicts via a free, unauthenticated API. Black (confirmed malicious) and red (high-risk) hits are merged into the same infected-package check as the lists above, annotated `[aur-audit: black]` / `[aur-audit: red]` so you can tell the source of a hit. Yellow (minor/qualitative findings) is intentionally not synced — too noisy for an automated check. This is a best-effort, third-party feed, not a guarantee — same caveat as any heuristic scanner.
+
+The same synced lists also gate installs directly: the `AURPreInstall` yay hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) aborts a build on a black hit and warns on a red hit — a pre-build check that doesn't need aurscan or an LLM.
 
 ---
 

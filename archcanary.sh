@@ -156,7 +156,7 @@ for arg in "$@"; do
             echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
             echo "  --run-lynis        Run a full Lynis audit (lynis audit system) and exit — not included in --full"
             echo "  --full             Enable all checks"
-            echo "  --refresh          Download the latest package list before scanning"
+            echo "  --refresh          Download the latest package list before scanning (incl. aur-audit black/red feed)"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
             echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/archcanary/aur-check-<date>.log)"
             echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
@@ -566,7 +566,7 @@ run_doctor() {
                 "path: /usr/share/libalpm/hooks/traur.hook"
         fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
-        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, install log)" "$(_marker "$_ARCHCANARY_LUA_MARKER" "$yay_init_lua")" "" "path: $yay_init_lua"
+        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)" "$(_marker "$_ARCHCANARY_LUA_MARKER" "$yay_init_lua")" "" "path: $yay_init_lua"
         printf '\n'
     fi
 
@@ -737,6 +737,12 @@ CHAOS_RAT_PKGS=()
 
 RUSSIAN_SPAM_LIST="${RUSSIAN_SPAM_LIST:-$AUR_CONFIG_DIR/malicious_russian_spam_packages.txt}"
 RUSSIAN_SPAM_PKGS=()
+
+AUR_AUDIT_BLACK_LIST="${AUR_AUDIT_BLACK_LIST:-$AUR_CONFIG_DIR/aur_audit_black.txt}"
+AUR_AUDIT_BLACK_PKGS=()
+
+AUR_AUDIT_RED_LIST="${AUR_AUDIT_RED_LIST:-$AUR_CONFIG_DIR/aur_audit_red.txt}"
+AUR_AUDIT_RED_PKGS=()
 
 EXTRA_LISTS_CONF="${EXTRA_LISTS_CONF:-$AUR_CONFIG_DIR/extra_lists.conf}"
 EXTRA_PKGS=()
@@ -933,6 +939,38 @@ load_packages() {
         _refresh_list "$CHAOS_RAT_LIST_URL"       "$CHAOS_RAT_LIST"      "CHAOS RAT list"       "$CHAOS_RAT_LIST_OPT"
         _refresh_list "$RUSSIAN_SPAM_LIST_URL"    "$RUSSIAN_SPAM_LIST"   "Russian spam list"    "$RUSSIAN_SPAM_LIST_OPT"
         unset -f _refresh_list
+
+        # aur-audit.wtako.net — community/third-party continuous AUR scan feed.
+        # Paginated JSON API (no auth, no jq dependency: grep -oP field pull).
+        # Fails soft per filter, like the supplementary lists above.
+        _refresh_aur_audit() {
+            local filter="$1" dest="$2" label="$3"
+            local base="https://aur-audit.wtako.net/packages"
+            local cursor="" page page_names all=() n pages=0
+            echo "Fetching aur-audit $label list..."
+            while :; do
+                page=$(curl -fsSL "${base}?filter=${filter}&limit=500${cursor:+&before=$cursor}" 2>/dev/null) || {
+                    echo >&2 "WARNING: failed to fetch aur-audit $label list — keeping existing."
+                    return
+                }
+                mapfile -t page_names < <(grep -oP '"packageName":"\K[^"]*' <<<"$page")
+                all+=("${page_names[@]}")
+                cursor=$(grep -oP '"nextCursor":\K[0-9]+' <<<"$page" || true)
+                pages=$((pages + 1))
+                [[ -n "$cursor" && $pages -lt 200 ]] || break
+            done
+            n=${#all[@]}
+            if [[ $n -eq 0 ]]; then
+                echo >&2 "WARNING: aur-audit $label fetch returned 0 entries — keeping existing."
+                return
+            fi
+            printf '%s\n' "${all[@]}" | sort -u > "$dest"
+            _chown_to_invoker "$dest"
+            echo "Updated $dest ($(grep -c '^[^#[:space:]]' "$dest") entries)"
+        }
+        _refresh_aur_audit black "$AUR_AUDIT_BLACK_LIST" "black"
+        _refresh_aur_audit red   "$AUR_AUDIT_RED_LIST"   "red"
+        unset -f _refresh_aur_audit
     fi
 
     if [[ ! -f "$PACKAGE_LIST_FILE" ]]; then
@@ -968,6 +1006,23 @@ load_packages() {
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             RUSSIAN_SPAM_PKGS+=("$line")
         done <"$RUSSIAN_SPAM_LIST"
+    fi
+
+    # aur-audit.wtako.net black/red lists (optional — only exist after --refresh)
+    AUR_AUDIT_BLACK_PKGS=()
+    if [[ -f "$AUR_AUDIT_BLACK_LIST" ]]; then
+        while IFS= read -r line; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            AUR_AUDIT_BLACK_PKGS+=("$line")
+        done <"$AUR_AUDIT_BLACK_LIST"
+    fi
+
+    AUR_AUDIT_RED_PKGS=()
+    if [[ -f "$AUR_AUDIT_RED_LIST" ]]; then
+        while IFS= read -r line; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            AUR_AUDIT_RED_PKGS+=("$line")
+        done <"$AUR_AUDIT_RED_LIST"
     fi
 
     # Extra lists — from extra_lists.conf and --extra-list= flags
@@ -1065,6 +1120,10 @@ check_current() {
         fi
         if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then
             found+=("$pkg (installed: $install_date) [CHAOS RAT campaign, 2025-07]")
+        elif [[ -v AUR_AUDIT_BLACK_LOOKUP["$pkg"] ]]; then
+            found+=("$pkg (installed: $install_date) [aur-audit: black]")
+        elif [[ -v AUR_AUDIT_RED_LOOKUP["$pkg"] ]]; then
+            found+=("$pkg (installed: $install_date) [aur-audit: red]")
         else
             found+=("$pkg (installed: $install_date)")
         fi
@@ -1132,6 +1191,10 @@ check_logs() {
 
             if [[ -v CHAOS_LOOKUP[$pkg] ]]; then
                 echo "LOG_HIT: $pkg ($action on $datetime_str) [CHAOS RAT campaign, 2025-07]"
+            elif [[ -v AUR_AUDIT_BLACK_LOOKUP[$pkg] ]]; then
+                echo "LOG_HIT: $pkg ($action on $datetime_str) [aur-audit: black]"
+            elif [[ -v AUR_AUDIT_RED_LOOKUP[$pkg] ]]; then
+                echo "LOG_HIT: $pkg ($action on $datetime_str) [aur-audit: red]"
             else
                 echo "LOG_HIT: $pkg ($action on $datetime_str)"
             fi
@@ -2261,6 +2324,20 @@ for p in "${RUSSIAN_SPAM_PKGS[@]}"; do
     INFECTED_PKGS+=("$p")
 done
 
+# aur-audit.wtako.net black/red — built before merging, same reason as
+# CHAOS_LOOKUP above (source-specific annotation in check_current/check_logs).
+declare -A AUR_AUDIT_BLACK_LOOKUP
+for p in "${AUR_AUDIT_BLACK_PKGS[@]}"; do
+    AUR_AUDIT_BLACK_LOOKUP["$p"]=1
+    INFECTED_PKGS+=("$p")
+done
+
+declare -A AUR_AUDIT_RED_LOOKUP
+for p in "${AUR_AUDIT_RED_PKGS[@]}"; do
+    AUR_AUDIT_RED_LOOKUP["$p"]=1
+    INFECTED_PKGS+=("$p")
+done
+
 # Extra lists — merged last so they appear in INFECTED_LOOKUP
 for p in "${EXTRA_PKGS[@]}"; do
     INFECTED_PKGS+=("$p")
@@ -2285,6 +2362,12 @@ if ! $FOCUSED_MODE; then
     fi
     if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
         printf "   + Russian Spam%7s pkgs\n" "${#RUSSIAN_SPAM_PKGS[@]}"
+    fi
+    if [[ ${#AUR_AUDIT_BLACK_PKGS[@]} -gt 0 ]]; then
+        printf "   + aur-audit black%4s pkgs\n" "${#AUR_AUDIT_BLACK_PKGS[@]}"
+    fi
+    if [[ ${#AUR_AUDIT_RED_PKGS[@]} -gt 0 ]]; then
+        printf "   + aur-audit red%6s pkgs\n" "${#AUR_AUDIT_RED_PKGS[@]}"
     fi
     if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
         printf "   + extra lists%8s pkgs  (extra_lists.conf / --extra-list)\n" "${#EXTRA_PKGS[@]}"

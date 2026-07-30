@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Added: `--refresh` now also syncs the black/red package lists from the third-party [aur-audit.wtako.net](https://wtako.net/services/aur-audit) service (continuous community AUR scan feed, free/unauthenticated API). Hits merge into the existing infected-package check, annotated `[aur-audit: black]`/`[aur-audit: red]`. Yellow (qualitative/minor) findings are not synced. Purely additive — no new dependency, no network call outside `--refresh`, no CLI overrides.
+- Added: new `AURPreInstall` yay hook in `configs/yay-init.lua` checks the about-to-build package against the synced aur-audit black/red lists — aborts on black, warns on red. Gives pre-build protection against known-bad AUR packages without requiring aurscan/an LLM. No new systemd unit: the existing weekly/on-boot `archcanary.timer` already keeps the lists fresh via `--refresh`.
+- Added: bash tab-completion (`configs/archcanary-completion.bash`), installed by both `install.sh` and the AUR package into the standard `bash-completion` completions directory — no `.bashrc` edits needed. Also registers a `canary` completion alongside it (as a symlink) for anyone who adds their own `alias canary=archcanary`.
+
 ## v0.1.19 (2026-07-25)
 
 - Fix: the AUR package `aurscan-manticore-git` no longer exists — upstream split it into `aurscan-manticore-release-git` (source build) and `aurscan-manticore-bin-release-git` (prebuilt binary). Updated every install command/optdepend pointing at the old name, including the `PKGBUILD`'s own `optdepends="aurscan: ..."`, which never matched anyway since no AUR package is literally named `aurscan`.

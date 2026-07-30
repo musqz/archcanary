@@ -109,6 +109,13 @@ Enable all of the above checks.
 .TP
 .B \-\-refresh
 Download the latest package list from the Arch Linux HedgeDoc before scanning.
+Also refreshes the supplementary npm/CHAOS RAT/Russian Spam lists and syncs
+the black/red package feed from the third-party
+.I aur-audit.wtako.net
+service (continuous community AUR scan; free, unauthenticated API). Hits from
+that feed are merged into the same infected-package check and annotated
+.IR "[aur-audit: black]" " / " "[aur-audit: red]" .
+Yellow (minor/qualitative) findings are not synced.
 .TP
 \fB\-\-package-list\fR=\fIPATH\fR
 Override the infected AUR package list (default:

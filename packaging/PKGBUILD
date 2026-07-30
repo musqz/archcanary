@@ -13,6 +13,7 @@ optdepends=(
   'polkit: GUI privilege escalation for root checks'
   'bpf: bpftool for eBPF rootkit detection'
   'yay: AUR helper with Lua hook support'
+  'bash-completion: tab-completion for archcanary/canary flags'
   'aurscan-manticore-release-git: LLM-based PKGBUILD scanner (pre-install gate), builds from source'
   'aurscan-manticore-bin-release-git: LLM-based PKGBUILD scanner (pre-install gate), pre-built binary'
 )
@@ -40,6 +41,11 @@ package() {
 
   # Man page
   install -Dm644 man/archcanary.1 "$pkgdir/usr/share/man/man1/archcanary.1"
+
+  # Bash completion (archcanary + canary alias)
+  install -Dm644 configs/archcanary-completion.bash \
+    "$pkgdir/usr/share/bash-completion/completions/archcanary"
+  ln -sf archcanary "$pkgdir/usr/share/bash-completion/completions/canary"
 
   # System lib: scanner + root helper + threat lists (used by the root scan)
   install -dm755 "$pkgdir/usr/lib/archcanary"

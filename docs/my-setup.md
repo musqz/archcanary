@@ -151,6 +151,8 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── malicious_npm_packages.txt         # static lists, auto-seeded on first run
     ├── chaos_rat_packages.txt
     ├── malicious_russian_spam_packages.txt
+    ├── aur_audit_black.txt                # synced via --refresh only (no bundled fallback —
+    ├── aur_audit_red.txt                  #   third-party live feed, not ours to snapshot)
     └── extra_lists.conf                   # optional extra list subscriptions (paths/URLs)
 
 ~/.config/yay/
@@ -226,17 +228,24 @@ exec env -u EDITOR -u VISUAL aurscan-edit "$@"
 
 — that runs aurscan's edit-hook (`aurscan-edit`) with `EDITOR`/`VISUAL` cleared, so a CLEAN scan proceeds without dropping you into a manual editor and a non-CLEAN verdict exits non-zero, aborting the build. Because yay only invokes the editor for actual builds, non-build operations (`yay -Syu` with nothing to build, `-Ss`, `-Q`, `--version`) are untouched — this is why the old `syay` wrapper alias was dropped.
 
-**2. The yay 13.0 Lua hooks** (`~/.config/yay/init.lua`) — seeded by `install.sh` if not already present (source: [`configs/yay-init.lua`](../configs/yay-init.lua)). An offline backstop that runs alongside the editor-gate:
+**2. The yay 13.0 Lua hooks** (`~/.config/yay/init.lua`) — seeded by `install.sh` **only if the file doesn't already exist** (source: [`configs/yay-init.lua`](../configs/yay-init.lua)). If you already have an `init.lua` from before a hook was added here, `install.sh` won't retrofit it — re-copy `configs/yay-init.lua` by hand (merging in any of your own customizations) to pick up new hooks. An offline backstop that runs alongside the editor-gate:
 
 | Hook | Event | What it does |
 |------|-------|--------------|
 | Upgrade-age warning | `UpgradeSelect` | Warns for any AUR upgrade whose PKGBUILD was modified < 3 days ago (prints hours since change) — a freshly rewritten PKGBUILD is the classic compromise signal |
 | Pattern block | `AURPreInstall` | Aborts the build if the PKGBUILD matches a known-malicious pattern: `npm install atomic-lockfile` (Atomic Arch wave 1), `bun install js-digest` (wave 2), or `curl`/`wget` piped to `bash`/`sh` |
+| aur-audit check | `AURPreInstall` | Aborts on a black (confirmed malicious) hit, warns on red (high-risk, unconfirmed) from the [aur-audit.wtako.net](https://wtako.net/services/aur-audit) feed synced by `--refresh` — the only protection against a malicious AUR package that doesn't require aurscan/an LLM |
 | Install log | `PostInstall` | Logs every installed AUR package (name + version) via `yay.log.info` |
 
 Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and **`edit_menu = true`** — `editmenu`/`edit_menu` being on is **required** for the editor-gate: it forces yay to invoke its editor (`aurscan-gate`) on each PKGBUILD, which is the interception point for the scan. `config.json` mirrors the rest of the options and sets `editor=aurscan-gate`.
 
 > The two layers are complementary: the editor-gate (aurscan/Claude) catches novel or obfuscated payloads; the Lua hooks are a fast offline backstop for known campaign signatures and stale-rewrite upgrades, and run even if the LLM call is unavailable.
+
+## Shell completion and the `canary` alias
+
+Both install paths (`install.sh` and the AUR package) drop a bash-completion script into `/usr/share/bash-completion/completions/archcanary` (system) or `~/.local/share/bash-completion/completions/archcanary` (user), plus a `canary` symlink alongside it — both load automatically via the `bash-completion` package, no `.bashrc` edits required. `archcanary --<TAB>` lists every flag; `--doctor=<TAB>`, `--color=<TAB>`, and the `--*-list=<TAB>`/`--log-file=<TAB>` flags complete their values (section names, `auto|always|never`, and file paths respectively).
+
+The `canary` completion works standalone, but `canary` itself is only a *name* until you actually alias it — add `alias canary=archcanary` to `.bashrc`/`.zshrc` yourself if you want the shorter command; `install.sh` deliberately doesn't inject this (same "never touch the user's shell rc" rule as everything else here).
 
 ## Known false positives
 
