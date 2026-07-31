@@ -268,8 +268,9 @@ All threads on https://lists.archlinux.org/archives/list/aur-general@lists.archl
 
 - **URL:** https://wtako.net/services/aur-audit
 - **API docs:** https://wtako.net/services/aur-audit/docs
-- **Author:** wtako.net (third-party, independent of archcanary)
+- **Author:** An independent, pseudonymous individual operator ("Saren" / wtako.net — personal homelab site, not a security vendor or organization). Third-party, unaffiliated with archcanary.
 - **Content:** Free, unauthenticated JSON API publishing continuous automated scan verdicts for AUR packages, categorized black (confirmed malicious), red (high-risk), and yellow (minor/qualitative). Paginated via `GET /packages?filter=black|red&before=&limit=`.
 - **Detection method:** `--refresh` pages through the `black` and `red` filters and stores the package names in `aur_audit_black.txt`/`aur_audit_red.txt`. Yellow is intentionally not synced — too noisy for an automated check without incident history to justify it.
 - **Status:** Live, continuously updated by the upstream service — not a static snapshot.
-- **Relevant for:** Community-scale, continuously-updated denylist supplementing archcanary's own hand-curated lists. Best-effort third-party data, not a guarantee — same caveat as any heuristic scanner.
+- **Trust basis:** Neither the site nor the API docs publish a scanning methodology, source code, or a track record — there are no operator credentials to verify. Included anyway because the integration itself is low-risk: the API is free, unauthenticated, and read-only; its hits are merged as an annotated, attributable signal (`[aur-audit: black]`/`[aur-audit: red]`) alongside archcanary's own sourced/cited lists rather than replacing them. This is unlike every other entry in this file, which are all independently corroborated incident reports — treat this one as a best-effort community signal, not verified intelligence.
+- **Relevant for:** Community-scale, continuously-updated denylist supplementing archcanary's own hand-curated lists.
