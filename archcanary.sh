@@ -2311,6 +2311,10 @@ _print_summary() {
 
 load_packages
 
+# Captured before the merge loops below append the supplementary lists, so
+# it reflects package_list.txt alone (used by the "Lists loaded" banner).
+BASE_PKG_COUNT=${#INFECTED_PKGS[@]}
+
 # Build CHAOS_LOOKUP before merging into INFECTED_PKGS so checks can apply
 # the CHAOS RAT date window separately from the main campaign window.
 declare -A CHAOS_LOOKUP
@@ -2351,26 +2355,47 @@ for p in "${INFECTED_PKGS[@]}"; do
 done
 
 if ! $FOCUSED_MODE; then
+    # Per-list pkg counts from the previous run, so the banner below can show
+    # a "(+N)"/"(-N)" delta and flag when a threat-intel feed grew or shrank.
+    LIST_COUNTS_FILE="$AUR_CONFIG_DIR/.list_counts"
+    declare -A _PREV_LIST_COUNTS
+    if [[ -f "$LIST_COUNTS_FILE" ]]; then
+        while IFS='=' read -r _k _v; do
+            [[ -z "$_k" ]] && continue
+            _PREV_LIST_COUNTS["$_k"]="$_v"
+        done < "$LIST_COUNTS_FILE"
+    fi
+
+    # Prints " (+N)" / " (-N)" against last run's count for key $1, or nothing
+    # if unchanged / not tracked yet (first run, or a newly-populated list).
+    _count_diff() {
+        local prev="${_PREV_LIST_COUNTS[$1]:-}" delta
+        [[ -z "$prev" ]] && return
+        delta=$(( $2 - prev ))
+        [[ $delta -ne 0 ]] && printf ' (%+d)' "$delta"
+    }
+
     echo "============================================================"
     echo " Archcanary v${SCRIPT_VERSION}"
     echo " Scanned: $(date '+%Y-%m-%d %H:%M')"
     echo
     echo " Lists loaded"
-    echo "   $(basename "$PACKAGE_LIST_FILE")  infostealer + eBPF rootkit"
+    printf "   %s  infostealer + eBPF rootkit  %s pkgs%s\n" \
+        "$(basename "$PACKAGE_LIST_FILE")" "$BASE_PKG_COUNT" "$(_count_diff package_list "$BASE_PKG_COUNT")"
     if [[ ${#CHAOS_RAT_PKGS[@]} -gt 0 ]]; then
-        printf "   + CHAOS RAT%10s pkgs\n" "${#CHAOS_RAT_PKGS[@]}"
+        printf "   + CHAOS RAT%10s pkgs%s\n" "${#CHAOS_RAT_PKGS[@]}" "$(_count_diff chaos_rat "${#CHAOS_RAT_PKGS[@]}")"
     fi
     if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
-        printf "   + Russian Spam%7s pkgs\n" "${#RUSSIAN_SPAM_PKGS[@]}"
+        printf "   + Russian Spam%7s pkgs%s\n" "${#RUSSIAN_SPAM_PKGS[@]}" "$(_count_diff russian_spam "${#RUSSIAN_SPAM_PKGS[@]}")"
     fi
     if [[ ${#AUR_AUDIT_BLACK_PKGS[@]} -gt 0 ]]; then
-        printf "   + aur-audit black%4s pkgs\n" "${#AUR_AUDIT_BLACK_PKGS[@]}"
+        printf "   + aur-audit black%4s pkgs%s\n" "${#AUR_AUDIT_BLACK_PKGS[@]}" "$(_count_diff aur_audit_black "${#AUR_AUDIT_BLACK_PKGS[@]}")"
     fi
     if [[ ${#AUR_AUDIT_RED_PKGS[@]} -gt 0 ]]; then
-        printf "   + aur-audit red%6s pkgs\n" "${#AUR_AUDIT_RED_PKGS[@]}"
+        printf "   + aur-audit red%6s pkgs%s\n" "${#AUR_AUDIT_RED_PKGS[@]}" "$(_count_diff aur_audit_red "${#AUR_AUDIT_RED_PKGS[@]}")"
     fi
     if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
-        printf "   + extra lists%8s pkgs  (extra_lists.conf / --extra-list)\n" "${#EXTRA_PKGS[@]}"
+        printf "   + extra lists%8s pkgs%s  (extra_lists.conf / --extra-list)\n" "${#EXTRA_PKGS[@]}" "$(_count_diff extra "${#EXTRA_PKGS[@]}")"
     fi
     echo
     echo " Packages checked: ${#INFECTED_PKGS[@]}"
@@ -2379,6 +2404,18 @@ if ! $FOCUSED_MODE; then
     fi
     echo "============================================================"
     echo
+
+    # Persist this run's counts as the baseline for the next comparison.
+    {
+        printf 'package_list=%s\n' "$BASE_PKG_COUNT"
+        printf 'chaos_rat=%s\n' "${#CHAOS_RAT_PKGS[@]}"
+        printf 'russian_spam=%s\n' "${#RUSSIAN_SPAM_PKGS[@]}"
+        printf 'aur_audit_black=%s\n' "${#AUR_AUDIT_BLACK_PKGS[@]}"
+        printf 'aur_audit_red=%s\n' "${#AUR_AUDIT_RED_PKGS[@]}"
+        printf 'extra=%s\n' "${#EXTRA_PKGS[@]}"
+    } > "$LIST_COUNTS_FILE"
+    _chown_to_invoker "$LIST_COUNTS_FILE"
+    unset -f _count_diff
 
     log_info "Loaded ${#INFECTED_PKGS[@]} packages from $PACKAGE_LIST_FILE"
 
