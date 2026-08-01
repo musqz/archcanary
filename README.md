@@ -266,7 +266,7 @@ archcanary detects these via `malicious_russian_spam_packages.txt` (shown in the
 
 ### Community Reports
 
-A hand-curated list (`community_reports.txt`), sourced from AUR malware reports shared by the community — refreshed the same way as the lists above, no separate opt-in needed. Unlike the campaign-specific lists, this one has no fixed scope or end date; it's an ongoing collection point for individually-reported packages that don't (yet) belong to a documented campaign. Hits are annotated `[community report]` so you can tell the source. Maintained directly in this repo — see [SOURCES.md](SOURCES.md) for how entries get added.
+A hand-curated list (`community_reports.txt`), sourced from AUR malware reports shared by the community — refreshed the same way as the lists above, no separate opt-in needed. Unlike the campaign-specific lists, this one has no fixed scope or end date; it's an ongoing collection point for individually-reported packages that don't (yet) belong to a documented campaign. Hits are annotated `[community report]` so you can tell the source. Maintained directly in this repo — see [CONTRIBUTING.md](CONTRIBUTING.md) to report a package, or [SOURCES.md](SOURCES.md) for the trust basis.
 
 ### aur-audit.wtako.net feed
 
@@ -299,6 +299,7 @@ The same synced lists also gate installs directly: the `AURPreInstall` yay hook 
 - [docs/systemd.md](docs/systemd.md) — systemd unit files and automated scan setup
 - [docs/my-setup.md](docs/my-setup.md) — full personal stack, component connections, reinstall steps
 - [docs/false-positives.md](docs/false-positives.md) — documented benign signals and how to verify
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to report a malicious/suspicious AUR package
 - [SOURCES.md](SOURCES.md) — full numbered source references
 
 ---

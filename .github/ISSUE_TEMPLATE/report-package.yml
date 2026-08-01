@@ -1,0 +1,56 @@
+name: Report a malicious/suspicious AUR package
+description: Report an AUR package for archcanary's community-reported list
+title: "[package report]: "
+labels: ["community-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep `lists/community_reports.txt` up to date.
+        A merged report ships to every archcanary user automatically on
+        their next `--refresh`, annotated `[community report]`.
+
+        Before submitting, please check the package isn't already covered:
+        `grep -rF 'package-name' lists/` in the repo, or just search
+        `lists/` on GitHub.
+
+  - type: input
+    id: package-name
+    attributes:
+      label: Package name
+      description: Exact AUR package name (as it appears in the AUR web UI or `pacman -Qm` output).
+      placeholder: e.g. some-malicious-pkg-git
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        Link(s) to what makes this package suspicious/malicious — an AUR
+        comment, a mailing-list post, a PKGBUILD diff, a writeup. A package
+        name alone without evidence can't be verified or acted on.
+      placeholder: |
+        https://aur.archlinux.org/packages/...
+        https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/...
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What does it do?
+      description: Brief description of the malicious/suspicious behavior (credential theft, backdoor, spam injection, etc.) if known.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked this package isn't already in `package_list.txt`, `chaos_rat_packages.txt`, `malicious_russian_spam_packages.txt`, or `community_reports.txt` in this repo.
+          required: true
+        - label: I have a concrete link or evidence, not just suspicion.
+          required: true
