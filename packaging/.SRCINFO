@@ -21,6 +21,6 @@ pkgbase = archcanary
 	backup = etc/archcanary/bpftool_allowlist.conf
 	backup = etc/archcanary/autostart_allowlist.conf
 	source = archcanary-0.1.20.tar.gz::https://github.com/musqz/archcanary/archive/v0.1.20.tar.gz
-	sha256sums = SKIP
+	sha256sums = 422ff4208bbe713b458441a1e77d8ac3dd19a8a683835b12320645c2939d909b
 
 pkgname = archcanary
