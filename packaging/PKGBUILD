@@ -1,7 +1,7 @@
 # Maintainer: musqz <gummy-fang-deputy@duck.com>
 pkgname=archcanary
 pkgver=0.1.21
-pkgrel=1
+pkgrel=2
 pkgdesc="Layered security detection stack for Arch Linux — malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering"
 arch=('any')
 url="https://github.com/musqz/archcanary"
@@ -58,6 +58,8 @@ package() {
   done
   install -Dm644 configs/lynis-custom.prf \
     "$pkgdir/usr/lib/archcanary/lynis-custom.prf"
+  install -Dm644 configs/audit-rules.conf \
+    "$pkgdir/usr/lib/archcanary/audit-rules.conf"
 
   # Polkit policy (authorises root-helper via pkexec)
   install -Dm644 configs/org.archcanary.policy \
