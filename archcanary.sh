@@ -63,6 +63,7 @@ LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
 MALICIOUS_NPM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/malicious_npm_packages.txt"
 CHAOS_RAT_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/chaos_rat_packages.txt"
 RUSSIAN_SPAM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/malicious_russian_spam_packages.txt"
+COMMUNITY_REPORTS_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/community_reports.txt"
 
 CHECK_SYSTEMD=false
 CHECK_EBPF=false
@@ -93,6 +94,7 @@ PACKAGE_LIST_FILE_OPT=""
 MALICIOUS_NPM_LIST_OPT=""
 CHAOS_RAT_LIST_OPT=""
 RUSSIAN_SPAM_LIST_OPT=""
+COMMUNITY_LIST_OPT=""
 START_DATE_OPT=""
 END_DATE_OPT=""
 EXTRA_LIST_OPTS=()
@@ -127,6 +129,7 @@ for arg in "$@"; do
         --malicious-npm-list=*)  MALICIOUS_NPM_LIST_OPT="${arg#*=}" ;;
         --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
         --russian-spam-list=*)   RUSSIAN_SPAM_LIST_OPT="${arg#*=}" ;;
+        --community-list=*)      COMMUNITY_LIST_OPT="${arg#*=}" ;;
         --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
         --start-date=*)          START_DATE_OPT="${arg#*=}" ;;
         --end-date=*)            END_DATE_OPT="${arg#*=}" ;;
@@ -169,6 +172,7 @@ for arg in "$@"; do
             echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
             echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)
   --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)
+  --community-list=PATH     Custom community-reported package list (default: ./community_reports.txt)
   --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
             echo "  --start-date=YYYY-MM-DD   Only flag packages installed on or after this date (env: START_DATE)"
             echo "  --end-date=YYYY-MM-DD     Only flag packages installed on or before this date (env: END_DATE)"
@@ -638,6 +642,10 @@ if [[ -n "$RUSSIAN_SPAM_LIST_OPT" ]]; then
     RUSSIAN_SPAM_LIST="$RUSSIAN_SPAM_LIST_OPT"
 fi
 
+if [[ -n "$COMMUNITY_LIST_OPT" ]]; then
+    COMMUNITY_REPORTS_LIST="$COMMUNITY_LIST_OPT"
+fi
+
 if [[ -n "$START_DATE_OPT" ]]; then
     START_DATE="$START_DATE_OPT"
 fi
@@ -758,6 +766,9 @@ CHAOS_RAT_PKGS=()
 
 RUSSIAN_SPAM_LIST="${RUSSIAN_SPAM_LIST:-$AUR_CONFIG_DIR/malicious_russian_spam_packages.txt}"
 RUSSIAN_SPAM_PKGS=()
+
+COMMUNITY_REPORTS_LIST="${COMMUNITY_REPORTS_LIST:-$AUR_CONFIG_DIR/community_reports.txt}"
+COMMUNITY_REPORTS_PKGS=()
 
 AUR_AUDIT_BLACK_LIST="${AUR_AUDIT_BLACK_LIST:-$AUR_CONFIG_DIR/aur_audit_black.txt}"
 AUR_AUDIT_BLACK_PKGS=()
@@ -891,6 +902,10 @@ if [[ ! -f "$RUSSIAN_SPAM_LIST" ]]; then
     _bundled="$(_bundled_list_path malicious_russian_spam_packages.txt)" && cp "$_bundled" "$RUSSIAN_SPAM_LIST"
 fi
 
+if [[ ! -f "$COMMUNITY_REPORTS_LIST" ]]; then
+    _bundled="$(_bundled_list_path community_reports.txt)" && cp "$_bundled" "$COMMUNITY_REPORTS_LIST"
+fi
+
 if [[ ! -f "$EXTRA_LISTS_CONF" ]]; then
     cat > "$EXTRA_LISTS_CONF" <<'CONF'
 # archcanary extra package lists
@@ -969,6 +984,7 @@ load_packages() {
         _refresh_list "$MALICIOUS_NPM_LIST_URL"  "$MALICIOUS_NPM_LIST"  "malicious npm list"   "$MALICIOUS_NPM_LIST_OPT"
         _refresh_list "$CHAOS_RAT_LIST_URL"       "$CHAOS_RAT_LIST"      "CHAOS RAT list"       "$CHAOS_RAT_LIST_OPT"
         _refresh_list "$RUSSIAN_SPAM_LIST_URL"    "$RUSSIAN_SPAM_LIST"   "Russian spam list"    "$RUSSIAN_SPAM_LIST_OPT"
+        _refresh_list "$COMMUNITY_REPORTS_LIST_URL" "$COMMUNITY_REPORTS_LIST" "community reports list" "$COMMUNITY_LIST_OPT"
         unset -f _refresh_list
 
         # aur-audit.wtako.net — community/third-party continuous AUR scan feed.
@@ -1041,6 +1057,15 @@ load_packages() {
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             RUSSIAN_SPAM_PKGS+=("$line")
         done <"$RUSSIAN_SPAM_LIST"
+    fi
+
+    # Community-reported package list (optional — absence is not fatal)
+    COMMUNITY_REPORTS_PKGS=()
+    if [[ -f "$COMMUNITY_REPORTS_LIST" ]]; then
+        while IFS= read -r line; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            COMMUNITY_REPORTS_PKGS+=("$line")
+        done <"$COMMUNITY_REPORTS_LIST"
     fi
 
     # aur-audit.wtako.net black/red lists (optional — only exist after --refresh)
@@ -1165,6 +1190,8 @@ check_current() {
             found+=("$pkg (installed: $install_date) [aur-audit: black]")
         elif [[ -v AUR_AUDIT_RED_LOOKUP["$pkg"] ]]; then
             found+=("$pkg (installed: $install_date) [aur-audit: red]")
+        elif [[ -v COMMUNITY_REPORTS_LOOKUP["$pkg"] ]]; then
+            found+=("$pkg (installed: $install_date) [community report]")
         else
             found+=("$pkg (installed: $install_date)")
         fi
@@ -1236,6 +1263,8 @@ check_logs() {
                 echo "LOG_HIT: $pkg ($action on $datetime_str) [aur-audit: black]"
             elif [[ -v AUR_AUDIT_RED_LOOKUP[$pkg] ]]; then
                 echo "LOG_HIT: $pkg ($action on $datetime_str) [aur-audit: red]"
+            elif [[ -v COMMUNITY_REPORTS_LOOKUP[$pkg] ]]; then
+                echo "LOG_HIT: $pkg ($action on $datetime_str) [community report]"
             else
                 echo "LOG_HIT: $pkg ($action on $datetime_str)"
             fi
@@ -2244,8 +2273,8 @@ check_pkginteg() {
 # summary either. Just a quick way to keep track of what's redundant between
 # your own list(s) and the official ones, so extra_lists.conf doesn't quietly
 # grow entries the official feeds (package_list.txt, CHAOS RAT, Russian Spam,
-# aur-audit black/red) already track — the official list is authoritative,
-# so the custom entry is the one that's safe to remove.
+# Community Reports, aur-audit black/red) already track — the official list
+# is authoritative, so the custom entry is the one that's safe to remove.
 # ---------------------------------------------------------------------------
 check_list_overlap() {
     local -A owner=()   # pkgname -> 1 if covered by any official list
@@ -2259,6 +2288,7 @@ check_list_overlap() {
     for pkg in "${_base_pkgs[@]}";          do owner["$pkg"]=1; done
     for pkg in "${CHAOS_RAT_PKGS[@]}";      do owner["$pkg"]=1; done
     for pkg in "${RUSSIAN_SPAM_PKGS[@]}";   do owner["$pkg"]=1; done
+    for pkg in "${COMMUNITY_REPORTS_PKGS[@]}"; do owner["$pkg"]=1; done
     for pkg in "${AUR_AUDIT_BLACK_PKGS[@]}"; do owner["$pkg"]=1; done
     for pkg in "${AUR_AUDIT_RED_PKGS[@]}";   do owner["$pkg"]=1; done
 
@@ -2449,6 +2479,14 @@ for p in "${RUSSIAN_SPAM_PKGS[@]}"; do
     INFECTED_PKGS+=("$p")
 done
 
+# Community-reported packages — built before merging, same reason as
+# CHAOS_LOOKUP above (source-specific annotation in check_current/check_logs).
+declare -A COMMUNITY_REPORTS_LOOKUP
+for p in "${COMMUNITY_REPORTS_PKGS[@]}"; do
+    COMMUNITY_REPORTS_LOOKUP["$p"]=1
+    INFECTED_PKGS+=("$p")
+done
+
 # aur-audit.wtako.net black/red — built before merging, same reason as
 # CHAOS_LOOKUP above (source-specific annotation in check_current/check_logs).
 declare -A AUR_AUDIT_BLACK_LOOKUP
@@ -2512,6 +2550,9 @@ if ! $FOCUSED_MODE; then
     if [[ ${#RUSSIAN_SPAM_PKGS[@]} -gt 0 ]]; then
         printf "   + Russian Spam%7s pkgs%s\n" "${#RUSSIAN_SPAM_PKGS[@]}" "$(_count_diff "$RUSSIAN_SPAM_LIST" "${#RUSSIAN_SPAM_PKGS[@]}")"
     fi
+    if [[ ${#COMMUNITY_REPORTS_PKGS[@]} -gt 0 ]]; then
+        printf "   + Community Reports %s pkgs%s\n" "${#COMMUNITY_REPORTS_PKGS[@]}" "$(_count_diff "$COMMUNITY_REPORTS_LIST" "${#COMMUNITY_REPORTS_PKGS[@]}")"
+    fi
     if [[ ${#AUR_AUDIT_BLACK_PKGS[@]} -gt 0 ]]; then
         printf "   + aur-audit black%4s pkgs%s\n" "${#AUR_AUDIT_BLACK_PKGS[@]}" "$(_count_diff "$AUR_AUDIT_BLACK_LIST" "${#AUR_AUDIT_BLACK_PKGS[@]}")"
     fi
@@ -2536,6 +2577,7 @@ if ! $FOCUSED_MODE; then
     _PREV_LIST_COUNTS["$PACKAGE_LIST_FILE"]="$BASE_PKG_COUNT"
     _PREV_LIST_COUNTS["$CHAOS_RAT_LIST"]="${#CHAOS_RAT_PKGS[@]}"
     _PREV_LIST_COUNTS["$RUSSIAN_SPAM_LIST"]="${#RUSSIAN_SPAM_PKGS[@]}"
+    _PREV_LIST_COUNTS["$COMMUNITY_REPORTS_LIST"]="${#COMMUNITY_REPORTS_PKGS[@]}"
     _PREV_LIST_COUNTS["$AUR_AUDIT_BLACK_LIST"]="${#AUR_AUDIT_BLACK_PKGS[@]}"
     _PREV_LIST_COUNTS["$AUR_AUDIT_RED_LIST"]="${#AUR_AUDIT_RED_PKGS[@]}"
     for _i in "${!EXTRA_LIST_NAMES[@]}"; do

@@ -52,7 +52,8 @@ package() {
   install -m755  archcanary.sh         "$pkgdir/usr/lib/archcanary/archcanary.sh"
   install -m755  lib/archcanary-root-helper "$pkgdir/usr/lib/archcanary/root-helper"
   for _list in package_list.txt malicious_npm_packages.txt \
-               chaos_rat_packages.txt malicious_russian_spam_packages.txt; do
+               chaos_rat_packages.txt malicious_russian_spam_packages.txt \
+               community_reports.txt; do
     install -Dm644 "lists/$_list" "$pkgdir/usr/lib/archcanary/$_list"
   done
   install -Dm644 configs/lynis-custom.prf \

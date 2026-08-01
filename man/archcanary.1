@@ -107,7 +107,7 @@ Requires root.
 Note custom list
 .RI ( extra_lists.conf " or " \-\-extra\-list )
 entries already covered by an official list
-.RI ( package_list.txt ", CHAOS RAT, Russian Spam, or aur-audit black/red)"
+.RI ( package_list.txt ", CHAOS RAT, Russian Spam, Community Reports, or aur-audit black/red)"
 — safe to remove, since the official list is authoritative. Prints a
 ready-to-run
 .B sed
@@ -121,7 +121,8 @@ Enable all of the above checks.
 .TP
 .B \-\-refresh
 Download the latest package list from the Arch Linux HedgeDoc before scanning.
-Also refreshes the supplementary npm/CHAOS RAT/Russian Spam lists and syncs
+Also refreshes the supplementary npm/CHAOS RAT/Russian Spam/Community Reports
+lists and syncs
 the black/red package feed from the third-party
 .I aur-audit.wtako.net
 service (continuous community AUR scan; free, unauthenticated API). Hits from
@@ -155,6 +156,9 @@ Override the CHAOS RAT campaign package list.
 .TP
 \fB\-\-russian-spam-list\fR=\fIPATH\fR
 Override the Russian Spam Campaign package list.
+.TP
+\fB\-\-community-list\fR=\fIPATH\fR
+Override the community-reported package list.
 .TP
 \fB\-\-extra-list\fR=\fIPATH_OR_URL\fR
 Load an additional package list from a file path or

@@ -21,7 +21,7 @@ _archcanary() {
             COMPREPLY=($(compgen -W "auto always never" -- "$cur"))
             return 0
             ;;
-        --package-list|--malicious-npm-list|--chaos-rat-list|--russian-spam-list|--extra-list|--log-file)
+        --package-list|--malicious-npm-list|--chaos-rat-list|--russian-spam-list|--community-list|--extra-list|--log-file)
             _filedir
             return 0
             ;;
@@ -35,7 +35,7 @@ _archcanary() {
         --check-pkginteg --check-list-overlap --full --refresh --no-aur-audit --verbose -v --debug
         --no-notify --no-summary --run-lynis --doctor --version -V --help -h
         --log-file= --package-list= --malicious-npm-list= --chaos-rat-list=
-        --russian-spam-list= --extra-list= --start-date= --end-date=
+        --russian-spam-list= --community-list= --extra-list= --start-date= --end-date=
         --color= --doctor=
     "
     COMPREPLY=($(compgen -W "$flags" -- "$cur"))
