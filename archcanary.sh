@@ -285,6 +285,126 @@ CONF
     fi
 }
 
+# ---------------------------------------------------------------------------
+# --aur-audit-{status,enable,disable} — the one persisted setting the yad
+# GUI's "Scan Settings" dialog writes to ~/.config/archcanary/env (see
+# scan_settings() in archcanary-gui.sh): whether to fetch the
+# aur-audit.wtako.net feed on --refresh. User-owned, no root needed. Absence
+# of the AUR_AUDIT_ENABLE line means enabled — mirrors the yad GUI's own
+# format exactly, so either can edit the file and the other still reads it.
+# ---------------------------------------------------------------------------
+_aur_audit_env_path() {
+    echo "${ARCHCANARY_ENV_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env}"
+}
+
+_aur_audit_status_cli() {
+    local f val="true"
+    f="$(_aur_audit_env_path)"
+    if [[ -f "$f" ]]; then
+        val="$(grep -E '^AUR_AUDIT_ENABLE=' "$f" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+        [[ -z "$val" ]] && val="true"
+    fi
+    echo "$val"
+    exit 0
+}
+
+_aur_audit_set_cli() {
+    local enable="$1" f
+    f="$(_aur_audit_env_path)"
+    mkdir -p "$(dirname "$f")"
+    {
+        printf '# archcanary settings — managed by archcanary-gui\n'
+        [[ "$enable" == false ]] && printf 'AUR_AUDIT_ENABLE=false\n'
+    } > "$f"
+    if [[ "$enable" == false ]]; then
+        echo "aur-audit: disabled"
+    else
+        echo "aur-audit: enabled"
+    fi
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
+# --audit-rules-{get,set} — the root-owned auditd rules file the yad GUI
+# edits via a raw pkexec-tee text editor (edit_audit_rules() in
+# archcanary-gui.sh). --get mirrors that function's exact same read-fallback
+# order (real rules in the live file, then the pre-migration legacy path,
+# then the seed template) so both frontends see identical content. --set
+# needs root; content comes from stdin, matching the existing GUI's
+# free-form text editor (no line-level validation here either — auditctl
+# syntax isn't something this script can meaningfully validate).
+# ---------------------------------------------------------------------------
+_audit_rules_get_cli() {
+    local cfg="/etc/audit/rules.d/30-archcanary.rules"
+    local legacy_cfg="/etc/audit/rules.d/30-archcanary.conf"
+    local template="/usr/lib/archcanary/audit-rules.conf"
+    if grep -qE '^\s*-[waAbfe]' "$cfg" 2>/dev/null; then
+        cat "$cfg"
+    elif grep -qE '^\s*-[waAbfe]' "$legacy_cfg" 2>/dev/null; then
+        cat "$legacy_cfg"
+    elif [[ -f "$template" ]]; then
+        cat "$template"
+    else
+        echo "Error: no audit rules found — run install.sh --system first" >&2
+        exit 3
+    fi
+    exit 0
+}
+
+_audit_rules_set_cli() {
+    local cfg="/etc/audit/rules.d/30-archcanary.rules"
+    local legacy_cfg="/etc/audit/rules.d/30-archcanary.conf"
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: modifying $cfg requires root — run via pkexec (root-helper)" >&2
+        exit 1
+    fi
+    local content
+    content="$(cat)"
+    if [[ -z "$content" ]]; then
+        echo "Error: refusing to write an empty audit-rules file" >&2
+        exit 1
+    fi
+    printf '%s\n' "$content" > "$cfg"
+    chmod 644 "$cfg"
+    rm -f "$legacy_cfg"
+    systemctl restart auditd 2>/dev/null || true
+    echo "saved: $cfg"
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
+# --lynis-config-{get,set} — the root-owned Lynis custom profile, same
+# rationale as audit rules above (see edit_lynis_config() in
+# archcanary-gui.sh). No daemon to restart — Lynis reads this at scan time.
+# ---------------------------------------------------------------------------
+_lynis_config_get_cli() {
+    local cfg="/etc/lynis/custom.prf"
+    local template="/usr/lib/archcanary/lynis-custom.prf"
+    if [[ -f "$cfg" ]]; then
+        cat "$cfg"
+    elif [[ -f "$template" ]]; then
+        cat "$template"
+    else
+        printf '# Lynis custom profile\n# skip-test=<TEST-ID>\n'
+    fi
+    exit 0
+}
+
+_lynis_config_set_cli() {
+    local cfg="/etc/lynis/custom.prf"
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: modifying $cfg requires root — run via pkexec (root-helper)" >&2
+        exit 1
+    fi
+    local content
+    content="$(cat)"
+    mkdir -p "$(dirname "$cfg")"
+    printf '%s\n' "$content" > "$cfg"
+    chmod 644 "$cfg"
+    echo "saved: $cfg"
+    exit 0
+}
+
 for arg in "$@"; do
     case "$arg" in
         --check-systemd) CHECK_SYSTEMD=true ;;
@@ -328,6 +448,13 @@ for arg in "$@"; do
         --extra-lists-list)      _extra_lists_cli list ;;
         --extra-lists-add=*)     _extra_lists_cli add "${arg#*=}" ;;
         --extra-lists-remove=*)  _extra_lists_cli remove "${arg#*=}" ;;
+        --aur-audit-status)      _aur_audit_status_cli ;;
+        --aur-audit-enable)      _aur_audit_set_cli true ;;
+        --aur-audit-disable)     _aur_audit_set_cli false ;;
+        --audit-rules-get)       _audit_rules_get_cli ;;
+        --audit-rules-set)       _audit_rules_set_cli ;;
+        --lynis-config-get)      _lynis_config_get_cli ;;
+        --lynis-config-set)      _lynis_config_set_cli ;;
         --version|-V)
             echo "Archcanary v${SCRIPT_VERSION}"
             exit 0
@@ -383,6 +510,13 @@ for arg in "$@"; do
             echo "  --extra-lists-list                List ~/.config/archcanary/extra_lists.conf entries and exit"
             echo "  --extra-lists-add=VALUE           Add a path/URL to extra_lists.conf and exit"
             echo "  --extra-lists-remove=VALUE        Remove a path/URL from extra_lists.conf and exit"
+            echo "  --aur-audit-status                Print aur-audit.wtako.net feed setting (true/false)"
+            echo "  --aur-audit-enable                Enable the aur-audit.wtako.net feed on --refresh"
+            echo "  --aur-audit-disable               Disable the aur-audit.wtako.net feed on --refresh"
+            echo "  --audit-rules-get                 Print the auditd rules file and exit"
+            echo "  --audit-rules-set                 Read new auditd rules from stdin and save (needs root)"
+            echo "  --lynis-config-get                Print the Lynis custom profile and exit"
+            echo "  --lynis-config-set                Read a new Lynis custom profile from stdin and save (needs root)"
             echo "  --version, -V             Show version and exit"
             echo "  --help, -h                Show this help"
             exit 0
