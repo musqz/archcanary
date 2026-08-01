@@ -88,6 +88,7 @@ DOCTOR=false
 DOCTOR_SECTIONS=""
 RUN_LYNIS=false
 _COLOR_ARG="auto"
+_FORMAT_ARG="text"
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -103,6 +104,104 @@ EXTRA_LIST_OPTS=()
 CLEANUP_FILES=()
 trap 'rm -f "${CLEANUP_FILES[@]}"' EXIT
 trap 'rm -f "${CLEANUP_FILES[@]}"; exit 1' INT TERM
+
+# ---------------------------------------------------------------------------
+# --allowlist-{list,add,remove} — manage the four system-wide allowlists at
+# /etc/archcanary/*_allowlist.conf (seeded by install.sh --system). --list
+# needs no root (the files are mode 644); --add/--remove do, and are meant to
+# be invoked as `pkexec /usr/lib/archcanary/root-helper --allowlist-add=NAME:
+# VALUE` — root-helper independently re-validates NAME/VALUE before exec'ing
+# back into this script, since it (not this script) is the actual polkit
+# privilege boundary. Env var overrides match the ones the scan-time parsing
+# below already uses, so both point at the same file.
+# ---------------------------------------------------------------------------
+_allowlist_path() {
+    case "$1" in
+        dkms)      echo "${DKMS_ALLOWLIST_FILE:-/etc/archcanary/dkms_allowlist.conf}" ;;
+        systemd)   echo "${SYSTEMD_ALLOWLIST_FILE:-/etc/archcanary/systemd_allowlist.conf}" ;;
+        bpftool)   echo "${BPFTOOL_ALLOWLIST_FILE:-/etc/archcanary/bpftool_allowlist.conf}" ;;
+        autostart) echo "${AUTOSTART_ALLOWLIST_FILE:-/etc/archcanary/autostart_allowlist.conf}" ;;
+        *)         return 1 ;;
+    esac
+}
+
+# Prints one semantic value per line — same "strip inline comment, take first
+# token" rule the scan-time DKMS/SYSTEMD/BPFTOOL/AUTOSTART_ALLOWLIST parsing
+# below applies — so list output always matches what a scan actually treats
+# as allowlisted, not raw file lines (which may carry a trailing description).
+_allowlist_values() {
+    awk '{
+        line = $0
+        sub(/#.*/, "", line)
+        n = split(line, tok, /[ \t]+/)
+        for (i = 1; i <= n; i++) { if (tok[i] != "") { print tok[i]; break } }
+    }' "$1"
+}
+
+_allowlist_cli() {
+    local action="$1" arg2="$2" name value path
+    if [[ "$action" == list ]]; then
+        name="$arg2"
+    else
+        if [[ "$arg2" != *:* ]]; then
+            echo "Error: expected NAME:VALUE, got '$arg2'" >&2
+            exit 1
+        fi
+        name="${arg2%%:*}"
+        value="${arg2#*:}"
+    fi
+    path="$(_allowlist_path "$name")" || {
+        echo "Error: unknown allowlist '$name' (expected: dkms, systemd, bpftool, autostart)" >&2
+        exit 1
+    }
+    if [[ ! -f "$path" ]]; then
+        echo "Error: $path does not exist — run install.sh --system first" >&2
+        exit 3
+    fi
+    if [[ "$action" == list ]]; then
+        _allowlist_values "$path"
+        exit 0
+    fi
+    if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$ ]]; then
+        echo "Error: invalid allowlist value '$value'" >&2
+        exit 1
+    fi
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: modifying $path requires root — run via pkexec (root-helper)" >&2
+        exit 1
+    fi
+    if [[ "$action" == add ]]; then
+        if _allowlist_values "$path" | grep -qxF "$value"; then
+            echo "already allowlisted: $value"
+            exit 0
+        fi
+        printf '%s\n' "$value" >> "$path"
+        echo "added: $value"
+        exit 0
+    else
+        if ! _allowlist_values "$path" | grep -qxF "$value"; then
+            echo "not found: $value" >&2
+            exit 1
+        fi
+        local tmp
+        tmp="$(mktemp "${path}.XXXXXX")"
+        CLEANUP_FILES+=("$tmp")
+        awk -v val="$value" '{
+            line = $0
+            stripped = line
+            sub(/#.*/, "", stripped)
+            n = split(stripped, tok, /[ \t]+/)
+            first = ""
+            for (i = 1; i <= n; i++) { if (tok[i] != "") { first = tok[i]; break } }
+            if (first == val) next
+            print line
+        }' "$path" > "$tmp"
+        mv "$tmp" "$path"
+        chmod 644 "$path"
+        echo "removed: $value"
+        exit 0
+    fi
+}
 
 for arg in "$@"; do
     case "$arg" in
@@ -137,9 +236,13 @@ for arg in "$@"; do
         --no-notify)             NO_NOTIFY=true ;;
         --no-summary)            NO_SUMMARY=true ;;
         --color=*)               _COLOR_ARG="${arg#*=}" ;;
+        --format=*)              _FORMAT_ARG="${arg#*=}" ;;
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
         --run-lynis)             RUN_LYNIS=true ;;
+        --allowlist-list=*)      _allowlist_cli list "${arg#*=}" ;;
+        --allowlist-add=*)       _allowlist_cli add "${arg#*=}" ;;
+        --allowlist-remove=*)    _allowlist_cli remove "${arg#*=}" ;;
         --version|-V)
             echo "Archcanary v${SCRIPT_VERSION}"
             exit 0
@@ -179,6 +282,8 @@ for arg in "$@"; do
             echo "  --no-notify               Suppress the desktop notification on detection
   --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --color=auto|always|never Control symbol/color output (default: auto; also obeys NO_COLOR env)"
+            echo "  --format=text|json        Output a JSON summary instead of the human-readable report"
+            echo "                            (default: text; JSON goes to stdout, full narrative still logged)"
             echo "  --doctor                  Report install/config status of every stack element"
             echo "                            (deps, install, systemd, aurscan, traur, yay/paru hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
@@ -186,6 +291,10 @@ for arg in "$@"; do
             echo "                            (tool names like aurscan/traur/yad also map to a section)"
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
+            echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
+            echo "                                     NAME: dkms, systemd, bpftool, autostart"
+            echo "  --allowlist-add=NAME:VALUE        Add VALUE to an allowlist and exit (needs root)"
+            echo "  --allowlist-remove=NAME:VALUE     Remove VALUE from an allowlist and exit (needs root)"
             echo "  --version, -V             Show version and exit"
             echo "  --help, -h                Show this help"
             exit 0
@@ -230,6 +339,18 @@ _init_color() {
     fi
 }
 _init_color
+
+# --format=json: a stable, structured contract for callers other than a human
+# terminal (archcanary-gtk in particular) instead of scraping the text output
+# above, which is formatted for a human and not meant to be a stable contract.
+case "$_FORMAT_ARG" in
+    text) FORMAT_JSON=false ;;
+    json) FORMAT_JSON=true ;;
+    *)
+        echo "Error: --format must be 'text' or 'json' (got '$_FORMAT_ARG')" >&2
+        exit 1
+        ;;
+esac
 
 # Focused mode: a specific --check-* flag was given without --full.
 # Suppresses the campaign header and the always-on package/log checks so
@@ -733,8 +854,19 @@ mkdir -p "$_AUR_CACHE_DIR"
 unset _AUR_CACHE_DIR
 # Verify log file writable before redirecting
 : > "$LOG_FILE" 2>/dev/null || { echo >&2 "ERROR: Cannot write log file: $LOG_FILE"; exit 1; }
-# Redirect all output through tee: terminal + log file
-exec > >(tee "$LOG_FILE") 2>&1
+# Preserve the real stdout on fd 3 before any redirection below — --format=json
+# needs a clean fd for its JSON payload even when the narrative output is
+# redirected to the log file only (see _print_summary_json).
+exec 3>&1
+if $FORMAT_JSON; then
+    # JSON mode: narrative goes to the log only, not to the captured stdout —
+    # a caller consuming this via a subprocess pipe (archcanary-gtk) needs
+    # nothing but the JSON payload on stdout.
+    exec > "$LOG_FILE" 2>&1
+else
+    # Redirect all output through tee: terminal + log file
+    exec > >(tee "$LOG_FILE") 2>&1
+fi
 
 # ---------------------------------------------------------------------------
 # Config dir: XDG_CONFIG_HOME/archcanary (default ~/.config/archcanary)
@@ -2460,6 +2592,75 @@ _print_summary() {
     printf ' %s\n' "$_SEP55"
 }
 
+# Escapes backslash/double-quote for the JSON string values below. The
+# inputs here are always script-controlled labels (check names) plus a
+# package count, never raw user/network input, but escaping is cheap and
+# correct regardless.
+_json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    printf '%s' "$s"
+}
+
+_json_status() {
+    case "$1" in
+        0)  printf 'clean' ;;
+        1)  printf 'warning' ;;
+        2)  printf 'infected' ;;
+        77) printf 'skipped_root' ;;
+        78) printf 'skipped_missing' ;;
+        *)  printf 'unknown' ;;
+    esac
+}
+
+# --format=json's whole output: a stable {name,status} array built from the
+# same _SUMMARY_NAMES/_SUMMARY_CODES that _print_summary renders as a table,
+# plus scan-level metadata. Written to fd 3 (the real stdout, saved before
+# the log-only redirect above) so it's the only thing a caller piping our
+# stdout ever sees, regardless of --no-summary.
+_print_summary_json() {
+    local result
+    case "$EXIT_CODE" in
+        0) result="clean" ;;
+        1) result="warnings" ;;
+        2) result="infected" ;;
+        *) result="unknown" ;;
+    esac
+
+    local json='{'
+    json+="\"version\":\"$(_json_escape "$SCRIPT_VERSION")\","
+    json+="\"scanned_at\":\"$(date -Iseconds)\","
+    json+="\"result\":\"$result\","
+    json+="\"packages_checked\":${#INFECTED_PKGS[@]},"
+
+    json+='"checks":['
+    local i sep=""
+    for i in "${!_SUMMARY_NAMES[@]}"; do
+        json+="${sep}{\"name\":\"$(_json_escape "${_SUMMARY_NAMES[$i]}")\",\"status\":\"$(_json_status "${_SUMMARY_CODES[$i]}")\"}"
+        sep=","
+    done
+    json+='],'
+
+    json+='"skipped_root":['
+    sep=""
+    for i in "${!SKIPPED_ROOT[@]}"; do
+        json+="${sep}\"$(_json_escape "${SKIPPED_ROOT[$i]}")\""
+        sep=","
+    done
+    json+='],'
+
+    json+='"skipped_missing":['
+    sep=""
+    for i in "${!SKIPPED_MISSING[@]}"; do
+        json+="${sep}\"$(_json_escape "${SKIPPED_MISSING[$i]}")\""
+        sep=","
+    done
+    json+=']}'
+
+    printf '%s\n' "$json" >&3
+}
+
 load_packages
 
 # Captured before the merge loops below append the supplementary lists, so
@@ -2745,7 +2946,11 @@ if [[ ( ${#SKIPPED_ROOT[@]} -gt 0 || ${#SKIPPED_MISSING[@]} -gt 0 ) && $EXIT_COD
     EXIT_CODE=1
 fi
 
-$NO_SUMMARY || _print_summary
+if $FORMAT_JSON; then
+    _print_summary_json
+else
+    $NO_SUMMARY || _print_summary
+fi
 
 printf '%s============================================================%s\n' "$_CB" "$_CN"
 case $EXIT_CODE in
