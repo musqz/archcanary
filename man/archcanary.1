@@ -104,15 +104,13 @@ silently skips files it cannot read.
 Requires root.
 .TP
 .B \-\-check-list-overlap
-Flag package names that appear in more than one loaded list. A custom list
+Note custom list
 .RI ( extra_lists.conf " or " \-\-extra\-list )
-entry already covered by an official list
+entries already covered by an official list
 .RI ( package_list.txt ", CHAOS RAT, Russian Spam, or aur-audit black/red)"
-is reported as safe to remove — the official list is authoritative.
-Duplicates
-.I between
-official lists are also reported, informational only.
-Advisory only: never affects the exit status, and not included in
+— safe to remove, since the official list is authoritative. A note, not a
+warning: never affects the exit status, never warns in the check summary,
+and not included in
 .BR \-\-full .
 .TP
 .B \-\-full
