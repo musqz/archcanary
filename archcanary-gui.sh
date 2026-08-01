@@ -712,7 +712,10 @@ list_overlap_check() {
     local raw body count
     raw="$("$MAIN_SCRIPT" --check-list-overlap --no-notify --no-summary 2>&1)"
     body="$(awk '/^--- \[14\] /{f=1; next} /^--- \[/{f=0} /^===/{f=0} f' <<< "$raw")"
-    count="$(grep -oP '(?<=NOTE: )[0-9]+' <<< "$body" | head -1)"
+    # || true: grep exits non-zero when there are no duplicates (no "NOTE:"
+    # line to match) — under set -e + pipefail that would otherwise kill the
+    # whole GUI instead of just showing "nothing found".
+    count="$(grep -oP '(?<=NOTE: )[0-9]+' <<< "$body" | head -1 || true)"
     count="${count:-0}"
 
     local tmpout
