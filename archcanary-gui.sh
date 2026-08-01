@@ -79,6 +79,14 @@ _SHOW_OUTPUT_ALLOWLIST_HINT=""
 # The first run of the full scan (idx 0) auto-adds --refresh and sets this.
 REFRESHED=false
 
+# Read once at startup so build_list_args() doesn't need to re-grep the file
+# on every menu redraw; scan_settings() updates this in place after Save.
+# Same file/key archcanary.sh itself reads (~/.config/archcanary/env,
+# AUR_AUDIT_ENABLE) — this is purely a display cache, not a second source
+# of truth.
+AUR_AUDIT_ENABLE_GUI=true
+grep -qiE '^AUR_AUDIT_ENABLE=false' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env" 2>/dev/null && AUR_AUDIT_ENABLE_GUI=false
+
 # Action data — order here is the canonical index used by run_action
 LABELS=(
     "Full scan"                 # 0  root
@@ -101,6 +109,7 @@ LABELS=(
     "Run Lynis audit"          # 17  root
     "Pacman integrity"         # 18
     "About"                    # 19
+    "Scan settings"            # 20
 )
 
 FLAGS=(
@@ -124,6 +133,7 @@ FLAGS=(
     "--run-lynis"
     "--check-pkginteg --no-notify --no-summary"
     "__about__"
+    "__scan_settings__"
 )
 
 NEEDS_ROOT=(
@@ -133,6 +143,7 @@ NEEDS_ROOT=(
     true
     true
     true
+    false
     false
 )
 
@@ -147,6 +158,7 @@ STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
 STATUS[15]="   "  # Edit config — config dialog, no scan verdict
 STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
 STATUS[19]="   "  # About — no scan verdict
+STATUS[20]="   "  # Scan settings — config dialog, no scan verdict
 unset _i
 
 # Derive full-scan status (row 0) from whichever individual checks have results.
@@ -339,7 +351,6 @@ edit_config() {
     $HAS_AUDITD && choices+=("Audit rules")
     $HAS_LYNIS  && choices+=("Lynis config")
     choices+=("Extra malware lists")
-    choices+=("Network feeds")
 
     local choice
     choice=$(yad --list \
@@ -356,7 +367,6 @@ edit_config() {
         "Audit rules")        edit_audit_rules ;;
         "Lynis config")       edit_lynis_config ;;
         "Extra malware lists") extra_lists_manager ;;
-        "Network feeds")      edit_network_feeds ;;
     esac
 }
 
@@ -659,18 +669,20 @@ CONF
 # (grep) — it is NEVER sourced as shell, since the pkexec-elevated root
 # scan resolves this same path under the invoking user's own $HOME (see
 # lib/archcanary-root-helper), and sourcing a user-writable file as root
-# would be a local privilege escalation.
-edit_network_feeds() {
+# would be a local privilege escalation. Top-level menu row (not nested
+# under Edit config) so the current state is visible without opening
+# anything — see build_list_args()'s "aur-audit sync: ON/OFF" suffix.
+scan_settings() {
     local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
     local env_file="$cfg_dir/env"
     mkdir -p "$cfg_dir"
 
     local cur="TRUE"
-    grep -qiE '^AUR_AUDIT_ENABLE=false' "$env_file" 2>/dev/null && cur="FALSE"
+    $AUR_AUDIT_ENABLE_GUI || cur="FALSE"
 
     local result
     result=$(yad --form \
-        --title="Network Feeds — Archcanary" \
+        --title="Scan Settings — Archcanary" \
         --window-icon=security-high --center \
         --width=480 \
         --field="Fetch aur-audit.wtako.net black/red feed on --refresh:CHK" "$cur" \
@@ -681,6 +693,7 @@ edit_network_feeds() {
         printf '# archcanary settings — managed by archcanary-gui\n'
         [[ "$result" == FALSE* ]] && printf 'AUR_AUDIT_ENABLE=false\n'
     } > "$env_file"
+    [[ "$result" == FALSE* ]] && AUR_AUDIT_ENABLE_GUI=false || AUR_AUDIT_ENABLE_GUI=true
 
     yad --image=dialog-information \
         --title="Archcanary" \
@@ -718,6 +731,11 @@ run_action() {
 
     if [[ "$flags" == "__about__" ]]; then
         show_about
+        return
+    fi
+
+    if [[ "$flags" == "__scan_settings__" ]]; then
+        scan_settings
         return
     fi
 
@@ -913,6 +931,9 @@ build_list_args() {
     _sep "Settings"
     _row 12
     _row 15
+    local aa_state="ON"
+    $AUR_AUDIT_ENABLE_GUI || aa_state="OFF"
+    _row 20 "${LABELS[20]}  (aur-audit sync: ${aa_state})"
     $HAS_AURSCAN && _row 14
     _row 19
 }
@@ -939,7 +960,8 @@ while true; do
     [[ -z "$selected" ]] && continue
     [[ "$selected" == *"───"* ]] && continue  # separator row
 
-    selected="${selected#🔐  }"  # strip lock prefix from root items
+    selected="${selected#🔐  }"                # strip lock prefix from root items
+    selected="${selected%  (aur-audit sync:*}"  # strip Scan settings' state suffix
 
     for i in "${!LABELS[@]}"; do
         if [[ "${LABELS[$i]}" == "$selected" ]]; then
