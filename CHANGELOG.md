@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added: `--check-list-overlap` flags package names duplicated across loaded lists. A custom list (`extra_lists.conf`/`--extra-list`) entry already covered by an official list (`package_list.txt`, CHAOS RAT, Russian Spam, aur-audit black/red) is reported as safe to remove, since the official list is authoritative. Duplicates *between* official lists are also reported, informational only. Advisory-only — never affects the exit status, and not included in `--full`.
+
 ## v0.1.20 (2026-08-01)
 
 - Added: `--refresh` now also syncs the black/red package lists from the third-party [aur-audit.wtako.net](https://wtako.net/services/aur-audit) service (continuous community AUR scan feed, free/unauthenticated API). Hits merge into the existing infected-package check, annotated `[aur-audit: black]`/`[aur-audit: red]`. Yellow (qualitative/minor) findings are not synced. Purely additive — no new dependency, no network call outside `--refresh`, no CLI overrides.

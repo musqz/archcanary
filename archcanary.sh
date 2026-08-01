@@ -77,6 +77,7 @@ CHECK_AUTOSTART=false
 CHECK_KMOD=false
 CHECK_LYNIS=false
 CHECK_PKGINTEG=false
+CHECK_LIST_OVERLAP=false
 CHECK_FULL=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
@@ -116,6 +117,7 @@ for arg in "$@"; do
         --check-kmod)       CHECK_KMOD=true ;;
         --check-lynis)      CHECK_LYNIS=true ;;
         --check-pkginteg)   CHECK_PKGINTEG=true ;;
+        --check-list-overlap) CHECK_LIST_OVERLAP=true ;;
         --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_LYNIS=true; CHECK_PKGINTEG=true; CHECK_FULL=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
@@ -155,6 +157,8 @@ for arg in "$@"; do
             echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
             echo "  --check-lynis      Parse Lynis hardening report (/var/log/lynis-report.dat)"
             echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
+            echo "  --check-list-overlap  Flag package names duplicated across lists (custom vs. official, and"
+            echo "                        across official lists) — advisory only, not included in --full"
             echo "  --run-lynis        Run a full Lynis audit (lynis audit system) and exit — not included in --full"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning (incl. aur-audit black/red feed)"
@@ -2235,6 +2239,71 @@ check_pkginteg() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 14: Duplicate package names across loaded lists
+# Advisory only — never affects EXIT_CODE. A custom list (extra_lists.conf /
+# --extra-list) that duplicates an official list's entry is redundant; the
+# official list is authoritative, so the custom entry is flagged as safe to
+# remove. Also reports duplicates BETWEEN official lists (informational —
+# maintainer's call, not something a user should "fix" locally).
+# ---------------------------------------------------------------------------
+check_list_overlap() {
+    local -A owner=()   # pkgname -> comma-joined official list labels
+    local pkg
+
+    # INFECTED_PKGS is package_list.txt merged with every other list further
+    # down (for the unified detection lookup) — BASE_PKG_COUNT was captured
+    # right before that merge, so slice back to just the package_list.txt
+    # portion rather than re-reading the file.
+    local -a _base_pkgs=("${INFECTED_PKGS[@]:0:$BASE_PKG_COUNT}")
+    for pkg in "${_base_pkgs[@]}";        do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }package_list.txt"; done
+    for pkg in "${CHAOS_RAT_PKGS[@]}";     do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }CHAOS RAT";       done
+    for pkg in "${RUSSIAN_SPAM_PKGS[@]}";  do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }Russian Spam";    done
+    for pkg in "${AUR_AUDIT_BLACK_PKGS[@]}"; do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }aur-audit black"; done
+    for pkg in "${AUR_AUDIT_RED_PKGS[@]}";   do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }aur-audit red";   done
+
+    local -a official_dupes=()
+    for pkg in "${!owner[@]}"; do
+        [[ "${owner[$pkg]}" == *,* ]] && official_dupes+=("$pkg  (${owner[$pkg]})")
+    done
+
+    # Custom lists aren't kept as per-source arrays after loading (only the
+    # combined EXTRA_PKGS), so re-resolve each source's own file here — same
+    # cache-path logic _load_extra uses for a URL source.
+    local -a custom_dupes=()
+    local i orig path line
+    for i in "${!EXTRA_LIST_KEYS[@]}"; do
+        orig="${EXTRA_LIST_KEYS[$i]}"
+        if [[ "$orig" =~ ^https?:// ]]; then
+            path="$AUR_CONFIG_DIR/extra_$(printf '%s' "$orig" | md5sum | cut -c1-8).txt"
+        else
+            path="$orig"
+        fi
+        [[ -f "$path" ]] || continue
+        while IFS= read -r line; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            [[ -n "${owner[$line]:-}" ]] && custom_dupes+=("$line  —  ${EXTRA_LIST_NAMES[$i]}  (also in: ${owner[$line]})")
+        done < "$path"
+    done
+
+    if [[ ${#custom_dupes[@]} -eq 0 && ${#official_dupes[@]} -eq 0 ]]; then
+        echo "  No duplicate package names found across any loaded list."
+        return 0
+    fi
+
+    if [[ ${#custom_dupes[@]} -gt 0 ]]; then
+        printf '  %d custom-list entr%s already covered by an official list (safe to remove):\n' \
+            "${#custom_dupes[@]}" "$([[ ${#custom_dupes[@]} -eq 1 ]] && echo y || echo ies)"
+        printf '    - %s\n' "${custom_dupes[@]}"
+        echo
+    fi
+    if [[ ${#official_dupes[@]} -gt 0 ]]; then
+        printf '  %d duplicate(s) across official lists (informational only):\n' "${#official_dupes[@]}"
+        printf '    - %s\n' "${official_dupes[@]}"
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Check 12: Lynis hardening report
 # Parses /var/log/lynis-report.dat (written by: sudo lynis audit system).
 # Reports the hardening index and warnings from the last Lynis run.
@@ -2600,6 +2669,13 @@ if $CHECK_PKGINTEG; then
     check_pkginteg && ret=$? || ret=$?
     _apply_ret "$ret" pkginteg
     _rec "Package integrity" "$ret"
+    echo
+fi
+
+if $CHECK_LIST_OVERLAP; then
+    echo "--- [14] Duplicate package names across lists ---"
+    check_list_overlap
+    _rec "List overlap check" 0
     echo
 fi
 
