@@ -128,6 +128,7 @@ for arg in "$@"; do
         --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
         --start-date=*)          START_DATE_OPT="${arg#*=}" ;;
         --end-date=*)            END_DATE_OPT="${arg#*=}" ;;
+        --no-aur-audit)          AUR_AUDIT_ENABLE=false ;;
         --no-notify)             NO_NOTIFY=true ;;
         --no-summary)            NO_SUMMARY=true ;;
         --color=*)               _COLOR_ARG="${arg#*=}" ;;
@@ -157,6 +158,7 @@ for arg in "$@"; do
             echo "  --run-lynis        Run a full Lynis audit (lynis audit system) and exit — not included in --full"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning (incl. aur-audit black/red feed)"
+            echo "  --no-aur-audit     Skip the aur-audit.wtako.net feed on --refresh (env: AUR_AUDIT_ENABLE=false)"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
             echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/archcanary/aur-check-<date>.log)"
             echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
@@ -729,6 +731,21 @@ exec > >(tee "$LOG_FILE") 2>&1
 AUR_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
 mkdir -p "$AUR_CONFIG_DIR"
 
+# Persisted settings written by archcanary-gui's "Edit config" > "Network
+# feeds" dialog. Read as plain data (grep), never `source`d as shell — this
+# file resolves into the invoking user's $HOME even during the pkexec-elevated
+# root scan (see lib/archcanary-root-helper), so sourcing it would let any
+# local user run arbitrary code as root.
+ARCHCANARY_ENV_FILE="${ARCHCANARY_ENV_FILE:-$AUR_CONFIG_DIR/env}"
+# || true twice: grep exits non-zero on no match / missing file, and under
+# `pipefail` that would propagate through tail/cut; under `set -e` a bare
+# `return` would then inherit that non-zero status and kill the whole script
+# (same failure class as the picker bug documented for archcanary-gui.sh).
+_archcanary_env_get() {
+    [[ -f "$ARCHCANARY_ENV_FILE" ]] || return 0
+    grep -E "^$1=" "$ARCHCANARY_ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
 PACKAGE_LIST_FILE="${PACKAGE_LIST_FILE:-$AUR_CONFIG_DIR/package_list.txt}"
 INFECTED_PKGS=()
 
@@ -743,6 +760,16 @@ AUR_AUDIT_BLACK_PKGS=()
 
 AUR_AUDIT_RED_LIST="${AUR_AUDIT_RED_LIST:-$AUR_CONFIG_DIR/aur_audit_red.txt}"
 AUR_AUDIT_RED_PKGS=()
+
+# Fetch the aur-audit.wtako.net black/red feed on --refresh. Disable via
+# AUR_AUDIT_ENABLE=false (env), --no-aur-audit (one-off), or the GUI checkbox.
+# Lowercased so a hand-edited env file (TRUE/False/etc.) still matches the
+# exact-string gate below, and so it agrees with the GUI's own case-insensitive
+# grep for the checkbox's current state.
+AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE:-$(_archcanary_env_get AUR_AUDIT_ENABLE)}"
+AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE:-true}"
+AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE,,}"
+unset -f _archcanary_env_get
 
 EXTRA_LISTS_CONF="${EXTRA_LISTS_CONF:-$AUR_CONFIG_DIR/extra_lists.conf}"
 EXTRA_PKGS=()
@@ -968,8 +995,12 @@ load_packages() {
             _chown_to_invoker "$dest"
             echo "Updated $dest ($(grep -c '^[^#[:space:]]' "$dest") entries)"
         }
-        _refresh_aur_audit black "$AUR_AUDIT_BLACK_LIST" "black"
-        _refresh_aur_audit red   "$AUR_AUDIT_RED_LIST"   "red"
+        if [[ "$AUR_AUDIT_ENABLE" == true ]]; then
+            _refresh_aur_audit black "$AUR_AUDIT_BLACK_LIST" "black"
+            _refresh_aur_audit red   "$AUR_AUDIT_RED_LIST"   "red"
+        else
+            echo "Skipping aur-audit.wtako.net fetch (disabled)."
+        fi
         unset -f _refresh_aur_audit
     fi
 

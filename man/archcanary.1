@@ -117,6 +117,19 @@ that feed are merged into the same infected-package check and annotated
 .IR "[aur-audit: black]" " / " "[aur-audit: red]" .
 Yellow (minor/qualitative) findings are not synced.
 .TP
+.B \-\-no-aur-audit
+Skip the
+.I aur-audit.wtako.net
+feed on
+.BR \-\-refresh ,
+leaving any previously fetched black/red lists on disk untouched. Persists
+across runs via
+.I AUR_AUDIT_ENABLE=false
+in
+.I ~/.config/archcanary/env
+(also toggleable from
+.BR archcanary-gui "'s Edit config " "Network feeds" " dialog)."
+.TP
 \fB\-\-package-list\fR=\fIPATH\fR
 Override the infected AUR package list (default:
 .IR ~/.config/archcanary/package_list.txt ).

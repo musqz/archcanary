@@ -339,6 +339,7 @@ edit_config() {
     $HAS_AUDITD && choices+=("Audit rules")
     $HAS_LYNIS  && choices+=("Lynis config")
     choices+=("Extra malware lists")
+    choices+=("Network feeds")
 
     local choice
     choice=$(yad --list \
@@ -355,6 +356,7 @@ edit_config() {
         "Audit rules")        edit_audit_rules ;;
         "Lynis config")       edit_lynis_config ;;
         "Extra malware lists") extra_lists_manager ;;
+        "Network feeds")      edit_network_feeds ;;
     esac
 }
 
@@ -650,6 +652,42 @@ CONF
             --button="OK:0" 2>/dev/null || true
     fi
     rm -f "$tmpout"
+}
+
+# Persisted true/false settings for archcanary.sh itself, written to
+# ~/.config/archcanary/env. archcanary.sh reads this file as plain data
+# (grep) — it is NEVER sourced as shell, since the pkexec-elevated root
+# scan resolves this same path under the invoking user's own $HOME (see
+# lib/archcanary-root-helper), and sourcing a user-writable file as root
+# would be a local privilege escalation.
+edit_network_feeds() {
+    local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
+    local env_file="$cfg_dir/env"
+    mkdir -p "$cfg_dir"
+
+    local cur="TRUE"
+    grep -qiE '^AUR_AUDIT_ENABLE=false' "$env_file" 2>/dev/null && cur="FALSE"
+
+    local result
+    result=$(yad --form \
+        --title="Network Feeds — Archcanary" \
+        --window-icon=security-high --center \
+        --width=480 \
+        --field="Fetch aur-audit.wtako.net black/red feed on --refresh:CHK" "$cur" \
+        --button="Save:0" --button="Cancel:1" \
+        2>/dev/null) || return 0
+
+    {
+        printf '# archcanary settings — managed by archcanary-gui\n'
+        [[ "$result" == FALSE* ]] && printf 'AUR_AUDIT_ENABLE=false\n'
+    } > "$env_file"
+
+    yad --image=dialog-information \
+        --title="Archcanary" \
+        --window-icon=security-high --center \
+        --text="Saved to\n<tt>$env_file</tt>" \
+        --width=380 \
+        --button="OK:0" 2>/dev/null || true
 }
 
 run_action() {
