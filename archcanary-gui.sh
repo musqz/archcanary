@@ -351,6 +351,7 @@ edit_config() {
     $HAS_AUDITD && choices+=("Audit rules")
     $HAS_LYNIS  && choices+=("Lynis config")
     choices+=("Extra malware lists")
+    choices+=("List overlap check")
 
     local choice
     choice=$(yad --list \
@@ -367,6 +368,7 @@ edit_config() {
         "Audit rules")        edit_audit_rules ;;
         "Lynis config")       edit_lynis_config ;;
         "Extra malware lists") extra_lists_manager ;;
+        "List overlap check") list_overlap_check ;;
     esac
 }
 
@@ -701,6 +703,37 @@ scan_settings() {
         --text="Saved to\n<tt>$env_file</tt>" \
         --width=380 \
         --button="OK:0" 2>/dev/null || true
+}
+
+# Runs --check-list-overlap and shows just its own report section (not the
+# rest of a default scan) in a read-only window. Fast/local (no network), so
+# run synchronously rather than through show_output()'s live-tail machinery.
+list_overlap_check() {
+    local raw body hint count
+    raw="$("$MAIN_SCRIPT" --check-list-overlap --no-notify --no-summary 2>&1)"
+    body="$(awk '/^--- \[14\] /{f=1; next} /^--- \[/{f=0} /^===/{f=0} f' <<< "$raw")"
+    # The "quick fix" wrap-up (which file to remove which entries from) is
+    # printed near the very end of the scan, after the RESULT banner — outside
+    # the section [14] body captured above — so pull it in separately.
+    hint="$(awk '/^ LIST OVERLAP:/{f=1} f && !/^===/' <<< "$raw")"
+    count="$(grep -c '^    - ' <<< "$body" || true)"
+
+    local tmpout
+    tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
+    {
+        printf '%s\n' "$body"
+        [[ -n "$hint" ]] && printf '\n%s\n' "$hint"
+    } > "$tmpout"
+
+    yad --text-info \
+        --title="List Overlap Check (${count} found) — Archcanary" \
+        --window-icon=security-high --center \
+        --width=760 --height=460 \
+        --fontname="Monospace 10" \
+        --wrap \
+        --filename="$tmpout" \
+        --button="Close:0" 2>/dev/null || true
+    rm -f "$tmpout"
 }
 
 run_action() {

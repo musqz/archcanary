@@ -2269,8 +2269,15 @@ check_list_overlap() {
     # Custom lists aren't kept as per-source arrays after loading (only the
     # combined EXTRA_PKGS), so re-resolve each source's own file here — same
     # cache-path logic _load_extra uses for a URL source.
+    #
+    # LIST_OVERLAP_CUSTOM_TOTAL / LIST_OVERLAP_FILE_COUNTS are globals (no
+    # `local`/declared with -g) — read by the caller after this function
+    # returns, to print a "what to actually do" wrap-up hint at the very end
+    # of the scan instead of leaving it buried in this section's own output.
     local -a custom_dupes=()
     local i orig path line
+    LIST_OVERLAP_CUSTOM_TOTAL=0
+    declare -gA LIST_OVERLAP_FILE_COUNTS=()
     for i in "${!EXTRA_LIST_KEYS[@]}"; do
         orig="${EXTRA_LIST_KEYS[$i]}"
         if [[ "$orig" =~ ^https?:// ]]; then
@@ -2281,7 +2288,11 @@ check_list_overlap() {
         [[ -f "$path" ]] || continue
         while IFS= read -r line; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-            [[ -n "${owner[$line]:-}" ]] && custom_dupes+=("$line  —  ${EXTRA_LIST_NAMES[$i]}  (also in: ${owner[$line]})")
+            if [[ -n "${owner[$line]:-}" ]]; then
+                custom_dupes+=("$line  —  also in: ${owner[$line]}  →  remove from: $path")
+                LIST_OVERLAP_CUSTOM_TOTAL=$(( LIST_OVERLAP_CUSTOM_TOTAL + 1 ))
+                LIST_OVERLAP_FILE_COUNTS["$path"]=$(( ${LIST_OVERLAP_FILE_COUNTS["$path"]:-0} + 1 ))
+            fi
         done < "$path"
     done
 
@@ -2675,7 +2686,14 @@ fi
 if $CHECK_LIST_OVERLAP; then
     echo "--- [14] Duplicate package names across lists ---"
     check_list_overlap
-    _rec "List overlap check" 0
+    # Warn (not clean) in the summary iff there's something actually
+    # actionable — official-vs-official overlap is expected/informational,
+    # not something the user needs to go fix.
+    if [[ "${LIST_OVERLAP_CUSTOM_TOTAL:-0}" -gt 0 ]]; then
+        _rec "List overlap check" 1
+    else
+        _rec "List overlap check" 0
+    fi
     echo
 fi
 
@@ -2704,6 +2722,16 @@ if [[ ${#SKIPPED_ROOT[@]} -gt 0 ]]; then
 fi
 if [[ ${#SKIPPED_MISSING[@]} -gt 0 ]]; then
     printf ' INCOMPLETE: %d optional check(s) skipped (tool not installed): %s\n' "${#SKIPPED_MISSING[@]}" "${SKIPPED_MISSING[*]}"
+fi
+if [[ "${LIST_OVERLAP_CUSTOM_TOTAL:-0}" -gt 0 ]]; then
+    printf ' %sLIST OVERLAP: %d duplicate(s) in your custom list(s) — already covered by an official list.%s\n' \
+        "$_CY" "$LIST_OVERLAP_CUSTOM_TOTAL" "$_CN"
+    for _f in "${!LIST_OVERLAP_FILE_COUNTS[@]}"; do
+        printf ' → Remove %d entr%s from: %s\n' \
+            "${LIST_OVERLAP_FILE_COUNTS[$_f]}" \
+            "$([[ ${LIST_OVERLAP_FILE_COUNTS[$_f]} -eq 1 ]] && echo y || echo ies)" \
+            "$_f"
+    done
 fi
 printf '%s============================================================%s\n' "$_CB" "$_CN"
 
