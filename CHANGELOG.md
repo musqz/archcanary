@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## v0.1.20 (2026-08-01)
 
 - Added: `--refresh` now also syncs the black/red package lists from the third-party [aur-audit.wtako.net](https://wtako.net/services/aur-audit) service (continuous community AUR scan feed, free/unauthenticated API). Hits merge into the existing infected-package check, annotated `[aur-audit: black]`/`[aur-audit: red]`. Yellow (qualitative/minor) findings are not synced. Purely additive — no new dependency, no network call outside `--refresh`, no CLI overrides.
 - Added: new `AURPreInstall` yay hook in `configs/yay-init.lua` checks the about-to-build package against the synced aur-audit black/red lists — aborts on black, warns on red. Gives pre-build protection against known-bad AUR packages without requiring aurscan/an LLM. No new systemd unit: the existing weekly/on-boot `archcanary.timer` already keeps the lists fresh via `--refresh`.
 - Added: bash tab-completion (`configs/archcanary-completion.bash`), installed by both `install.sh` and the AUR package into the standard `bash-completion` completions directory — no `.bashrc` edits needed. Also registers a `canary` completion alongside it (as a symlink) for anyone who adds their own `alias canary=archcanary`.
+- Added: the "Lists loaded" banner now shows a `+N`/`-N` delta next to each list's package count, comparing against the previous run's count persisted to `~/.config/archcanary/.list_counts` (keyed by the list's resolved path, merged rather than overwritten, so a one-off `--package-list`/test run can't clobber the real baseline) — makes a growing/shrinking threat-intel feed (e.g. aur-audit red after `--refresh`) visible at a glance instead of requiring a manual before/after comparison.
+- Added: each `extra_lists.conf`/`--extra-list` source now gets its own line in the "Lists loaded" banner (basename + count + independent delta) instead of being rolled into one generic "extra lists" total — lets a user with multiple custom lists see which one actually grew or shrank.
+- Added: `--no-aur-audit` flag / `AUR_AUDIT_ENABLE=false` env var to skip the aur-audit.wtako.net feed on `--refresh` while leaving previously fetched black/red lists on disk untouched. Persists across runs via `~/.config/archcanary/env` — read as plain data (never sourced as shell), since the pkexec-elevated root scan resolves that same path under the invoking user's own `$HOME` and sourcing it would be a local privilege escalation. Also toggleable from `archcanary-gui`'s top-level **Scan settings** menu row, which shows live `ON`/`OFF` state right in the row label.
 
 ## v0.1.19 (2026-07-25)
 
