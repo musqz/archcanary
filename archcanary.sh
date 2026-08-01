@@ -763,8 +763,12 @@ AUR_AUDIT_RED_PKGS=()
 
 # Fetch the aur-audit.wtako.net black/red feed on --refresh. Disable via
 # AUR_AUDIT_ENABLE=false (env), --no-aur-audit (one-off), or the GUI checkbox.
+# Lowercased so a hand-edited env file (TRUE/False/etc.) still matches the
+# exact-string gate below, and so it agrees with the GUI's own case-insensitive
+# grep for the checkbox's current state.
 AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE:-$(_archcanary_env_get AUR_AUDIT_ENABLE)}"
 AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE:-true}"
+AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE,,}"
 unset -f _archcanary_env_get
 
 EXTRA_LISTS_CONF="${EXTRA_LISTS_CONF:-$AUR_CONFIG_DIR/extra_lists.conf}"

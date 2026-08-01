@@ -655,14 +655,18 @@ CONF
 }
 
 # Persisted true/false settings for archcanary.sh itself, written to
-# ~/.config/archcanary/env (sourced by archcanary.sh at startup).
+# ~/.config/archcanary/env. archcanary.sh reads this file as plain data
+# (grep) — it is NEVER sourced as shell, since the pkexec-elevated root
+# scan resolves this same path under the invoking user's own $HOME (see
+# lib/archcanary-root-helper), and sourcing a user-writable file as root
+# would be a local privilege escalation.
 edit_network_feeds() {
     local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
     local env_file="$cfg_dir/env"
     mkdir -p "$cfg_dir"
 
     local cur="TRUE"
-    grep -qE '^AUR_AUDIT_ENABLE=false' "$env_file" 2>/dev/null && cur="FALSE"
+    grep -qiE '^AUR_AUDIT_ENABLE=false' "$env_file" 2>/dev/null && cur="FALSE"
 
     local result
     result=$(yad --form \
@@ -673,12 +677,9 @@ edit_network_feeds() {
         --button="Save:0" --button="Cancel:1" \
         2>/dev/null) || return 0
 
-    local enable="true"
-    [[ "$result" == FALSE* ]] && enable="false"
-
     {
         printf '# archcanary settings — managed by archcanary-gui\n'
-        printf 'AUR_AUDIT_ENABLE=%s\n' "$enable"
+        [[ "$result" == FALSE* ]] && printf 'AUR_AUDIT_ENABLE=false\n'
     } > "$env_file"
 
     yad --image=dialog-information \
