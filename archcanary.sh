@@ -88,6 +88,7 @@ DOCTOR=false
 DOCTOR_SECTIONS=""
 RUN_LYNIS=false
 _COLOR_ARG="auto"
+_FORMAT_ARG="text"
 
 # CLI arg overrides for env-var-backed settings
 PACKAGE_LIST_FILE_OPT=""
@@ -235,6 +236,7 @@ for arg in "$@"; do
         --no-notify)             NO_NOTIFY=true ;;
         --no-summary)            NO_SUMMARY=true ;;
         --color=*)               _COLOR_ARG="${arg#*=}" ;;
+        --format=*)              _FORMAT_ARG="${arg#*=}" ;;
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
         --run-lynis)             RUN_LYNIS=true ;;
@@ -280,6 +282,8 @@ for arg in "$@"; do
             echo "  --no-notify               Suppress the desktop notification on detection
   --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --color=auto|always|never Control symbol/color output (default: auto; also obeys NO_COLOR env)"
+            echo "  --format=text|json        Output a JSON summary instead of the human-readable report"
+            echo "                            (default: text; JSON goes to stdout, full narrative still logged)"
             echo "  --doctor                  Report install/config status of every stack element"
             echo "                            (deps, install, systemd, aurscan, traur, yay/paru hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
@@ -335,6 +339,18 @@ _init_color() {
     fi
 }
 _init_color
+
+# --format=json: a stable, structured contract for callers other than a human
+# terminal (archcanary-gtk in particular) instead of scraping the text output
+# above, which is formatted for a human and not meant to be a stable contract.
+case "$_FORMAT_ARG" in
+    text) FORMAT_JSON=false ;;
+    json) FORMAT_JSON=true ;;
+    *)
+        echo "Error: --format must be 'text' or 'json' (got '$_FORMAT_ARG')" >&2
+        exit 1
+        ;;
+esac
 
 # Focused mode: a specific --check-* flag was given without --full.
 # Suppresses the campaign header and the always-on package/log checks so
@@ -838,8 +854,19 @@ mkdir -p "$_AUR_CACHE_DIR"
 unset _AUR_CACHE_DIR
 # Verify log file writable before redirecting
 : > "$LOG_FILE" 2>/dev/null || { echo >&2 "ERROR: Cannot write log file: $LOG_FILE"; exit 1; }
-# Redirect all output through tee: terminal + log file
-exec > >(tee "$LOG_FILE") 2>&1
+# Preserve the real stdout on fd 3 before any redirection below — --format=json
+# needs a clean fd for its JSON payload even when the narrative output is
+# redirected to the log file only (see _print_summary_json).
+exec 3>&1
+if $FORMAT_JSON; then
+    # JSON mode: narrative goes to the log only, not to the captured stdout —
+    # a caller consuming this via a subprocess pipe (archcanary-gtk) needs
+    # nothing but the JSON payload on stdout.
+    exec > "$LOG_FILE" 2>&1
+else
+    # Redirect all output through tee: terminal + log file
+    exec > >(tee "$LOG_FILE") 2>&1
+fi
 
 # ---------------------------------------------------------------------------
 # Config dir: XDG_CONFIG_HOME/archcanary (default ~/.config/archcanary)
@@ -2565,6 +2592,75 @@ _print_summary() {
     printf ' %s\n' "$_SEP55"
 }
 
+# Escapes backslash/double-quote for the JSON string values below. The
+# inputs here are always script-controlled labels (check names) plus a
+# package count, never raw user/network input, but escaping is cheap and
+# correct regardless.
+_json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    printf '%s' "$s"
+}
+
+_json_status() {
+    case "$1" in
+        0)  printf 'clean' ;;
+        1)  printf 'warning' ;;
+        2)  printf 'infected' ;;
+        77) printf 'skipped_root' ;;
+        78) printf 'skipped_missing' ;;
+        *)  printf 'unknown' ;;
+    esac
+}
+
+# --format=json's whole output: a stable {name,status} array built from the
+# same _SUMMARY_NAMES/_SUMMARY_CODES that _print_summary renders as a table,
+# plus scan-level metadata. Written to fd 3 (the real stdout, saved before
+# the log-only redirect above) so it's the only thing a caller piping our
+# stdout ever sees, regardless of --no-summary.
+_print_summary_json() {
+    local result
+    case "$EXIT_CODE" in
+        0) result="clean" ;;
+        1) result="warnings" ;;
+        2) result="infected" ;;
+        *) result="unknown" ;;
+    esac
+
+    local json='{'
+    json+="\"version\":\"$(_json_escape "$SCRIPT_VERSION")\","
+    json+="\"scanned_at\":\"$(date -Iseconds)\","
+    json+="\"result\":\"$result\","
+    json+="\"packages_checked\":${#INFECTED_PKGS[@]},"
+
+    json+='"checks":['
+    local i sep=""
+    for i in "${!_SUMMARY_NAMES[@]}"; do
+        json+="${sep}{\"name\":\"$(_json_escape "${_SUMMARY_NAMES[$i]}")\",\"status\":\"$(_json_status "${_SUMMARY_CODES[$i]}")\"}"
+        sep=","
+    done
+    json+='],'
+
+    json+='"skipped_root":['
+    sep=""
+    for i in "${!SKIPPED_ROOT[@]}"; do
+        json+="${sep}\"$(_json_escape "${SKIPPED_ROOT[$i]}")\""
+        sep=","
+    done
+    json+='],'
+
+    json+='"skipped_missing":['
+    sep=""
+    for i in "${!SKIPPED_MISSING[@]}"; do
+        json+="${sep}\"$(_json_escape "${SKIPPED_MISSING[$i]}")\""
+        sep=","
+    done
+    json+=']}'
+
+    printf '%s\n' "$json" >&3
+}
+
 load_packages
 
 # Captured before the merge loops below append the supplementary lists, so
@@ -2850,7 +2946,11 @@ if [[ ( ${#SKIPPED_ROOT[@]} -gt 0 || ${#SKIPPED_MISSING[@]} -gt 0 ) && $EXIT_COD
     EXIT_CODE=1
 fi
 
-$NO_SUMMARY || _print_summary
+if $FORMAT_JSON; then
+    _print_summary_json
+else
+    $NO_SUMMARY || _print_summary
+fi
 
 printf '%s============================================================%s\n' "$_CB" "$_CN"
 case $EXIT_CODE in
