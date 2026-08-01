@@ -157,8 +157,8 @@ for arg in "$@"; do
             echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
             echo "  --check-lynis      Parse Lynis hardening report (/var/log/lynis-report.dat)"
             echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
-            echo "  --check-list-overlap  Flag package names duplicated across lists (custom vs. official, and"
-            echo "                        across official lists) — advisory only, not included in --full"
+            echo "  --check-list-overlap  Note custom-list entries already covered by an official list, safe to"
+            echo "                        remove — advisory only, not included in --full"
             echo "  --run-lynis        Run a full Lynis audit (lynis audit system) and exit — not included in --full"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning (incl. aur-audit black/red feed)"
@@ -2239,15 +2239,16 @@ check_pkginteg() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 14: Duplicate package names across loaded lists
-# Advisory only — never affects EXIT_CODE. A custom list (extra_lists.conf /
-# --extra-list) that duplicates an official list's entry is redundant; the
-# official list is authoritative, so the custom entry is flagged as safe to
-# remove. Also reports duplicates BETWEEN official lists (informational —
-# maintainer's call, not something a user should "fix" locally).
+# Check 14: Custom-list entries already covered by an official list
+# A note, not a warning — never affects EXIT_CODE, doesn't warn in the check
+# summary either. Just a quick way to keep track of what's redundant between
+# your own list(s) and the official ones, so extra_lists.conf doesn't quietly
+# grow entries the official feeds (package_list.txt, CHAOS RAT, Russian Spam,
+# aur-audit black/red) already track — the official list is authoritative,
+# so the custom entry is the one that's safe to remove.
 # ---------------------------------------------------------------------------
 check_list_overlap() {
-    local -A owner=()   # pkgname -> comma-joined official list labels
+    local -A owner=()   # pkgname -> 1 if covered by any official list
     local pkg
 
     # INFECTED_PKGS is package_list.txt merged with every other list further
@@ -2255,29 +2256,23 @@ check_list_overlap() {
     # right before that merge, so slice back to just the package_list.txt
     # portion rather than re-reading the file.
     local -a _base_pkgs=("${INFECTED_PKGS[@]:0:$BASE_PKG_COUNT}")
-    for pkg in "${_base_pkgs[@]}";        do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }package_list.txt"; done
-    for pkg in "${CHAOS_RAT_PKGS[@]}";     do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }CHAOS RAT";       done
-    for pkg in "${RUSSIAN_SPAM_PKGS[@]}";  do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }Russian Spam";    done
-    for pkg in "${AUR_AUDIT_BLACK_PKGS[@]}"; do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }aur-audit black"; done
-    for pkg in "${AUR_AUDIT_RED_PKGS[@]}";   do owner["$pkg"]="${owner[$pkg]:+${owner[$pkg]}, }aur-audit red";   done
-
-    local -a official_dupes=()
-    for pkg in "${!owner[@]}"; do
-        [[ "${owner[$pkg]}" == *,* ]] && official_dupes+=("$pkg  (${owner[$pkg]})")
-    done
+    for pkg in "${_base_pkgs[@]}";          do owner["$pkg"]=1; done
+    for pkg in "${CHAOS_RAT_PKGS[@]}";      do owner["$pkg"]=1; done
+    for pkg in "${RUSSIAN_SPAM_PKGS[@]}";   do owner["$pkg"]=1; done
+    for pkg in "${AUR_AUDIT_BLACK_PKGS[@]}"; do owner["$pkg"]=1; done
+    for pkg in "${AUR_AUDIT_RED_PKGS[@]}";   do owner["$pkg"]=1; done
 
     # Custom lists aren't kept as per-source arrays after loading (only the
     # combined EXTRA_PKGS), so re-resolve each source's own file here — same
     # cache-path logic _load_extra uses for a URL source.
     #
-    # LIST_OVERLAP_CUSTOM_TOTAL / LIST_OVERLAP_FILE_COUNTS are globals (no
+    # LIST_OVERLAP_CUSTOM_TOTAL / LIST_OVERLAP_FILE_PKGS are globals (no
     # `local`/declared with -g) — read by the caller after this function
-    # returns, to print a "what to actually do" wrap-up hint at the very end
-    # of the scan instead of leaving it buried in this section's own output.
-    local -a custom_dupes=()
+    # returns, to print the same note again at the very end of the scan
+    # instead of leaving it buried in this section's own output.
     local i orig path line
     LIST_OVERLAP_CUSTOM_TOTAL=0
-    declare -gA LIST_OVERLAP_FILE_COUNTS=()
+    declare -gA LIST_OVERLAP_FILE_PKGS=()
     for i in "${!EXTRA_LIST_KEYS[@]}"; do
         orig="${EXTRA_LIST_KEYS[$i]}"
         if [[ "$orig" =~ ^https?:// ]]; then
@@ -2289,28 +2284,22 @@ check_list_overlap() {
         while IFS= read -r line; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             if [[ -n "${owner[$line]:-}" ]]; then
-                custom_dupes+=("$line  —  also in: ${owner[$line]}  →  remove from: $path")
                 LIST_OVERLAP_CUSTOM_TOTAL=$(( LIST_OVERLAP_CUSTOM_TOTAL + 1 ))
-                LIST_OVERLAP_FILE_COUNTS["$path"]=$(( ${LIST_OVERLAP_FILE_COUNTS["$path"]:-0} + 1 ))
+                LIST_OVERLAP_FILE_PKGS["$path"]="${LIST_OVERLAP_FILE_PKGS[$path]:+${LIST_OVERLAP_FILE_PKGS[$path]}, }$line"
             fi
         done < "$path"
     done
 
-    if [[ ${#custom_dupes[@]} -eq 0 && ${#official_dupes[@]} -eq 0 ]]; then
-        echo "  No duplicate package names found across any loaded list."
+    if [[ "$LIST_OVERLAP_CUSTOM_TOTAL" -eq 0 ]]; then
+        echo "  No custom-list entries duplicate an official list."
         return 0
     fi
 
-    if [[ ${#custom_dupes[@]} -gt 0 ]]; then
-        printf '  %d custom-list entr%s already covered by an official list (safe to remove):\n' \
-            "${#custom_dupes[@]}" "$([[ ${#custom_dupes[@]} -eq 1 ]] && echo y || echo ies)"
-        printf '    - %s\n' "${custom_dupes[@]}"
-        echo
-    fi
-    if [[ ${#official_dupes[@]} -gt 0 ]]; then
-        printf '  %d duplicate(s) across official lists (informational only):\n' "${#official_dupes[@]}"
-        printf '    - %s\n' "${official_dupes[@]}"
-    fi
+    printf '  NOTE: %d package(s) below are already covered by an official list — safe to remove:\n' \
+        "$LIST_OVERLAP_CUSTOM_TOTAL"
+    for path in "${!LIST_OVERLAP_FILE_PKGS[@]}"; do
+        printf '    %s: %s\n' "$path" "${LIST_OVERLAP_FILE_PKGS[$path]}"
+    done
     return 0
 }
 
@@ -2684,16 +2673,11 @@ if $CHECK_PKGINTEG; then
 fi
 
 if $CHECK_LIST_OVERLAP; then
-    echo "--- [14] Duplicate package names across lists ---"
+    echo "--- [14] Custom-list entries already covered elsewhere ---"
     check_list_overlap
-    # Warn (not clean) in the summary iff there's something actually
-    # actionable — official-vs-official overlap is expected/informational,
-    # not something the user needs to go fix.
-    if [[ "${LIST_OVERLAP_CUSTOM_TOTAL:-0}" -gt 0 ]]; then
-        _rec "List overlap check" 1
-    else
-        _rec "List overlap check" 0
-    fi
+    # Always "clean" in the summary — this is a note, not a warning, so it
+    # never signals a problem in the summary table itself.
+    _rec "List overlap check" 0
     echo
 fi
 
@@ -2724,13 +2708,10 @@ if [[ ${#SKIPPED_MISSING[@]} -gt 0 ]]; then
     printf ' INCOMPLETE: %d optional check(s) skipped (tool not installed): %s\n' "${#SKIPPED_MISSING[@]}" "${SKIPPED_MISSING[*]}"
 fi
 if [[ "${LIST_OVERLAP_CUSTOM_TOTAL:-0}" -gt 0 ]]; then
-    printf ' %sLIST OVERLAP: %d duplicate(s) in your custom list(s) — already covered by an official list.%s\n' \
-        "$_CY" "$LIST_OVERLAP_CUSTOM_TOTAL" "$_CN"
-    for _f in "${!LIST_OVERLAP_FILE_COUNTS[@]}"; do
-        printf ' → Remove %d entr%s from: %s\n' \
-            "${LIST_OVERLAP_FILE_COUNTS[$_f]}" \
-            "$([[ ${LIST_OVERLAP_FILE_COUNTS[$_f]} -eq 1 ]] && echo y || echo ies)" \
-            "$_f"
+    printf ' %sNOTE: %d package(s) in your custom list(s) are already covered by an official list — safe to remove.%s\n' \
+        "$_CC" "$LIST_OVERLAP_CUSTOM_TOTAL" "$_CN"
+    for _f in "${!LIST_OVERLAP_FILE_PKGS[@]}"; do
+        printf '   %s: %s\n' "$_f" "${LIST_OVERLAP_FILE_PKGS[$_f]}"
     done
 fi
 printf '%s============================================================%s\n' "$_CB" "$_CN"
