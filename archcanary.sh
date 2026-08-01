@@ -1027,8 +1027,11 @@ load_packages() {
 
     # Extra lists — from extra_lists.conf and --extra-list= flags
     EXTRA_PKGS=()
+    EXTRA_LIST_NAMES=()
+    EXTRA_LIST_KEYS=()
+    EXTRA_LIST_COUNTS=()
     _load_extra() {
-        local src="$1"
+        local orig="$1" src="$1"
         if [[ "$src" =~ ^https?:// ]]; then
             local cached="$AUR_CONFIG_DIR/extra_$(printf '%s' "$src" | md5sum | cut -c1-8).txt"
             if [[ ! -f "$cached" ]] || $REFRESH_PACKAGE_LIST; then
@@ -1059,6 +1062,9 @@ load_packages() {
             EXTRA_PKGS+=("$line")
             _n=$(( _n + 1 ))
         done < "$src"
+        EXTRA_LIST_NAMES+=("$(basename "$orig")")
+        EXTRA_LIST_KEYS+=("$orig")
+        EXTRA_LIST_COUNTS+=("$_n")
         log_info "Extra list $src: $_n entries"
     }
     if [[ -f "$EXTRA_LISTS_CONF" ]]; then
@@ -2397,9 +2403,10 @@ if ! $FOCUSED_MODE; then
     if [[ ${#AUR_AUDIT_RED_PKGS[@]} -gt 0 ]]; then
         printf "   + aur-audit red%6s pkgs%s\n" "${#AUR_AUDIT_RED_PKGS[@]}" "$(_count_diff "$AUR_AUDIT_RED_LIST" "${#AUR_AUDIT_RED_PKGS[@]}")"
     fi
-    if [[ ${#EXTRA_PKGS[@]} -gt 0 ]]; then
-        printf "   + extra lists%8s pkgs%s  (extra_lists.conf / --extra-list)\n" "${#EXTRA_PKGS[@]}" "$(_count_diff "$EXTRA_LISTS_CONF" "${#EXTRA_PKGS[@]}")"
-    fi
+    for _i in "${!EXTRA_LIST_NAMES[@]}"; do
+        printf "   + extra: %-20s %3s pkgs%s\n" "${EXTRA_LIST_NAMES[$_i]}" "${EXTRA_LIST_COUNTS[$_i]}" \
+            "$(_count_diff "${EXTRA_LIST_KEYS[$_i]}" "${EXTRA_LIST_COUNTS[$_i]}")"
+    done
     echo
     echo " Packages checked: ${#INFECTED_PKGS[@]}"
     if [[ -n "$START_DATE" || -n "$END_DATE" ]]; then
@@ -2416,7 +2423,9 @@ if ! $FOCUSED_MODE; then
     _PREV_LIST_COUNTS["$RUSSIAN_SPAM_LIST"]="${#RUSSIAN_SPAM_PKGS[@]}"
     _PREV_LIST_COUNTS["$AUR_AUDIT_BLACK_LIST"]="${#AUR_AUDIT_BLACK_PKGS[@]}"
     _PREV_LIST_COUNTS["$AUR_AUDIT_RED_LIST"]="${#AUR_AUDIT_RED_PKGS[@]}"
-    _PREV_LIST_COUNTS["$EXTRA_LISTS_CONF"]="${#EXTRA_PKGS[@]}"
+    for _i in "${!EXTRA_LIST_NAMES[@]}"; do
+        _PREV_LIST_COUNTS["${EXTRA_LIST_KEYS[$_i]}"]="${EXTRA_LIST_COUNTS[$_i]}"
+    done
     {
         for _k in "${!_PREV_LIST_COUNTS[@]}"; do
             printf '%s\t%s\n' "$_k" "${_PREV_LIST_COUNTS[$_k]}"
