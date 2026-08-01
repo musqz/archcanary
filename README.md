@@ -26,53 +26,6 @@ As the tool grew to cover a much broader set of system checks — integrating a 
 
 ---
 
-## Screenshots
-
-<table>
-<tr>
-<td align="center" width="40%">
-<img src="images/gui.png" alt="Archcanary GUI — main menu" width="320"/><br/>
-<sub>Main menu — all checks passed</sub>
-</td>
-</tr>
-</table>
-
----
-
-## Projects Used
-
-archcanary integrates with and builds on the following — see
-[docs/my-setup.md § Components](docs/my-setup.md#components) for what each one
-does and how it's wired in:
-
-| Project | Required |
-|---------|----------|
-| [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | Optional |
-| [traur](https://aur.archlinux.org/packages/traur) | Optional |
-| [yay](https://github.com/Jguer/yay) 13.0 | Optional |
-| [yad](https://github.com/v1cont/yad) | GUI only |
-| [noto-fonts-emoji](https://archlinux.org/packages/extra/any/noto-fonts-emoji/) | GUI only (🔐 icons) |
-| [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Optional (`--check-bpftool`) |
-| [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | Optional |
-| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI + `--system` install |
-| [lynis](https://cisofy.com/lynis/) | Optional |
-| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional |
-
-Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) — see [Attribution](#attribution) below.
-
-### Detection Layers
-
-Four automatic layers fire at AUR install time — yay's editor-gate
-(aurscan + Claude), yay's offline `init.lua` hooks, and traur's pacman
-`PreTransaction` hook — plus a continuous root scan (`archcanary --full`,
-weekly + on boot + after every pacman transaction), a desktop notifier on
-detection, and the on-demand GUI.
-
-See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
-(at-a-glance table included).
-
----
-
 ## Quick Start
 
 ```bash
@@ -121,7 +74,27 @@ Every scan prints a per-check summary before the final verdict:
 
 ---
 
+## Screenshots
+
+<table>
+<tr>
+<td align="center" width="40%">
+<img src="images/gui.png" alt="Archcanary GUI — main menu" width="320"/><br/>
+<sub>Main menu — all checks passed</sub>
+</td>
+</tr>
+</table>
+
+---
+
 ## Checks
+
+Every optional check is off by default — bare `archcanary` just matches your
+installed packages against the known-bad lists. Enable more with flags, or
+run everything at once with `--full`.
+
+<details>
+<summary><strong>Full flag reference</strong> (click to expand)</summary>
 
 | Flag | What it does | Root? |
 |------|-------------|-------|
@@ -149,6 +122,8 @@ Every scan prints a per-check summary before the final verdict:
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
 
 Both `install.sh` and the AUR package install bash tab-completion for every flag above (`archcanary --<TAB>`), loaded automatically via the `bash-completion` package — no `.bashrc` edits needed. If you'd rather type `canary`, add `alias canary=archcanary` to your `.bashrc`/`.zshrc`; the completion is already registered for that name too, so it works immediately.
+
+</details>
 
 ### Lynis on a desktop system
 
@@ -211,6 +186,40 @@ systemctl --user enable --now archcanary-user.timer archcanary-notify.path
 Until you run these, `archcanary --doctor` will correctly show `[WARN]` for all four automation entries — that's expected, not a bug. Re-run `--doctor` after enabling to confirm they flip to `[ OK ]`.
 
 See [docs/systemd.md](docs/systemd.md) for unit file details and [docs/my-setup.md](docs/my-setup.md) for the full personal stack and reinstall steps.
+
+---
+
+## Projects Used
+
+archcanary integrates with and builds on the following — see
+[docs/my-setup.md § Components](docs/my-setup.md#components) for what each one
+does and how it's wired in:
+
+| Project | Required |
+|---------|----------|
+| [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | Optional |
+| [traur](https://aur.archlinux.org/packages/traur) | Optional |
+| [yay](https://github.com/Jguer/yay) 13.0 | Optional |
+| [yad](https://github.com/v1cont/yad) | GUI only |
+| [noto-fonts-emoji](https://archlinux.org/packages/extra/any/noto-fonts-emoji/) | GUI only (🔐 icons) |
+| [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Optional (`--check-bpftool`) |
+| [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | Optional |
+| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI + `--system` install |
+| [lynis](https://cisofy.com/lynis/) | Optional |
+| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional |
+
+Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) — see [Attribution](#attribution) below.
+
+### Detection Layers
+
+Four automatic layers fire at AUR install time — yay's editor-gate
+(aurscan + Claude), yay's offline `init.lua` hooks, and traur's pacman
+`PreTransaction` hook — plus a continuous root scan (`archcanary --full`,
+weekly + on boot + after every pacman transaction), a desktop notifier on
+detection, and the on-demand GUI.
+
+See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
+(at-a-glance table included).
 
 ---
 
