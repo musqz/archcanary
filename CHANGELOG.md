@@ -4,6 +4,7 @@
 
 - Added: `CONTRIBUTING.md`, a GitHub issue form (`.github/ISSUE_TEMPLATE/report-package.yml`), and a PR template (`.github/PULL_REQUEST_TEMPLATE.md`) for reporting a malicious/suspicious AUR package into `lists/community_reports.txt` — either via a low-friction form (no git needed) or a direct PR, both asking for the same evidence link so reports can be reviewed without back-and-forth.
 - Changed: reordered README.md so Quick Start comes right after the intro instead of after a 10-row dependency table and an architecture explainer — the simple "just run archcanary" path now comes before the deeper-dive material (Projects Used, Detection Layers), which moved down. The full `--check-*` flag reference table is now collapsed behind a `<details>` toggle, with a one-line summary staying visible. No content removed, only reordered/collapsed.
+- Added: a Quick Start example showing `archcanary --refresh`'s "Lists loaded" banner (per-list counts plus the `+N`/`-N` delta since the last run), alongside the existing plain-scan check-summary example.
 
 ## v0.1.21 (2026-08-01)
 
