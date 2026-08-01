@@ -920,7 +920,7 @@ CONF
 fi
 
 MALICIOUS_NPM_PKGS=()
-while IFS= read -r line; do
+while IFS= read -r line || [[ -n "$line" ]]; do
     [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
     MALICIOUS_NPM_PKGS+=("$line")
 done < "$MALICIOUS_NPM_LIST"
@@ -1036,7 +1036,7 @@ load_packages() {
 
     INFECTED_PKGS=()
 
-    while IFS= read -r line; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
         [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
         INFECTED_PKGS+=("$line")
     done <"$PACKAGE_LIST_FILE"
@@ -1044,7 +1044,7 @@ load_packages() {
     # CHAOS RAT list (optional — absence is not fatal)
     CHAOS_RAT_PKGS=()
     if [[ -f "$CHAOS_RAT_LIST" ]]; then
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             CHAOS_RAT_PKGS+=("$line")
         done <"$CHAOS_RAT_LIST"
@@ -1053,7 +1053,7 @@ load_packages() {
     # Russian Spam Campaign list (optional — absence is not fatal)
     RUSSIAN_SPAM_PKGS=()
     if [[ -f "$RUSSIAN_SPAM_LIST" ]]; then
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             RUSSIAN_SPAM_PKGS+=("$line")
         done <"$RUSSIAN_SPAM_LIST"
@@ -1062,7 +1062,7 @@ load_packages() {
     # Community-reported package list (optional — absence is not fatal)
     COMMUNITY_REPORTS_PKGS=()
     if [[ -f "$COMMUNITY_REPORTS_LIST" ]]; then
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             COMMUNITY_REPORTS_PKGS+=("$line")
         done <"$COMMUNITY_REPORTS_LIST"
@@ -1071,7 +1071,7 @@ load_packages() {
     # aur-audit.wtako.net black/red lists (optional — only exist after --refresh)
     AUR_AUDIT_BLACK_PKGS=()
     if [[ -f "$AUR_AUDIT_BLACK_LIST" ]]; then
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             AUR_AUDIT_BLACK_PKGS+=("$line")
         done <"$AUR_AUDIT_BLACK_LIST"
@@ -1079,7 +1079,7 @@ load_packages() {
 
     AUR_AUDIT_RED_PKGS=()
     if [[ -f "$AUR_AUDIT_RED_LIST" ]]; then
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             AUR_AUDIT_RED_PKGS+=("$line")
         done <"$AUR_AUDIT_RED_LIST"
@@ -1117,7 +1117,7 @@ load_packages() {
             return
         fi
         local _n=0
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             EXTRA_PKGS+=("$line")
             _n=$(( _n + 1 ))
@@ -1717,7 +1717,7 @@ check_pkgbuild_caches() {
     while IFS= read -r file; do
         (( scanned++ )) || true
         local lineno=0
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             (( lineno++ )) || true
 
             # --- Pattern 1: quote-split bun/npm command (original) ---
@@ -2025,7 +2025,7 @@ check_autostart() {
                grep -qE '^[[:space:]]*X-GNOME-Autostart-enabled[[:space:]]*=[[:space:]]*false[[:space:]]*$' "$desktop" 2>/dev/null; then
                 continue
             fi
-            while IFS= read -r line; do
+            while IFS= read -r line || [[ -n "$line" ]]; do
                 [[ "$line" =~ ^Exec= ]] || continue
                 local exec_val="${line#Exec=}"
                 exec_val=$(printf '%s' "$exec_val" | sed 's/[[:space:]]*%[a-zA-Z]//g' | awk '{print $1}')
@@ -2116,7 +2116,7 @@ check_autostart() {
     for rc in "${rc_files[@]}"; do
         [[ -f "$rc" ]] || continue
         local lineno=0
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             (( lineno++ )) || true
             if [[ "$line" =~ $re_pipe_exec ]] || [[ "$line" =~ $re_base64 ]] || \
                [[ "$line" =~ $re_eval_net ]]; then
@@ -2311,7 +2311,7 @@ check_list_overlap() {
             path="$orig"
         fi
         [[ -f "$path" ]] || continue
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             if [[ -n "${owner[$line]:-}" ]]; then
                 LIST_OVERLAP_CUSTOM_TOTAL=$(( LIST_OVERLAP_CUSTOM_TOTAL + 1 ))
@@ -2522,7 +2522,7 @@ if ! $FOCUSED_MODE; then
     LIST_COUNTS_FILE="$AUR_CONFIG_DIR/.list_counts"
     declare -A _PREV_LIST_COUNTS
     if [[ -f "$LIST_COUNTS_FILE" ]]; then
-        while IFS=$'\t' read -r _k _v; do
+        while IFS=$'\t' read -r _k _v || [[ -n "$_k" ]]; do
             [[ -z "$_k" ]] && continue
             _PREV_LIST_COUNTS["$_k"]="$_v"
         done < "$LIST_COUNTS_FILE"
