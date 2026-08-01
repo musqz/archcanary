@@ -2266,10 +2266,10 @@ check_list_overlap() {
     # combined EXTRA_PKGS), so re-resolve each source's own file here — same
     # cache-path logic _load_extra uses for a URL source.
     #
-    # LIST_OVERLAP_CUSTOM_TOTAL / LIST_OVERLAP_FILE_PKGS are globals (no
-    # `local`/declared with -g) — read by the caller after this function
-    # returns, to print the same note again at the very end of the scan
-    # instead of leaving it buried in this section's own output.
+    # LIST_OVERLAP_CUSTOM_TOTAL / LIST_OVERLAP_FILE_PKGS / LIST_OVERLAP_FILE_CMD
+    # are globals (no `local`/declared with -g) — read by the caller after
+    # this function returns, to print the same note again at the very end of
+    # the scan instead of leaving it buried in this section's own output.
     local i orig path line
     LIST_OVERLAP_CUSTOM_TOTAL=0
     declare -gA LIST_OVERLAP_FILE_PKGS=()
@@ -2295,10 +2295,25 @@ check_list_overlap() {
         return 0
     fi
 
-    printf '  NOTE: %d package(s) below are already covered by an official list — safe to remove:\n' \
-        "$LIST_OVERLAP_CUSTOM_TOTAL"
+    # Build a ready-to-run removal command per file — an ERE alternation of
+    # the exact duplicate names, anchored per line. Package names can only
+    # contain [a-z0-9@._+-] (pacman naming rules); of those, only . and +
+    # are ERE metacharacters, so those are the only two that need escaping.
+    local pattern
+    declare -gA LIST_OVERLAP_FILE_CMD=()
     for path in "${!LIST_OVERLAP_FILE_PKGS[@]}"; do
-        printf '    %s: %s\n' "$path" "${LIST_OVERLAP_FILE_PKGS[$path]}"
+        pattern="${LIST_OVERLAP_FILE_PKGS[$path]//, /|}"
+        pattern="${pattern//./\\.}"
+        pattern="${pattern//+/\\+}"
+        LIST_OVERLAP_FILE_CMD["$path"]="sed -i -E '/^(${pattern})\$/d' '$path'"
+    done
+
+    printf '  NOTE: %d package(s) below are already covered by an official list — safe to remove.\n' \
+        "$LIST_OVERLAP_CUSTOM_TOTAL"
+    printf '  Run the command shown for each file to remove them:\n\n'
+    for path in "${!LIST_OVERLAP_FILE_PKGS[@]}"; do
+        printf '    %s\n' "$path"
+        printf '      %s\n\n' "${LIST_OVERLAP_FILE_CMD[$path]}"
     done
     return 0
 }
@@ -2711,7 +2726,8 @@ if [[ "${LIST_OVERLAP_CUSTOM_TOTAL:-0}" -gt 0 ]]; then
     printf ' %sNOTE: %d package(s) in your custom list(s) are already covered by an official list — safe to remove.%s\n' \
         "$_CC" "$LIST_OVERLAP_CUSTOM_TOTAL" "$_CN"
     for _f in "${!LIST_OVERLAP_FILE_PKGS[@]}"; do
-        printf '   %s: %s\n' "$_f" "${LIST_OVERLAP_FILE_PKGS[$_f]}"
+        printf '   %s\n' "$_f"
+        printf '     %s\n' "${LIST_OVERLAP_FILE_CMD[$_f]}"
     done
 fi
 printf '%s============================================================%s\n' "$_CB" "$_CN"

@@ -108,9 +108,11 @@ Note custom list
 .RI ( extra_lists.conf " or " \-\-extra\-list )
 entries already covered by an official list
 .RI ( package_list.txt ", CHAOS RAT, Russian Spam, or aur-audit black/red)"
-— safe to remove, since the official list is authoritative. A note, not a
-warning: never affects the exit status, never warns in the check summary,
-and not included in
+— safe to remove, since the official list is authoritative. Prints a
+ready-to-run
+.B sed
+command per affected file. A note, not a warning: never affects the exit
+status, never warns in the check summary, and not included in
 .BR \-\-full .
 .TP
 .B \-\-full

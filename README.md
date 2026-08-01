@@ -140,7 +140,7 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-lynis` | Read last Lynis report — hardening index, warnings, scan date | Yes |
 | `--run-lynis` | Run `lynis audit system`, stream output | Yes |
 | `--check-pkginteg` | Verify installed file checksums via `pacman -Qkk`. Reports SHA256 mismatches on non-backup, non-factory files. Backup files (pacman-managed configs expected to diverge) and `/factory/` paths are filtered out. Prioritise hits in `/usr/bin/`, `/usr/lib/`, `/usr/sbin/`. | Yes |
-| `--check-list-overlap` | A note, not a warning: custom (`--extra-list`) entries already covered by an official list, grouped by file — safe to remove, since the official list is authoritative. Never affects the exit code or the check summary, and not included in `--full`. Also reachable from the GUI: Edit config → List overlap check. | No |
+| `--check-list-overlap` | A note, not a warning: custom (`--extra-list`) entries already covered by an official list are grouped by file, with a ready-to-run `sed` command to remove them — safe to remove, since the official list is authoritative. Never affects the exit code or the check summary, and not included in `--full`. Also reachable from the GUI: Edit config → List overlap check. | No |
 | `--full` | All of the above except `--check-list-overlap` | Partial |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam lists and the aur-audit black/red feed | — |
 | `--no-aur-audit` | Skip the aur-audit.wtako.net feed on `--refresh`. Persists via `AUR_AUDIT_ENABLE=false` in `~/.config/archcanary/env`, also toggleable from the GUI's Scan settings menu row | — |
