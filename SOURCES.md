@@ -274,3 +274,15 @@ All threads on https://lists.archlinux.org/archives/list/aur-general@lists.archl
 - **Status:** Live, continuously updated by the upstream service — not a static snapshot.
 - **Trust basis:** Neither the site nor the API docs publish a scanning methodology, source code, or a track record — there are no operator credentials to verify. Included anyway because the integration itself is low-risk: the API is free, unauthenticated, and read-only; its hits are merged as an annotated, attributable signal (`[aur-audit: black]`/`[aur-audit: red]`) alongside archcanary's own sourced/cited lists rather than replacing them. This is unlike every other entry in this file, which are all independently corroborated incident reports — treat this one as a best-effort community signal, not verified intelligence.
 - **Relevant for:** Community-scale, continuously-updated denylist supplementing archcanary's own hand-curated lists.
+
+---
+
+## 10. Community Reports
+
+- **File:** `lists/community_reports.txt`
+- **Maintainer:** musqz, directly in this repo.
+- **Content:** Individually-reported AUR packages that don't (yet) belong to a documented campaign — sourced from community reports (mailing lists, forums, direct reports) as they come in. No fixed scope or end date, unlike the campaign-specific lists above.
+- **Detection method:** `--refresh` fetches it like the other supplementary lists; hits are annotated `[community report]`.
+- **Status:** Ongoing, updated as reports come in.
+- **Trust basis:** Same caveat as the aur-audit feed above — this is best-effort curation from unverified community reports, not independently corroborated incident data like sections 1-8. A package landing here means "reported as suspicious by someone in the community", not "confirmed malicious with a public writeup". `--check-list-overlap` deliberately doesn't require entries here to be deduplicated against the other official lists before being added — overlap is harmless once a package is in an official list.
+- **Relevant for:** Catching AUR malware between documented campaigns, before it's significant enough for its own writeup.

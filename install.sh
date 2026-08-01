@@ -252,7 +252,7 @@ if $SYSTEM; then
     sudo cp "$REPO_DIR/configs/org.archcanary.policy" /usr/share/polkit-1/actions/
     # Seed the bundled package lists next to the system script so a root scan
     # (system service) finds them — root's $HOME is /root, which is not seeded.
-    for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt malicious_russian_spam_packages.txt; do
+    for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt malicious_russian_spam_packages.txt community_reports.txt; do
         [[ -f "$REPO_DIR/lists/$_list" ]] && sudo cp "$REPO_DIR/lists/$_list" "$SYSTEM_LIB/$_list"
     done
     # DKMS allowlist — single system-wide file (the kmod audit only runs as root).
@@ -339,7 +339,7 @@ EOF
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
-    echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages}.txt"
+    echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages,community_reports}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /etc/archcanary/systemd_allowlist.conf (system-wide systemd allowlist for the persistence check)"
     echo "  installed: /etc/archcanary/bpftool_allowlist.conf (system-wide bpftool allowlist for the eBPF loader check)"

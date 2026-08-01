@@ -142,7 +142,7 @@ Every scan prints a per-check summary before the final verdict:
 | `--check-pkginteg` | Verify installed file checksums via `pacman -Qkk`. Reports SHA256 mismatches on non-backup, non-factory files. Backup files (pacman-managed configs expected to diverge) and `/factory/` paths are filtered out. Prioritise hits in `/usr/bin/`, `/usr/lib/`, `/usr/sbin/`. | Yes |
 | `--check-list-overlap` | A note, not a warning: custom (`--extra-list`) entries already covered by an official list are grouped by file, with a ready-to-run `sed` command to remove them — safe to remove, since the official list is authoritative. Never affects the exit code or the check summary, and not included in `--full`. Also reachable from the GUI: Edit config → List overlap check. | No |
 | `--full` | All of the above except `--check-list-overlap` | Partial |
-| `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam lists and the aur-audit black/red feed | — |
+| `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam/Community Reports lists and the aur-audit black/red feed | — |
 | `--no-aur-audit` | Skip the aur-audit.wtako.net feed on `--refresh`. Persists via `AUR_AUDIT_ENABLE=false` in `~/.config/archcanary/env`, also toggleable from the GUI's Scan settings menu row | — |
 | `--package-list=PATH` | Override the infected AUR package list | — |
 | `--extra-list=PATH_OR_URL` | Load an additional package list (file or `https://` URL); repeatable | — |
@@ -263,6 +263,10 @@ Three waves:
 A separate campaign ([reported by Sid Karunaratne](https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/2YQSHTC27MOKDDKHZTH2BJGTEN2CYC7W/)) in which 75 AUR package PKGBUILDs were modified to inject Russian-language spam `echo` statements into `~/.bashrc`, `~/.zshrc`, and other shell configs at install time. No credential theft or persistence — nuisance/propaganda payload. Reported to Arch DevOps; cleanup was in progress as of 2026-06-14.
 
 archcanary detects these via `malicious_russian_spam_packages.txt` (shown in the scan header alongside the JS campaign count).
+
+### Community Reports
+
+A hand-curated list (`community_reports.txt`), sourced from AUR malware reports shared by the community — refreshed the same way as the lists above, no separate opt-in needed. Unlike the campaign-specific lists, this one has no fixed scope or end date; it's an ongoing collection point for individually-reported packages that don't (yet) belong to a documented campaign. Hits are annotated `[community report]` so you can tell the source. Maintained directly in this repo — see [SOURCES.md](SOURCES.md) for how entries get added.
 
 ### aur-audit.wtako.net feed
 
