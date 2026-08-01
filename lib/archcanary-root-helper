@@ -22,6 +22,40 @@ if [[ -n "${PKEXEC_UID:-}" ]]; then
     fi
 fi
 
+# --allowlist-add/--allowlist-remove are a distinct, single-flag path: they
+# write to /etc/archcanary/*_allowlist.conf rather than run a scan, so they're
+# validated and exec'd here directly instead of going through the ALLOWED_FLAGS
+# scan-flag allowlist below. This script — not archcanary.sh — is the actual
+# polkit-authorized privilege boundary (org.archcanary.policy authorizes this
+# exec path with no argument restriction of its own), so NAME/VALUE are
+# re-validated here even though archcanary.sh validates them again itself.
+if [[ $# -eq 1 ]]; then
+    case "$1" in
+        --allowlist-add=*|--allowlist-remove=*)
+            _spec="${1#*=}"
+            if [[ "$_spec" != *:* ]]; then
+                echo "Error: expected NAME:VALUE, got '$_spec'" >&2
+                exit 1
+            fi
+            _name="${_spec%%:*}"
+            _value="${_spec#*:}"
+            case "$_name" in
+                dkms|systemd|bpftool|autostart) ;;
+                *)
+                    echo "Error: invalid allowlist name '$_name'" >&2
+                    exit 1
+                    ;;
+            esac
+            if [[ ! "$_value" =~ ^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$ ]]; then
+                echo "Error: invalid allowlist value '$_value'" >&2
+                exit 1
+            fi
+            unset _spec _name _value
+            exec "$MAIN_SCRIPT" "$1"
+            ;;
+    esac
+fi
+
 ALLOWED_FLAGS=(--full --refresh --no-aur-audit --check-kmod --check-bpftool --check-ebpf --check-lynis --check-pkginteg --run-lynis --no-notify --no-summary)
 
 for _arg in "$@"; do

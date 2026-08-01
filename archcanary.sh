@@ -104,6 +104,104 @@ CLEANUP_FILES=()
 trap 'rm -f "${CLEANUP_FILES[@]}"' EXIT
 trap 'rm -f "${CLEANUP_FILES[@]}"; exit 1' INT TERM
 
+# ---------------------------------------------------------------------------
+# --allowlist-{list,add,remove} — manage the four system-wide allowlists at
+# /etc/archcanary/*_allowlist.conf (seeded by install.sh --system). --list
+# needs no root (the files are mode 644); --add/--remove do, and are meant to
+# be invoked as `pkexec /usr/lib/archcanary/root-helper --allowlist-add=NAME:
+# VALUE` — root-helper independently re-validates NAME/VALUE before exec'ing
+# back into this script, since it (not this script) is the actual polkit
+# privilege boundary. Env var overrides match the ones the scan-time parsing
+# below already uses, so both point at the same file.
+# ---------------------------------------------------------------------------
+_allowlist_path() {
+    case "$1" in
+        dkms)      echo "${DKMS_ALLOWLIST_FILE:-/etc/archcanary/dkms_allowlist.conf}" ;;
+        systemd)   echo "${SYSTEMD_ALLOWLIST_FILE:-/etc/archcanary/systemd_allowlist.conf}" ;;
+        bpftool)   echo "${BPFTOOL_ALLOWLIST_FILE:-/etc/archcanary/bpftool_allowlist.conf}" ;;
+        autostart) echo "${AUTOSTART_ALLOWLIST_FILE:-/etc/archcanary/autostart_allowlist.conf}" ;;
+        *)         return 1 ;;
+    esac
+}
+
+# Prints one semantic value per line — same "strip inline comment, take first
+# token" rule the scan-time DKMS/SYSTEMD/BPFTOOL/AUTOSTART_ALLOWLIST parsing
+# below applies — so list output always matches what a scan actually treats
+# as allowlisted, not raw file lines (which may carry a trailing description).
+_allowlist_values() {
+    awk '{
+        line = $0
+        sub(/#.*/, "", line)
+        n = split(line, tok, /[ \t]+/)
+        for (i = 1; i <= n; i++) { if (tok[i] != "") { print tok[i]; break } }
+    }' "$1"
+}
+
+_allowlist_cli() {
+    local action="$1" arg2="$2" name value path
+    if [[ "$action" == list ]]; then
+        name="$arg2"
+    else
+        if [[ "$arg2" != *:* ]]; then
+            echo "Error: expected NAME:VALUE, got '$arg2'" >&2
+            exit 1
+        fi
+        name="${arg2%%:*}"
+        value="${arg2#*:}"
+    fi
+    path="$(_allowlist_path "$name")" || {
+        echo "Error: unknown allowlist '$name' (expected: dkms, systemd, bpftool, autostart)" >&2
+        exit 1
+    }
+    if [[ ! -f "$path" ]]; then
+        echo "Error: $path does not exist — run install.sh --system first" >&2
+        exit 3
+    fi
+    if [[ "$action" == list ]]; then
+        _allowlist_values "$path"
+        exit 0
+    fi
+    if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$ ]]; then
+        echo "Error: invalid allowlist value '$value'" >&2
+        exit 1
+    fi
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: modifying $path requires root — run via pkexec (root-helper)" >&2
+        exit 1
+    fi
+    if [[ "$action" == add ]]; then
+        if _allowlist_values "$path" | grep -qxF "$value"; then
+            echo "already allowlisted: $value"
+            exit 0
+        fi
+        printf '%s\n' "$value" >> "$path"
+        echo "added: $value"
+        exit 0
+    else
+        if ! _allowlist_values "$path" | grep -qxF "$value"; then
+            echo "not found: $value" >&2
+            exit 1
+        fi
+        local tmp
+        tmp="$(mktemp "${path}.XXXXXX")"
+        CLEANUP_FILES+=("$tmp")
+        awk -v val="$value" '{
+            line = $0
+            stripped = line
+            sub(/#.*/, "", stripped)
+            n = split(stripped, tok, /[ \t]+/)
+            first = ""
+            for (i = 1; i <= n; i++) { if (tok[i] != "") { first = tok[i]; break } }
+            if (first == val) next
+            print line
+        }' "$path" > "$tmp"
+        mv "$tmp" "$path"
+        chmod 644 "$path"
+        echo "removed: $value"
+        exit 0
+    fi
+}
+
 for arg in "$@"; do
     case "$arg" in
         --check-systemd) CHECK_SYSTEMD=true ;;
@@ -140,6 +238,9 @@ for arg in "$@"; do
         --doctor)                DOCTOR=true ;;
         --doctor=*)              DOCTOR=true; DOCTOR_SECTIONS="${arg#*=}" ;;
         --run-lynis)             RUN_LYNIS=true ;;
+        --allowlist-list=*)      _allowlist_cli list "${arg#*=}" ;;
+        --allowlist-add=*)       _allowlist_cli add "${arg#*=}" ;;
+        --allowlist-remove=*)    _allowlist_cli remove "${arg#*=}" ;;
         --version|-V)
             echo "Archcanary v${SCRIPT_VERSION}"
             exit 0
@@ -186,6 +287,10 @@ for arg in "$@"; do
             echo "                            (tool names like aurscan/traur/yad also map to a section)"
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
+            echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
+            echo "                                     NAME: dkms, systemd, bpftool, autostart"
+            echo "  --allowlist-add=NAME:VALUE        Add VALUE to an allowlist and exit (needs root)"
+            echo "  --allowlist-remove=NAME:VALUE     Remove VALUE from an allowlist and exit (needs root)"
             echo "  --version, -V             Show version and exit"
             echo "  --help, -h                Show this help"
             exit 0
