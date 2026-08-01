@@ -2281,7 +2281,7 @@ check_list_overlap() {
         [[ -f "$path" ]] || continue
         while IFS= read -r line; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-            [[ -n "${owner[$line]:-}" ]] && custom_dupes+=("$line  —  ${EXTRA_LIST_NAMES[$i]}  (also in: ${owner[$line]})")
+            [[ -n "${owner[$line]:-}" ]] && custom_dupes+=("$line  —  also in: ${owner[$line]}  →  remove from: $path")
         done < "$path"
     done
 

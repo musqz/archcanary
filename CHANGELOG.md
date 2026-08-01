@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Added: `--check-list-overlap` flags package names duplicated across loaded lists. A custom list (`extra_lists.conf`/`--extra-list`) entry already covered by an official list (`package_list.txt`, CHAOS RAT, Russian Spam, aur-audit black/red) is reported as safe to remove, since the official list is authoritative. Duplicates *between* official lists are also reported, informational only. Advisory-only — never affects the exit status, and not included in `--full`.
+- Added: `--check-list-overlap` flags package names duplicated across loaded lists. A custom list (`extra_lists.conf`/`--extra-list`) entry already covered by an official list (`package_list.txt`, CHAOS RAT, Russian Spam, aur-audit black/red) is reported as safe to remove, along with the exact file path to remove it from, since the official list is authoritative. Duplicates *between* official lists are also reported, informational only (no path, since those aren't meant to be hand-edited). Advisory-only — never affects the exit status, and not included in `--full`. Also reachable from the GUI: `archcanary-gui` → Edit config → List overlap check, which runs it and shows just its own report (with a live duplicate count in the window title) rather than a full scan.
 
 ## v0.1.20 (2026-08-01)
 
