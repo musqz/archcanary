@@ -709,14 +709,21 @@ scan_settings() {
 # rest of a default scan) in a read-only window. Fast/local (no network), so
 # run synchronously rather than through show_output()'s live-tail machinery.
 list_overlap_check() {
-    local raw body count
+    local raw body hint count
     raw="$("$MAIN_SCRIPT" --check-list-overlap --no-notify --no-summary 2>&1)"
     body="$(awk '/^--- \[14\] /{f=1; next} /^--- \[/{f=0} /^===/{f=0} f' <<< "$raw")"
+    # The "quick fix" wrap-up (which file to remove which entries from) is
+    # printed near the very end of the scan, after the RESULT banner — outside
+    # the section [14] body captured above — so pull it in separately.
+    hint="$(awk '/^ LIST OVERLAP:/{f=1} f && !/^===/' <<< "$raw")"
     count="$(grep -c '^    - ' <<< "$body" || true)"
 
     local tmpout
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
-    printf '%s\n' "$body" > "$tmpout"
+    {
+        printf '%s\n' "$body"
+        [[ -n "$hint" ]] && printf '\n%s\n' "$hint"
+    } > "$tmpout"
 
     yad --text-info \
         --title="List Overlap Check (${count} found) — Archcanary" \
