@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added: `CONTRIBUTING.md`, a GitHub issue form (`.github/ISSUE_TEMPLATE/report-package.yml`), and a PR template (`.github/PULL_REQUEST_TEMPLATE.md`) for reporting a malicious/suspicious AUR package into `lists/community_reports.txt` — either via a low-friction form (no git needed) or a direct PR, both asking for the same evidence link so reports can be reviewed without back-and-forth.
+
 ## v0.1.21 (2026-08-01)
 
 - Added: `--check-list-overlap` notes custom list (`extra_lists.conf`/`--extra-list`) entries already covered by an official list (`package_list.txt`, CHAOS RAT, Russian Spam, Community Reports, aur-audit black/red) — grouped by file, each with a ready-to-run `sed` command to remove exactly those entries, since the official list is authoritative. A note, not a warning: always shows "clean" in the check summary and never affects the exit status, and not included in `--full`. The same note prints twice — once in its own section, once again right after the final RESULT banner — so it's visible without scrolling back up. Also reachable from the GUI: `archcanary-gui` → Edit config → List overlap check, which runs it and shows just its own report (with the live count in the window title) rather than a full scan.
