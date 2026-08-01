@@ -72,6 +72,27 @@ Every scan prints a per-check summary before the final verdict:
 ============================================================
 ```
 
+With `archcanary --refresh`, the banner also shows each list's count and how
+much it changed since the last run — handy for noticing a threat-intel feed
+just grew:
+
+```
+============================================================
+ Archcanary v0.1.20
+ Scanned: 2026-08-01 16:14
+
+ Lists loaded
+   package_list.txt  infostealer + eBPF rootkit  1936 pkgs
+   + CHAOS RAT         7 pkgs
+   + Russian Spam     75 pkgs
+   + aur-audit black 101 pkgs (+17)
+   + aur-audit red   306 pkgs (+27)
+   + extra: archlinux-list.txt    68 pkgs
+
+ Packages checked: 2493
+============================================================
+```
+
 ---
 
 ## Screenshots
