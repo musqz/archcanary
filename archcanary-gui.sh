@@ -667,15 +667,35 @@ run_action() {
         REFRESHED=true
     fi
 
-    if [[ "$needs_root" == "true" ]]; then
-        if ! $HAS_ROOT; then
+    # Full scan (idx 0) is a bundle where most checks don't need root — if root
+    # isn't available, fall through to the plain non-root path below instead of
+    # refusing to run at all. archcanary.sh's own --full already skips the
+    # root-only checks and reports INCOMPLETE in that case (same as the CLI),
+    # so this just lets the GUI do what the CLI already does. A single
+    # root-only check (eBPF, bpftool, kmod, Lynis, pacman integrity) has no
+    # meaningful non-root version, so those still block below.
+    if [[ "$needs_root" == "true" ]] && ! $HAS_ROOT && [[ "$idx" -ne 0 ]]; then
+        # Two independent causes were previously conflated into one dialog
+        # that only ever suggested the install.sh fix — if pkexec itself
+        # isn't installed (polkit is optional), re-running install.sh --system
+        # does nothing, and the same dialog kept reappearing (reported live).
+        if [[ -z "$PKEXEC" ]]; then
+            yad --image=dialog-warning \
+                --title="polkit not installed" \
+                --window-icon=security-high --center \
+                --text="This check needs <b>pkexec</b>, which comes from the <b>polkit</b> package (not installed).\n\nRun:\n  <b>sudo pacman -S polkit</b>\n\nthen try again." \
+                --width=440 2>/dev/null || true
+        else
             yad --image=dialog-warning \
                 --title="Root helper not installed" \
                 --window-icon=security-high --center \
                 --text="The system root helper is not installed.\n\nRun:\n  <b>./install.sh --system</b>\n\nto enable root-requiring checks." \
                 --width=440 2>/dev/null || true
-            return
         fi
+        return
+    fi
+
+    if [[ "$needs_root" == "true" ]] && $HAS_ROOT; then
         local tmpout pkexec_exit=0 pkexec_done=false
         tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
 
