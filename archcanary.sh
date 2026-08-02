@@ -554,6 +554,7 @@ _init_color() {
         _SYM_CLEAN="${_CG}✅  clean${_CN}"
         _SYM_WARNINGS="${_CY}⚠   warnings${_CN}"
         _SYM_INFECTED_TXT="${_CR}${_CB}❌  INFECTED${_CN}"
+        _SYM_REVIEW_TXT="${_CY}⚠   REVIEW${_CN}"
         _SYM_SKIPPED="⚠   skipped (needs root)"
         _SYM_SKIPPED_MISSING="⚠   skipped (not installed)"
         _SEP55="$(printf '─%.0s' $(seq 1 55))"
@@ -562,6 +563,7 @@ _init_color() {
         _SYM_CLEAN="[ok]   clean"
         _SYM_WARNINGS="[!!]   warnings"
         _SYM_INFECTED_TXT="[!!]   INFECTED"
+        _SYM_REVIEW_TXT="[??]   REVIEW"
         _SYM_SKIPPED="[--]   skipped (needs root)"
         _SYM_SKIPPED_MISSING="[--]   skipped (not installed)"
         _SEP55="$(printf '%0.s-' $(seq 1 55))"
@@ -2447,6 +2449,8 @@ check_autostart() {
                     else
                         echo "  WARNING: suspicious autostart entry: $desktop"
                         echo "    Exec=$exec_val (outside standard system path)"
+                        echo "    If you recognize this app (e.g. an AppImage/Flatpak launcher or a"
+                        echo "    personal script), mark it known-good: archcanary --allowlist-add=autostart:$exec_val"
                         found=2
                     fi
                 fi
@@ -2485,6 +2489,8 @@ check_autostart() {
                 else
                     echo "  WARNING: user service with unowned ExecStart binary: $svc"
                     echo "    ExecStart=$exec_bin (not tracked by pacman)"
+                    echo "    If you recognize this (e.g. a package that ships its unit via /etc/skel),"
+                    echo "    mark it known-good: archcanary --allowlist-add=autostart:$exec_bin"
                     found=2
                 fi
             fi
@@ -2836,6 +2842,38 @@ _SUMMARY_NAMES=()
 _SUMMARY_CODES=()
 _rec() { _SUMMARY_NAMES+=("$1"); _SUMMARY_CODES+=("$2"); }
 
+# Checks tagged here are heuristic/behavior-based (prone to real false
+# positives — legitimate personal scripts, AppImage/Flatpak launchers in
+# unusual paths, custom systemd units, non-pacman kernel modules, etc.),
+# as opposed to name/hash matches against a known-malicious list (package
+# list, pacman.log history, npm/bun/yarn/pnpm cache, package integrity),
+# which stay "INFECTED" since those really are confirmed hits. A code-2
+# result from one of these instead shows the softer "REVIEW" — reported
+# live by two separate users whose legitimate autostart entries (a
+# personal Conky script; AppImage-style apps like pCloud/Gearlever/
+# MEGAsync) produced an "INFECTED" verdict, which is needlessly alarming
+# for something that's often just "an app archcanary can't recognize yet."
+_is_behavior_check_name() {
+    case "$1" in
+        "Systemd persistence"|"eBPF programs (bpftool)"|"ld.so.preload injection"|\
+        "XDG autostart + shell RCs"|"Kernel modules (DKMS)"|"PKGBUILD obfuscation scan")
+            return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# True if any RECORDED code-2 finding came from a high-confidence
+# (non-behavior-based) check — used to decide the final overall RESULT
+# banner's wording, same rationale as _is_behavior_check_name above.
+_any_confirmed_infected() {
+    local i
+    for i in "${!_SUMMARY_NAMES[@]}"; do
+        [[ "${_SUMMARY_CODES[$i]}" -eq 2 ]] || continue
+        _is_behavior_check_name "${_SUMMARY_NAMES[$i]}" || return 0
+    done
+    return 1
+}
+
 _print_summary() {
     local _w=36
     printf '\n Check summary\n'
@@ -2846,7 +2884,12 @@ _print_summary() {
         case "$code" in
             0)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_CLEAN" ;;
             1)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_WARNINGS" ;;
-            2)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_INFECTED_TXT" ;;
+            2)  if _is_behavior_check_name "$name"; then
+                    printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_REVIEW_TXT"
+                else
+                    printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_INFECTED_TXT"
+                fi
+                ;;
             77) printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_SKIPPED" ;;
             78) printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
         esac
@@ -3218,7 +3261,12 @@ printf '%s============================================================%s\n' "$_C
 case $EXIT_CODE in
     0) printf ' %sRESULT: CLEAN - No indicators found.%s\n'                           "$_CG"       "$_CN" ;;
     1) printf ' %sRESULT: WARNINGS - Review output above.%s\n'                        "$_CY"       "$_CN" ;;
-    2) printf ' %sRESULT: INFECTED - Indicators found! Follow incident response.%s\n' "$_CR$_CB"   "$_CN" ;;
+    2) if _any_confirmed_infected; then
+           printf ' %sRESULT: INFECTED - Indicators found! Follow incident response.%s\n' "$_CR$_CB" "$_CN"
+       else
+           printf ' %sRESULT: REVIEW NEEDED - Suspicious behavior found, see checks above.%s\n' "$_CY$_CB" "$_CN"
+       fi
+       ;;
 esac
 if [[ ${#SKIPPED_ROOT[@]} -gt 0 ]]; then
     printf ' INCOMPLETE: %d root check(s) skipped (no root): %s\n' "${#SKIPPED_ROOT[@]}" "${SKIPPED_ROOT[*]}"

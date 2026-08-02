@@ -665,6 +665,31 @@ RC
         fail "check_autostart: commented-out RC line false positive regression, rc=$rc, out: $out"
     fi
     rm -rf "$tmpdir9"
+
+    # Sub-test P: summary table shows "REVIEW" (not "INFECTED") for a genuine
+    # autostart finding, and the WARNING text includes the allowlist
+    # self-service hint — reported live by two separate users whose
+    # legitimate autostart entries produced an alarming "INFECTED" verdict
+    # with no indication a fix (allowlisting) even existed.
+    local tmpdir10
+    tmpdir10=$(mktemp -d)
+    mkdir -p "$tmpdir10/.config/autostart"
+    cat > "$tmpdir10/.config/autostart/someapp.desktop" << DESK
+[Desktop Entry]
+Type=Application
+Name=SomeApp
+Exec=$tmpdir10/Applications/SomeApp.AppImage
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir10" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --no-color 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"REVIEW"* && "$out" != *"INFECTED"* && \
+          "$out" == *"--allowlist-add=autostart:"* ]]; then
+        pass "check_autostart: summary shows REVIEW + allowlist hint present"
+    else
+        fail "check_autostart: expected REVIEW wording + allowlist hint, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir10"
 }
 
 # ---------------------------------------------------------------------------
@@ -727,6 +752,20 @@ test_pkgbuild_obfuscation() {
         pass "pkgbuild_obfuscation: clean PKGBUILD → no false positive"
     else
         fail "pkgbuild_obfuscation: clean PKGBUILD triggered WARNING — false positive"
+    fi
+
+    # Sub-test F: summary table shows the softer "REVIEW" (not "INFECTED") for
+    # this check — regression guard for the INFECTED/REVIEW wording split
+    # (behavior-based checks like this one are heuristic and false-positive
+    # prone, unlike a package-list/hash match, so the summary shouldn't imply
+    # the same certainty for both).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-base64" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --no-color 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"REVIEW"* && "$out" != *"INFECTED"* ]]; then
+        pass "pkgbuild_obfuscation: summary shows REVIEW, not INFECTED"
+    else
+        fail "pkgbuild_obfuscation: expected REVIEW wording in summary, rc=$rc, out: $out"
     fi
 }
 
