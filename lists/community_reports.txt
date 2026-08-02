@@ -20,6 +20,7 @@ mingw-w64-vulkan-tools
 nimf
 noctyra-cli-git
 node-llama-cpp
+openconnect-sso
 openrc-manager-gui
 play-git
 python-drastic
