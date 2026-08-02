@@ -851,6 +851,21 @@ run_doctor() {
                 "sudo chown -R $real_user: \"$cfg_dir\"" \
                 "dir is owned by root — --refresh will fail"
         fi
+        # A stale user-level completion file silently shadows a correct
+        # system-level one forever: bash's dynamic loader checks the user
+        # completions dir first, so it wins even when it's the wrong one.
+        # This happens to anyone who did a plain install once, then switched
+        # to --system/package installs/updates without ever repeating the
+        # plain one — nothing else in either install path touches the other
+        # location, so the two silently drift apart with no obvious symptom
+        # beyond "my new flag doesn't tab-complete." Reported live.
+        local user_completion="${XDG_DATA_HOME:-$real_home/.local/share}/bash-completion/completions/archcanary"
+        local sys_completion="${ARCHCANARY_SYS_COMPLETION:-/usr/share/bash-completion/completions/archcanary}"
+        if [[ -f "$user_completion" && -f "$sys_completion" ]] && ! cmp -s "$user_completion" "$sys_completion"; then
+            _warn "bash completion (user copy differs from system copy)" \
+                "bash $installer   # refreshes the user copy, which is the one that actually wins" \
+                "$user_completion is out of sync with $sys_completion — bash prefers the user copy regardless of which is newer"
+        fi
         printf '\n'
     fi
 
