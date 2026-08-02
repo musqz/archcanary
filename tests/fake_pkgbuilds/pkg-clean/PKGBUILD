@@ -8,4 +8,10 @@ build() {
 }
 package() {
     make DESTDIR="$pkgdir" install
+    # Standard NUL-delimited find -print0 iteration idiom — must never be
+    # flagged as ANSI-C hex/octal obfuscation (a single $'\0' delimiter is
+    # not an encoded payload).
+    find "$pkgdir" -type f -name '*.so*' -print0 | while read -d $'\0' _lib; do
+        chmod 644 "$_lib"
+    done
 }

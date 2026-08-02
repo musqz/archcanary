@@ -2047,9 +2047,16 @@ check_pkgbuild_caches() {
 
     local found_count=0
     local scanned=0
-    # matches $'\x.. or $'\0.. (ANSI-C hex/octal quoting)
+    # Matches an ANSI-C-quoted string built from 3+ chained \xHH (hex) or
+    # \NNN (octal) escapes back to back — the actual obfuscation signature
+    # (spelling out a command a byte at a time, e.g. $'\x63\x75\x72\x6c' for
+    # "curl"). A single escape, e.g. read -d $'\0' (the standard, extremely
+    # common idiom for NUL-delimited `find -print0` iteration), is not
+    # obfuscation and must not match — the previous regex matched on just
+    # one occurrence of $'\x or $'\0, flagging that exact legitimate idiom
+    # (reported live, real nvidia-utils-beta PKGBUILD).
     local re_ansi_c
-    re_ansi_c='\$'"'"'\\x|\$'"'"'\\0'
+    re_ansi_c='\$'"'"'(\\x[0-9a-fA-F]{2}|\\[0-7]{1,3}){3,}'
 
     while IFS= read -r file; do
         (( scanned++ )) || true
