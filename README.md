@@ -22,8 +22,6 @@ Archcanary is a layered security detection stack for Arch Linux — scanning for
 It started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) under the name **aur-malware-check**, originally focused on the June 2026 AUR supply-chain attack. 
 As the tool grew to cover a much broader set of system checks — integrating a GUI frontend, automated systemd timers, and multiple detection layers — the scope outgrew the original name. 
 
-[aurscan](https://github.com/manticore-projects/aurscan), an LLM-based PKGBUILD scanner, is an optional add-on; archcanary works fully without it. 
-
 ---
 
 ## Quick Start
@@ -218,7 +216,6 @@ does and how it's wired in:
 
 | Project | Required |
 |---------|----------|
-| [manticore-projects/aurscan](https://github.com/manticore-projects/aurscan) | Optional |
 | [traur](https://aur.archlinux.org/packages/traur) | Optional |
 | [yay](https://github.com/Jguer/yay) 13.0 | Optional |
 | [yad](https://github.com/v1cont/yad) | GUI only |
@@ -233,43 +230,13 @@ Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malwar
 
 ### Detection Layers
 
-Four automatic layers fire at AUR install time — yay's editor-gate
-(aurscan + Claude), yay's offline `init.lua` hooks, and traur's pacman
-`PreTransaction` hook — plus a continuous root scan (`archcanary --full`,
-weekly + on boot + after every pacman transaction), a desktop notifier on
-detection, and the on-demand GUI.
+Two automatic layers fire at AUR install time — yay's offline `init.lua`
+hooks and traur's pacman `PreTransaction` hook — plus a continuous root
+scan (`archcanary --full`, weekly + on boot + after every pacman
+transaction), a desktop notifier on detection, and the on-demand GUI.
 
 See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
 (at-a-glance table included).
-
----
-
-## LLM Settings (aurscan)
-
-[aurscan](https://github.com/manticore-projects/aurscan) scans PKGBUILDs with an LLM before `yay` or `paru` builds them. The GUI exposes its backend configuration under **Settings → LLM settings**.
-
-Install from the AUR (two variants — pick one):
-
-```bash
-yay -S aurscan-manticore-release-git       # builds from source, needs Go
-yay -S aurscan-manticore-bin-release-git   # pre-built binary, no toolchain needed
-```
-
-> **AUR helper compatibility:** aurscan integrates natively with both **yay** and **paru** — one-time setup, no wrapper alias needed. yay uses its Lua editor-gate (`aurscan --install-yay-hook`); paru uses its native `PreBuildCommand` config key (`aurscan --install-paru-hook`), which paru invokes in the PKGBUILD directory before every build. Other helpers (pikaur, aurutils) have no equivalent hook yet. archcanary's post-install detection (all other checks) works with any AUR helper.
-
-<img src="images/llm.png" alt="LLM Settings dialog" width="400"/>
-
-| Field | Description |
-|-------|-------------|
-| Backend | `auto` — Claude if `ANTHROPIC_API_KEY` is set, else static rules only<br>`claude` — Claude API<br>`openai` — any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM) |
-| Endpoint URL | URL for the `openai` backend, e.g. `http://localhost:11434/v1` |
-| Fallback URL | Optional second endpoint — aurscan fails over automatically |
-| Model | Model name sent to the endpoint |
-| Timeout | Per-request budget in seconds — raise for slow CPU-only local models (default 180 s) |
-
-Settings are saved to `~/.config/aurscan/env` and loaded by aurscan at startup. Explicit environment variables always override the file.
-
-The **Model guide** button in the dialog shows local model size recommendations and the critical Ollama `num_ctx` warning (Ollama defaults to 2048 which silently truncates the PKGBUILD — set ≥ 8192).
 
 ---
 
@@ -304,7 +271,7 @@ A hand-curated list (`community_reports.txt`), sourced from AUR malware reports 
 
 **On trusting it:** this is an independent, pseudonymous operator's project ("Saren" / wtako.net), not a security vendor — neither the site nor its API docs publish a scanning methodology or a track record, so there's nothing to verify the operator's credentials against. The trust here is in the integration, not the operator: the API is free, unauthenticated, and read-only (nothing about your system is ever sent to it), its hits are merged alongside archcanary's own sourced/cited lists rather than replacing them (see [SOURCES.md](SOURCES.md#9-aur-auditwtakonet-feed)), and the source is always visible in the `[aur-audit: black/red]` annotation. Treat it like any heuristic scanner: best-effort, not a guarantee.
 
-The same synced lists also gate installs directly: the `AURPreInstall` yay hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) aborts a build on a black hit and warns on a red hit — a pre-build check that doesn't need aurscan or an LLM. A black abort is a blocking action driven by this unverified third-party source; there's no per-source toggle, so the only way to opt out is to stop running `--refresh` (or delete `aur_audit_black.txt`/`aur_audit_red.txt` from `~/.config/archcanary/`), which makes both the hook and the scan-side check silently skip it.
+The same synced lists also gate installs directly: the `AURPreInstall` yay hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) aborts a build on a black hit and warns on a red hit — a pre-build check that needs no LLM. A black abort is a blocking action driven by this unverified third-party source; there's no per-source toggle, so the only way to opt out is to stop running `--refresh` (or delete `aur_audit_black.txt`/`aur_audit_red.txt` from `~/.config/archcanary/`), which makes both the hook and the scan-side check silently skip it.
 
 ---
 

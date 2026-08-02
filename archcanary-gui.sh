@@ -59,10 +59,6 @@ TRAUR="$(command -v traur 2>/dev/null || true)"
 HAS_TRAUR=false
 [[ -n "$TRAUR" ]] && HAS_TRAUR=true
 
-AURSCAN="$(command -v aurscan 2>/dev/null || true)"
-HAS_AURSCAN=false
-[[ -n "$AURSCAN" ]] && HAS_AURSCAN=true
-
 LYNIS="$(command -v lynis 2>/dev/null || true)"
 HAS_LYNIS=false
 [[ -n "$LYNIS" ]] && HAS_LYNIS=true
@@ -103,13 +99,12 @@ LABELS=(
     "Kernel modules"            # 11 root
     "Manage allowlists"         # 12
     "Trust scan (traur)"        # 13
-    "LLM settings (aurscan)"   # 14
-    "Edit config"               # 15
-    "Lynis hardening report"   # 16
-    "Run Lynis audit"          # 17  root
-    "Pacman integrity"         # 18
-    "About"                    # 19
-    "Scan settings"            # 20
+    "Edit config"               # 14
+    "Lynis hardening report"   # 15
+    "Run Lynis audit"          # 16  root
+    "Pacman integrity"         # 17
+    "About"                    # 18
+    "Scan settings"            # 19
 )
 
 FLAGS=(
@@ -127,7 +122,6 @@ FLAGS=(
     "--check-kmod --no-summary"
     "__manage_allowlists__"
     "__traur__"
-    "__aurscan_settings__"
     "__edit_config__"
     "--check-lynis --no-notify --no-summary"
     "--run-lynis"
@@ -139,7 +133,7 @@ FLAGS=(
 NEEDS_ROOT=(
     true false false false false false false false false
     true true true
-    false false false false
+    false false false
     true
     true
     true
@@ -154,11 +148,10 @@ for _i in "${!LABELS[@]}"; do STATUS[$_i]="  ?"; done
 STATUS[0]="   "   # Full scan — blank until first run
 STATUS[12]="   "  # Manage allowlists — config dialog, no scan verdict
 STATUS[13]="   "  # traur — opens its own output window, no verdict here
-STATUS[14]="   "  # aurscan settings — config dialog, no scan verdict
-STATUS[15]="   "  # Edit config — config dialog, no scan verdict
-STATUS[16]="   "  # Lynis hardening report — informational, no pass/fail verdict
-STATUS[19]="   "  # About — no scan verdict
-STATUS[20]="   "  # Scan settings — config dialog, no scan verdict
+STATUS[14]="   "  # Edit config — config dialog, no scan verdict
+STATUS[15]="   "  # Lynis hardening report — informational, no pass/fail verdict
+STATUS[18]="   "  # About — no scan verdict
+STATUS[19]="   "  # Scan settings — config dialog, no scan verdict
 unset _i
 
 # Derive full-scan status (row 0) from whichever individual checks have results.
@@ -176,7 +169,7 @@ _infer_full_status() {
 
 _update_status() {
     local idx=$1 code=$2
-    [[ $idx -eq 16 ]] && return  # Lynis hardening report — informational, stays blank
+    [[ $idx -eq 15 ]] && return  # Lynis hardening report — informational, stays blank
     case $code in
         0) STATUS[$idx]=" ✅" ;;
         1) STATUS[$idx]=" ⚠ " ;;
@@ -188,7 +181,7 @@ _update_status() {
 declare -A _SCAN_TAG=(
     [1]='3'  [2]='5'  [3]='6'  [4]='6b' [5]='6c'
     [6]='7'  [7]='9'  [8]='10' [9]='4'  [10]='8' [11]='11'
-    [16]='12'
+    [15]='12'
 )
 
 # After a full scan (idx 0), set each check row from ITS OWN section in the
@@ -465,125 +458,6 @@ Source: <a href=\"${repo}\">${repo}</a>" \
         2>/dev/null || true
 }
 
-aurscan_settings() {
-    local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aurscan"
-    local env_file="$cfg_dir/env"
-
-    # || true: grep exits non-zero on no match / missing file; pipefail would
-    # propagate that and set -e would kill the function before yad opens.
-    _env_get() { grep -E "^$1=" "$env_file" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
-    local cur_backend cur_url cur_fallback cur_model cur_timeout
-    cur_backend=$(_env_get AURSCAN_BACKEND)
-    cur_url=$(_env_get AURSCAN_OPENAI_URL)
-    cur_fallback=$(_env_get AURSCAN_OPENAI_URL_FALLBACK)
-    cur_model=$(_env_get AURSCAN_OPENAI_MODEL)
-    cur_timeout=$(_env_get AURSCAN_TIMEOUT)
-    [[ -z "$cur_timeout" ]] && cur_timeout="180"
-
-    local backends
-    case "$cur_backend" in
-        claude) backends="claude!auto!openai" ;;
-        openai) backends="openai!auto!claude" ;;
-        *)      backends="auto!claude!openai" ;;
-    esac
-
-    local model_list
-    if [[ -n "$cur_model" ]]; then
-        model_list="$cur_model!qwen2.5-coder:14b!qwen2.5-coder:7b!llama3.1:8b!llama3.3:70b"
-    else
-        model_list="!qwen2.5-coder:14b!qwen2.5-coder:7b!llama3.1:8b!llama3.3:70b"
-    fi
-
-    local result rc=0
-    while true; do
-        # && rc=0 || rc=$? captures yad's exit code without triggering set -e
-        # (set -e exempts the left side of && from exit-on-error).
-        result=$(yad --form \
-            --title="LLM Settings — aurscan" \
-            --window-icon=security-high --center \
-            --width=540 \
-            --separator="|" \
-            --field="Backend:CB" "$backends" \
-            --field="Endpoint URL  (openai — Ollama / llama.cpp / vLLM):TEXT" "$cur_url" \
-            --field="Fallback URL  (optional):TEXT" "$cur_fallback" \
-            --field="Model:CBE" "$model_list" \
-            --field="Timeout (seconds):NUM" "$cur_timeout" \
-            --field="<small><b>Ollama:</b> set num_ctx ≥ 8192 in your Modelfile (see Model guide)</small>:LBL" "" \
-            --button="Model guide:2" \
-            --button="Save:0" \
-            --button="Cancel:1" \
-            2>/dev/null) && rc=0 || rc=$?
-
-        if [[ $rc -eq 2 ]]; then
-            yad --text-info \
-                --title="Local model guide — aurscan" \
-                --window-icon=security-high --center \
-                --width=580 --height=440 \
-                --fontname="Monospace 10" \
-                --button="OK:0" \
-                2>/dev/null << 'GUIDE' || true
-Local model recommendations (from aurscan README):
-
- Size      Model                    Verdict quality
- ─────────────────────────────────────────────────────────────
- ≤ 3B      qwen2.5-coder:3b         ✗  Don't. Near-random verdicts,
-           llama3.2:3b                  unreliable JSON. Use
-           phi-*-mini                   --rules-only instead.
-
- 7–8B      qwen2.5-coder:7b         ⚠  Marginal. ~45% catch rate.
-           llama3.1:8b                  Misses subtle supply-chain
-           codellama:7b                 tricks. Weak bonus on top of
-                                        static rules, not a real auditor.
-
- 14–32B    qwen2.5-coder:14b        ✓  Good. Recommended minimum
-           phi-4:14b                    for real protection.
-           codellama:13b
-
- 70B+      llama3.3:70b             ✓  Best local. Approaches
-           qwen3-coder (MoE)            cloud quality.
-
-IMPORTANT — Ollama context window:
-  Ollama defaults to num_ctx=2048. This silently truncates the PKGBUILD
-  out of the prompt — the model scans almost nothing. Set num_ctx ≥ 8192
-  (16384 recommended). Bake it into a named model:
-
-    cat > Modelfile <<EOF
-    FROM qwen2.5-coder:14b
-    PARAMETER num_ctx 16384
-    EOF
-    ollama create aurscan-qwen -f Modelfile
-
-  Then use "aurscan-qwen" as the model name in settings.
-GUIDE
-            continue  # loop back to settings form
-        fi
-
-        break
-    done
-
-    [[ $rc -ne 0 ]] && return  # Cancel
-
-    local new_backend new_url new_fallback new_model new_timeout
-    IFS='|' read -r new_backend new_url new_fallback new_model new_timeout _ <<< "$result"
-
-    mkdir -p "$cfg_dir"
-    {
-        printf '# aurscan LLM settings — managed by archcanary-gui\n'
-        [[ -n "$new_backend" && "$new_backend" != "auto" ]] && printf 'AURSCAN_BACKEND=%s\n' "$new_backend"
-        [[ -n "$new_url" ]] && printf 'AURSCAN_OPENAI_URL=%s\n' "$new_url"
-        [[ -n "$new_fallback" ]] && printf 'AURSCAN_OPENAI_URL_FALLBACK=%s\n' "$new_fallback"
-        [[ -n "$new_model" ]] && printf 'AURSCAN_OPENAI_MODEL=%s\n' "$new_model"
-        [[ -n "$new_timeout" && "$new_timeout" != "180" ]] && printf 'AURSCAN_TIMEOUT=%s\n' "$new_timeout"
-    } > "$env_file"
-
-    yad --image=dialog-information \
-        --title="aurscan" \
-        --window-icon=security-high --center \
-        --text="Settings saved to\n<tt>$env_file</tt>" \
-        --width=380 \
-        --button="OK:0" 2>/dev/null || true
-}
-
 # Run a command, stream output live to a text-info window, return its exit code.
 show_output() {
     local title="$1" scan_exit=0
@@ -739,7 +613,7 @@ run_action() {
     local flags="${FLAGS[$idx]}"
     local needs_root="${NEEDS_ROOT[$idx]}"
 
-    if [[ "$idx" -eq 16 || "$idx" -eq 17 ]] && ! $HAS_LYNIS; then
+    if [[ "$idx" -eq 15 || "$idx" -eq 16 ]] && ! $HAS_LYNIS; then
         yad --image=dialog-information \
             --title="Lynis — Archcanary" \
             --window-icon=security-high --center \
@@ -766,11 +640,6 @@ run_action() {
 
     if [[ "$flags" == "__scan_settings__" ]]; then
         scan_settings
-        return
-    fi
-
-    if [[ "$flags" == "__aurscan_settings__" ]]; then
-        aurscan_settings
         return
     fi
 
@@ -862,10 +731,10 @@ run_action() {
         done
 
         printf '\n============================================================\n\n' >&8 2>/dev/null || true
-        if [[ "$idx" -eq 17 ]]; then
+        if [[ "$idx" -eq 16 ]]; then
             printf 'Running lynis audit system, please wait (1-2 minutes)...\n\n' >&8 || true
         fi
-        if [[ "$idx" -eq 20 ]]; then
+        if [[ "$idx" -eq 19 ]]; then
             printf 'Verifying installed file checksums — this may take 20-30 seconds...\n\n' >&8 || true
         fi
 
@@ -952,20 +821,19 @@ build_list_args() {
 
     _sep "Root checks"
     for i in 9 10 11; do _row "$i" "🔐  ${LABELS[$i]}"; done
-    _row 17 "🔐  ${LABELS[17]}"
+    _row 16 "🔐  ${LABELS[16]}"
 
     _sep "Utilities"
-    $HAS_LYNIS   && _row 16 "🔐  ${LABELS[16]}"
+    $HAS_LYNIS   && _row 15 "🔐  ${LABELS[15]}"
     $HAS_TRAUR   && _row 13
-    _row 18 "🔐  ${LABELS[18]}"
+    _row 17 "🔐  ${LABELS[17]}"
     _sep "Settings"
     _row 12
-    _row 15
+    _row 14
     local aa_state="ON"
     $AUR_AUDIT_ENABLE_GUI || aa_state="OFF"
-    _row 20 "${LABELS[20]}  (aur-audit sync: ${aa_state})"
-    $HAS_AURSCAN && _row 14
-    _row 19
+    _row 19 "${LABELS[19]}  (aur-audit sync: ${aa_state})"
+    _row 18
 }
 
 # Main loop

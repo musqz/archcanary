@@ -14,8 +14,6 @@ optdepends=(
   'bpf: bpftool for eBPF rootkit detection'
   'yay: AUR helper with Lua hook support'
   'bash-completion: tab-completion for archcanary/canary flags'
-  'aurscan-manticore-release-git: LLM-based PKGBUILD scanner (pre-install gate), builds from source'
-  'aurscan-manticore-bin-release-git: LLM-based PKGBUILD scanner (pre-install gate), pre-built binary'
 )
 backup=('etc/archcanary/dkms_allowlist.conf'
         'etc/archcanary/systemd_allowlist.conf'

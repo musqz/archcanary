@@ -2,14 +2,13 @@
 --
 -- yay 13.0 Lua hooks for the AUR security stack.
 -- Seeded to ~/.config/yay/init.lua by install.sh if not already present.
--- An offline backstop that runs on every AUR install/upgrade alongside the
--- aurscan editor-gate (config.json editor=aurscan-gate + editmenu=true), which
--- runs the Claude PKGBUILD scan transparently — no `alias yay=syay` needed.
--- See docs/my-setup.md, "yay 13.0 integration".
+-- An offline backstop that runs on every AUR install/upgrade: warns on
+-- recently-modified PKGBUILDs and blocks known malicious patterns before
+-- build. See docs/my-setup.md, "yay 13.0 integration".
 
 -- Options
 yay.opt.diff_menu   = true
-yay.opt.edit_menu   = true    -- REQUIRED: makes yay invoke the editor-gate (aurscan-gate) per PKGBUILD
+yay.opt.edit_menu   = true    -- lets you review each PKGBUILD before it builds
 yay.opt.clean_menu  = true
 yay.opt.clean_after = false
 yay.opt.sort_by     = "votes"
@@ -31,7 +30,7 @@ yay.create_autocmd("UpgradeSelect", {
   end,
 })
 
--- Static pattern check before build (complements aurscan)
+-- Static pattern check before build
 yay.create_autocmd("AURPreInstall", {
   desc = "block known malicious PKGBUILD patterns",
   callback = function(event)
