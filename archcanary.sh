@@ -3259,9 +3259,16 @@ fi
 
 # A scan that skipped root or missing-tool checks is incomplete, not clean —
 # surface it and escalate a would-be CLEAN (0) to WARNINGS (1) so it isn't
-# read as all-clear.
+# read as all-clear. Remember whether this escalation is the ONLY reason
+# for a non-zero code (as opposed to a real check reporting 1 on its own,
+# e.g. Lynis findings or bpftool's non-lsm-stealth warning) so the RESULT
+# banner can say something less alarming than "WARNINGS" — reported live:
+# a scan where every check that ran was clean, and the only "warning" was
+# an optional tool being absent, still printed "RESULT: WARNINGS".
+_ONLY_SKIP_CAUSED_WARNINGS=false
 if [[ ( ${#SKIPPED_ROOT[@]} -gt 0 || ${#SKIPPED_MISSING[@]} -gt 0 ) && $EXIT_CODE -lt 1 ]]; then
     EXIT_CODE=1
+    _ONLY_SKIP_CAUSED_WARNINGS=true
 fi
 
 if $FORMAT_JSON; then
@@ -3273,7 +3280,12 @@ fi
 printf '%s============================================================%s\n' "$_CB" "$_CN"
 case $EXIT_CODE in
     0) printf ' %sRESULT: CLEAN - No indicators found.%s\n'                           "$_CG"       "$_CN" ;;
-    1) printf ' %sRESULT: WARNINGS - Review output above.%s\n'                        "$_CY"       "$_CN" ;;
+    1) if $_ONLY_SKIP_CAUSED_WARNINGS; then
+           printf ' %sRESULT: CLEAN (INCOMPLETE) - No indicators found in the checks that ran; see below.%s\n' "$_CY" "$_CN"
+       else
+           printf ' %sRESULT: WARNINGS - Review output above.%s\n'                        "$_CY"       "$_CN"
+       fi
+       ;;
     2) if _any_confirmed_infected; then
            printf ' %sRESULT: INFECTED - Indicators found! Follow incident response.%s\n' "$_CR$_CB" "$_CN"
        else

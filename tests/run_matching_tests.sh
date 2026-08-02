@@ -1011,6 +1011,66 @@ test_bundled_list_path_usr_bin_layout() {
 }
 
 # ---------------------------------------------------------------------------
+# RESULT banner wording — regression coverage for a real report: a scan
+# where every check that ran was clean, and the only reason for a non-zero
+# exit code was an optional/root-only check being skipped, still printed
+# the same "RESULT: WARNINGS" banner as a genuine finding. Confusingly
+# alarming for what amounts to "nothing wrong, just incomplete."
+# ---------------------------------------------------------------------------
+test_result_banner_skip_only_wording() {
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --no-notify --no-color
+    )
+    local out rc=0
+
+    # Sub-test A: nothing found, but a check was skipped (needs root) —
+    # banner must say CLEAN (INCOMPLETE), not WARNINGS.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --check-lynis 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"RESULT: CLEAN (INCOMPLETE)"* && "$out" != *"RESULT: WARNINGS"* ]]; then
+        pass "result_banner: skip-only exit 1 shows CLEAN (INCOMPLETE), not WARNINGS"
+    else
+        fail "result_banner: expected CLEAN (INCOMPLETE) wording, rc=$rc, out: $out"
+    fi
+
+    # Sub-test B: a real code-1 finding (unknown bpftool LSM loader) must
+    # still say WARNINGS — the softer wording must not mask an actual hit.
+    local tmpdir loader_bin loader_pid fake_bpftool
+    tmpdir=$(mktemp -d)
+    loader_bin="$tmpdir/test-loader"
+    cp "$(command -v sleep)" "$loader_bin"
+    "$loader_bin" 30 &
+    loader_pid=$!
+    sleep 0.3
+    fake_bpftool=$(mktemp)
+    cat > "$fake_bpftool" <<SCRIPT
+#!/bin/sh
+if [ "\$1" = "prog" ]; then
+  cat <<PROGS
+5: lsm  name my_hook  tag 1234567890abcdef  gpl
+        loaded_at 2026-07-03T12:00:00+0200  uid 0
+        xlated 100B  jited 100B  memlock 4096B
+        pids test-loader($loader_pid)
+PROGS
+fi
+SCRIPT
+    chmod +x "$fake_bpftool"
+
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --check-bpftool 2>&1) || rc=$?
+    kill "$loader_pid" 2>/dev/null || true
+    rm -rf "$tmpdir" "$fake_bpftool"
+    if [[ $rc -eq 1 && "$out" == *"RESULT: WARNINGS"* && "$out" != *"CLEAN (INCOMPLETE)"* ]]; then
+        pass "result_banner: real code-1 finding still shows WARNINGS"
+    else
+        fail "result_banner: real finding should still say WARNINGS, rc=$rc, out: $out"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # _allowlist_cli value validation — regression coverage for the bug found
 # 2026-08-02: the value regex required the first char to be alphanumeric
 # and never allowed '/', so a real full-path autostart value (as required by
@@ -1131,6 +1191,9 @@ test_bundled_list_path_usr_bin_layout
 
 $VERBOSE && msg "--- Test 16: allowlist_cli value validation ---"
 test_allowlist_cli
+
+$VERBOSE && msg "--- Test 17: RESULT banner skip-only wording ---"
+test_result_banner_skip_only_wording
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
