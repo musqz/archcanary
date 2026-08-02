@@ -1,5 +1,7 @@
 # Changelog
 
+- Fix: the 45 packages added in v0.1.23 from the latest Arch Linux mailing list update landed in the wrong list. `package_list.txt`'s `--refresh` source is the official Arch Linux HedgeDoc note (external, not maintained here) — any user who runs `--refresh` gets that file fully overwritten from upstream, silently dropping hand-added entries the moment they refresh. `community_reports.txt` is the one whose `--refresh` source points back to this repo, so entries added there actually persist across every user's refresh. Moved all 45 there instead.
+
 ## v0.1.23 (2026-08-02)
 
 - Added: 45 packages to `lists/package_list.txt` from the latest Arch Linux malicious-AUR-package mailing list update (a batch of `-bin` typosquat/impersonation packages, plus `proton-rtsp`). Cross-checked against every existing list first — no exact duplicates; `syncthingtray-qt6-bin` was already tracked via `lists/community_reports.txt` so it was left there rather than duplicated.
