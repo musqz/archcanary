@@ -1,6 +1,16 @@
 # bash completion for archcanary / canary
 # Installed by install.sh / the AUR package into a bash-completion
 # completions/ directory (system or user) where it loads automatically.
+#
+# Also registered for archcanary.sh / ./archcanary.sh: bash's programmable
+# completion looks up a spec by the exact literal first word typed on the
+# command line, so running the script straight from a repo checkout
+# (./archcanary.sh --a<TAB>) matched no spec at all and silently fell back
+# to default filename completion — registering under just "archcanary" and
+# "canary" only ever covered the installed binary. This completion file
+# isn't auto-loaded for a repo checkout (it's only installed into the
+# bash-completion completions/ dir by install.sh/the package) — source it
+# manually first: `source configs/archcanary-completion.bash`.
 
 _archcanary() {
     local cur prev words cword split
@@ -53,4 +63,4 @@ _archcanary() {
     COMPREPLY=($(compgen -W "$flags" -- "$cur"))
     return 0
 }
-complete -F _archcanary archcanary canary
+complete -F _archcanary archcanary canary archcanary.sh ./archcanary.sh
