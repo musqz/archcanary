@@ -1,10 +1,16 @@
 -- ~/.config/yay/init.lua
 --
--- yay 13.0 Lua hooks for the AUR security stack.
+-- yay 13.0 Lua hooks for the AUR security stack (v2).
 -- Seeded to ~/.config/yay/init.lua by install.sh if not already present.
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
+--
+-- Version marker above (the "(vN)" suffix) is checked by `--doctor` to
+-- detect a stale local copy, since install.sh never overwrites an existing
+-- init.lua. Bump it whenever the hooks below change; never touch the text
+-- before "(vN)", since --doctor also prefix-matches on that stable part to
+-- tell "some archcanary version present" from "never installed".
 
 -- Options
 yay.opt.diff_menu   = true

@@ -1125,6 +1125,55 @@ test_doctor_stale_completion() {
 }
 
 # ---------------------------------------------------------------------------
+# --doctor's yay init.lua staleness check — regression coverage for the same
+# drift class as test_doctor_stale_completion, but for
+# ~/.config/yay/init.lua. install.sh never overwrites an existing init.lua
+# (see docs/my-setup.md, "yay 13.0 integration"), so a user who adopted the
+# hooks before a later archcanary release changed them would otherwise never
+# be told their copy is behind.
+# ---------------------------------------------------------------------------
+test_doctor_stale_yay_init() {
+    local fake_home out
+
+    # Sub-test A: current version marker present -> OK, no warning.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config/yay"
+    cp "$REPO_DIR/configs/yay-init.lua" "$fake_home/.config/yay/init.lua"
+    out=$(XDG_CONFIG_HOME="$fake_home/.config" "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
+    if [[ "$out" == *"[ OK ]  yay init.lua"* && "$out" != *"outdated"* ]]; then
+        pass "doctor: current yay init.lua marker -> OK, no false positive"
+    else
+        fail "doctor: expected OK for current yay init.lua, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    # Sub-test B: an older, unversioned marker (pre-(vN) convention) -> WARN
+    # with the exact re-copy fix command.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config/yay"
+    sed 's/ (v2)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
+    out=$(XDG_CONFIG_HOME="$fake_home/.config" "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
+    if [[ "$out" == *"yay init.lua"*"(outdated)"* && "$out" == *"cp "*"configs/yay-init.lua"* ]]; then
+        pass "doctor: outdated yay init.lua marker -> WARN with fix hint"
+    else
+        fail "doctor: expected outdated-yay-init WARN, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    # Sub-test C: no init.lua at all (not a yay user, or never adopted the
+    # hooks) -> optional, not a failure.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config"
+    out=$(XDG_CONFIG_HOME="$fake_home/.config" "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
+    if [[ "$out" == *"[OPT ]  yay init.lua"* ]]; then
+        pass "doctor: missing yay init.lua -> optional, no false positive"
+    else
+        fail "doctor: expected OPT for missing yay init.lua, out: $out"
+    fi
+    rm -rf "$fake_home"
+}
+
+# ---------------------------------------------------------------------------
 # _allowlist_cli value validation — regression coverage for the bug found
 # 2026-08-02: the value regex required the first char to be alphanumeric
 # and never allowed '/', so a real full-path autostart value (as required by
@@ -1251,6 +1300,9 @@ test_result_banner_skip_only_wording
 
 $VERBOSE && msg "--- Test 18: doctor stale bash completion detection ---"
 test_doctor_stale_completion
+
+$VERBOSE && msg "--- Test 19: doctor stale yay init.lua detection ---"
+test_doctor_stale_yay_init
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
