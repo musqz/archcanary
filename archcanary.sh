@@ -2392,11 +2392,20 @@ check_autostart() {
                 exec_val=$(printf '%s' "$exec_val" | sed 's/[[:space:]]*%[a-zA-Z]//g' | awk '{print $1}')
                 [[ -z "$exec_val" ]] && continue
 
+                # $home_dir/bin and $home_dir/.local/bin are standard, common
+                # places for a user's own scripts (e.g. a DE-generated
+                # autostart entry pointing at a personal launcher script like
+                # Conky's) — the user-systemd-service branch below already
+                # carries this same exception; this branch never had it,
+                # producing a false "suspicious" verdict for any legitimate
+                # personal script.
                 local suspicious=false
                 if [[ "$exec_val" == /* ]]; then
                     if [[ "$exec_val" != /usr/* && "$exec_val" != /opt/* && \
                           "$exec_val" != /bin/* && "$exec_val" != /sbin/* && \
-                          "$exec_val" != /usr/local/* ]]; then
+                          "$exec_val" != /usr/local/* && \
+                          "$exec_val" != "$home_dir/bin/"* && \
+                          "$exec_val" != "$home_dir/.local/bin/"* ]]; then
                         suspicious=true
                     fi
                 else
@@ -2405,7 +2414,9 @@ check_autostart() {
                     if [[ -n "$resolved" ]]; then
                         if [[ "$resolved" != /usr/* && "$resolved" != /opt/* && \
                               "$resolved" != /bin/* && "$resolved" != /sbin/* && \
-                              "$resolved" != /usr/local/* ]]; then
+                              "$resolved" != /usr/local/* && \
+                              "$resolved" != "$home_dir/bin/"* && \
+                              "$resolved" != "$home_dir/.local/bin/"* ]]; then
                             suspicious=true
                         fi
                     else
@@ -2492,6 +2503,15 @@ check_autostart() {
         local lineno=0
         while IFS= read -r line || [[ -n "$line" ]]; do
             (( lineno++ )) || true
+            # A fully commented-out line (# possibly after leading
+            # whitespace) can never execute — shell RCs commonly keep old
+            # commands/aliases around as commented-out notes/history, and
+            # that text can legitimately still contain the flagged patterns
+            # (e.g. a comment reminding the user what a past threat looked
+            # like) without posing any actual risk. Mirrors the .desktop
+            # Hidden=true/X-GNOME-Autostart-enabled=false skip above: a line
+            # that can't run isn't a finding regardless of what it contains.
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
             if [[ "$line" =~ $re_pipe_exec ]] || [[ "$line" =~ $re_base64 ]] || \
                [[ "$line" =~ $re_eval_net ]]; then
                 echo "  WARNING: suspicious pattern in $rc:$lineno"

