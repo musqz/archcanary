@@ -203,6 +203,88 @@ _allowlist_cli() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# --extra-lists-{list,add,remove} — manage ~/.config/archcanary/extra_lists.conf
+# (one file path or https:// URL per line, auto-loaded on every scan — see
+# _load_extra below). User-owned, no root/pkexec involved, unlike the
+# allowlists above. EXTRA_LISTS_CONF is the same env var the scan-time loader
+# further down honors, so both agree on the same file.
+# ---------------------------------------------------------------------------
+_extra_lists_path() {
+    echo "${EXTRA_LISTS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/extra_lists.conf}"
+}
+
+# Mirrors the scan-time parsing in _load_extra: strip inline comments, then
+# strip ALL whitespace (not just leading/trailing — matches archcanary's own
+# ${_entry//[[:space:]]/} behavior) so list output matches what a scan
+# actually loads, not raw file lines.
+_extra_lists_values() {
+    awk '{
+        line = $0
+        sub(/#.*/, "", line)
+        gsub(/[ \t]+/, "", line)
+        if (line != "") print line
+    }' "$1"
+}
+
+_extra_lists_cli() {
+    local action="$1" value="${2:-}" path
+    path="$(_extra_lists_path)"
+
+    if [[ "$action" == list ]]; then
+        [[ -f "$path" ]] && _extra_lists_values "$path"
+        exit 0
+    fi
+
+    if [[ -z "$value" || "$value" == *$'\n'* ]]; then
+        echo "Error: invalid extra-list value" >&2
+        exit 1
+    fi
+
+    mkdir -p "$(dirname "$path")"
+    if [[ ! -f "$path" ]]; then
+        cat > "$path" <<'CONF'
+# archcanary extra package lists
+# One entry per line: a file path or an https:// raw URL.
+# Lines starting with # are ignored.
+# URL entries are re-fetched when you run --refresh.
+#
+# Examples:
+#   /home/user/my_custom_list.txt
+#   https://raw.githubusercontent.com/lenucksi/archcanary/main/package_list.txt
+CONF
+    fi
+
+    if [[ "$action" == add ]]; then
+        if _extra_lists_values "$path" | grep -qxF "$value"; then
+            echo "already present: $value"
+            exit 0
+        fi
+        printf '%s\n' "$value" >> "$path"
+        echo "added: $value"
+        exit 0
+    else
+        if ! _extra_lists_values "$path" | grep -qxF "$value"; then
+            echo "not found: $value" >&2
+            exit 1
+        fi
+        local tmp
+        tmp="$(mktemp "${path}.XXXXXX")"
+        CLEANUP_FILES+=("$tmp")
+        awk -v val="$value" '{
+            line = $0
+            stripped = line
+            sub(/#.*/, "", stripped)
+            gsub(/[ \t]+/, "", stripped)
+            if (stripped == val) next
+            print line
+        }' "$path" > "$tmp"
+        mv "$tmp" "$path"
+        echo "removed: $value"
+        exit 0
+    fi
+}
+
 for arg in "$@"; do
     case "$arg" in
         --check-systemd) CHECK_SYSTEMD=true ;;
@@ -243,6 +325,9 @@ for arg in "$@"; do
         --allowlist-list=*)      _allowlist_cli list "${arg#*=}" ;;
         --allowlist-add=*)       _allowlist_cli add "${arg#*=}" ;;
         --allowlist-remove=*)    _allowlist_cli remove "${arg#*=}" ;;
+        --extra-lists-list)      _extra_lists_cli list ;;
+        --extra-lists-add=*)     _extra_lists_cli add "${arg#*=}" ;;
+        --extra-lists-remove=*)  _extra_lists_cli remove "${arg#*=}" ;;
         --version|-V)
             echo "Archcanary v${SCRIPT_VERSION}"
             exit 0
@@ -295,6 +380,9 @@ for arg in "$@"; do
             echo "                                     NAME: dkms, systemd, bpftool, autostart"
             echo "  --allowlist-add=NAME:VALUE        Add VALUE to an allowlist and exit (needs root)"
             echo "  --allowlist-remove=NAME:VALUE     Remove VALUE from an allowlist and exit (needs root)"
+            echo "  --extra-lists-list                List ~/.config/archcanary/extra_lists.conf entries and exit"
+            echo "  --extra-lists-add=VALUE           Add a path/URL to extra_lists.conf and exit"
+            echo "  --extra-lists-remove=VALUE        Remove a path/URL from extra_lists.conf and exit"
             echo "  --version, -V             Show version and exit"
             echo "  --help, -h                Show this help"
             exit 0
