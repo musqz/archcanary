@@ -903,12 +903,18 @@ run_doctor() {
     if [[ -n ${want[external]:-} ]]; then
         printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
         local yay_init_lua="${XDG_CONFIG_HOME:-$real_home/.config}/yay/init.lua"
-        # Marker below is coupled to archcanary's own configs/yay-init.lua
-        # header comment (not a public API, just this project's own
-        # convention) — if that header ever changes, update this too. This
-        # check fails silently (reports a working hook as missing) rather
-        # than erroring out.
-        local _ARCHCANARY_LUA_MARKER='yay 13.0 Lua hooks for the AUR security stack'
+        # Markers are coupled to archcanary's own configs/yay-init.lua header
+        # comment (not a public API, just this project's own convention) — if
+        # that header ever changes, bump these too. STABLE prefix-matches any
+        # archcanary-authored version; CURRENT matches only the exact latest
+        # one, so a present-but-outdated copy (install.sh never overwrites an
+        # existing init.lua — see docs/my-setup.md, "yay 13.0 integration")
+        # is distinguishable from "never installed". This check fails
+        # silently (reports a working hook as missing) rather than erroring
+        # out.
+        local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v2)"
+        local _lua_label="yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
         if command -v traur >/dev/null 2>&1; then
             _opt_item "traur pacman hook (auto-runs on every install)" \
@@ -917,7 +923,15 @@ run_doctor() {
                 "path: /usr/share/libalpm/hooks/traur.hook"
         fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
-        _opt_item "yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)" "$(_marker "$_ARCHCANARY_LUA_MARKER" "$yay_init_lua")" "" "path: $yay_init_lua"
+        if [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_CURRENT" "$yay_init_lua")" -eq 0 ]]; then
+            _ok "$_lua_label" "path: $yay_init_lua"
+        elif [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_STABLE" "$yay_init_lua")" -eq 0 ]]; then
+            _warn "$_lua_label (outdated)" \
+                "cp $luasrc $yay_init_lua   # merge in any of your own customizations first" \
+                "$yay_init_lua's archcanary-managed hooks are from an older version"
+        else
+            _opt "$_lua_label" "" "path: $yay_init_lua"
+        fi
         printf '\n'
     fi
 
