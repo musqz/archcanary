@@ -97,6 +97,13 @@ All threads on https://lists.archlinux.org/archives/list/aur-general@lists.archl
 - **Content:** Reports additional suspicious packages (android-support-repository, monochrome, blinkenlib, perl-set-object) all doing npm-based payloads.
 - **Relevant for:** Expanded package list.
 
+#### 3.1.6 André Herbst — git-grep Evidence for the Full Package List
+- **URL:** https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/ALAZHW5PJJUJTT5ICIHDXB6AKSICZ6MA/
+- **Date:** 2026-06-11
+- **Author:** André Herbst (same author as the original ~408 package list referenced in 3.1.1)
+- **Content:** Reply to Jonathan Grotelüschen's request to send found packages back to the thread. Herbst cloned the read-only GitHub mirror of the entire AUR (`archlinux/aur.git`) and ran `git grep 'atomic-lockfile'` across every remote ref, then posted the full per-package result inline — each line in the form `<pkgname>:<pkgname>-deps.install:  npm install atomic-lockfile <decoy packages>` (or a `.hook`/`install.sh` variant of the same pattern). This is the actual forensic evidence behind the aggregate package list, not just a name on a crowd-sourced roll call — it mechanically confirms, per package, that the malicious install line was genuinely present in that package's AUR git history at scan time.
+- **Relevant for:** Per-package verification, not just aggregate scope. Confirms `vidcutter` specifically: `vidcutter:vidcutter-deps.install:  npm install atomic-lockfile uuid commander ansi-colors`. Also explains why `package_list.txt` legitimately holds far more than the "400+" cited in the official announcement (1.1) — this single message's git-grep dump alone spans well past 408 names.
+
 ### 3.2 Monitoring & Investigation
 
 #### 3.2.1 Likely Malicious Account: ivonahruskova
