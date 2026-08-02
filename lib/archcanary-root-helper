@@ -46,7 +46,10 @@ if [[ $# -eq 1 ]]; then
                     exit 1
                     ;;
             esac
-            if [[ ! "$_value" =~ ^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$ ]]; then
+            # Kept identical to archcanary.sh's _allowlist_cli validation — see
+            # its comment for why '/' is allowed (autostart full-path values)
+            # and ':' is not (would corrupt the IFS=: multi-value join).
+            if [[ ! "$_value" =~ ^[A-Za-z0-9/][A-Za-z0-9._@+/-]{0,127}$ ]]; then
                 echo "Error: invalid allowlist value '$_value'" >&2
                 exit 1
             fi

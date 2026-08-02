@@ -829,6 +829,73 @@ test_bundled_list_path_usr_bin_layout() {
 }
 
 # ---------------------------------------------------------------------------
+# _allowlist_cli value validation — regression coverage for the bug found
+# 2026-08-02: the value regex required the first char to be alphanumeric
+# and never allowed '/', so a real full-path autostart value (as required by
+# check_autostart's unowned-ExecStart-binary allowlisting, added earlier the
+# same day) was rejected outright with "invalid allowlist value" before ever
+# reaching the root check. Neither the CLI verbs nor lib/archcanary-root-helper
+# (which duplicates the same regex as the actual polkit privilege boundary)
+# had any test coverage before this.
+# ---------------------------------------------------------------------------
+test_allowlist_cli() {
+    local out rc
+
+    # A: full-path autostart value must pass validation — run as the current
+    # (non-root) user and assert the failure is the ROOT check, not
+    # "invalid allowlist value". That proves validation let it through.
+    local auto_file
+    auto_file=$(mktemp)
+    rc=0
+    out=$(AUTOSTART_ALLOWLIST_FILE="$auto_file" \
+        "$REPO_DIR/archcanary.sh" --allowlist-add=autostart:/usr/bin/mabox-logo 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"requires root"* && "$out" != *"invalid allowlist value"* ]]; then
+        pass "allowlist_cli: full-path autostart value passes validation"
+    else
+        fail "allowlist_cli: full-path value wrongly rejected, rc=$rc, out: $out"
+    fi
+
+    # B: a bare name (the pre-existing dkms/systemd/bpftool case) must still
+    # pass validation too — regression guard against the widened regex
+    # accidentally breaking the original bare-name path.
+    local dkms_file
+    dkms_file=$(mktemp)
+    rc=0
+    out=$(DKMS_ALLOWLIST_FILE="$dkms_file" \
+        "$REPO_DIR/archcanary.sh" --allowlist-add=dkms:v4l2loopback 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"requires root"* && "$out" != *"invalid allowlist value"* ]]; then
+        pass "allowlist_cli: bare-name dkms value still passes validation"
+    else
+        fail "allowlist_cli: bare-name value wrongly rejected, rc=$rc, out: $out"
+    fi
+    rm -f "$dkms_file"
+
+    # C: a value containing a space must still be rejected — the widened
+    # regex must not have accidentally loosened validation beyond '/'.
+    rc=0
+    out=$(AUTOSTART_ALLOWLIST_FILE="$auto_file" \
+        "$REPO_DIR/archcanary.sh" --allowlist-add="autostart:has space" 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"invalid allowlist value"* ]]; then
+        pass "allowlist_cli: value with a space still rejected"
+    else
+        fail "allowlist_cli: value with a space should be rejected, rc=$rc, out: $out"
+    fi
+
+    # D: a value containing ':' must still be rejected (would get mis-split
+    # by the IFS=: multi-value join when the file is later loaded).
+    rc=0
+    out=$(AUTOSTART_ALLOWLIST_FILE="$auto_file" \
+        "$REPO_DIR/archcanary.sh" --allowlist-add="autostart:has:colon" 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"invalid allowlist value"* ]]; then
+        pass "allowlist_cli: value with a colon still rejected"
+    else
+        fail "allowlist_cli: value with a colon should be rejected, rc=$rc, out: $out"
+    fi
+
+    rm -f "$auto_file"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -879,6 +946,9 @@ test_check_bpftool_allowlist
 
 $VERBOSE && msg "--- Test 15: bundled_list_path /usr/bin layout ---"
 test_bundled_list_path_usr_bin_layout
+
+$VERBOSE && msg "--- Test 16: allowlist_cli value validation ---"
+test_allowlist_cli
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

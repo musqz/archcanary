@@ -162,7 +162,14 @@ _allowlist_cli() {
         _allowlist_values "$path"
         exit 0
     fi
-    if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$ ]]; then
+    # Allows an absolute path (needed for autostart's unowned-ExecStart-binary
+    # finding, which allowlists by exact full path — see check_autostart) as
+    # well as a bare name (module/unit/binary basename, the other 3 lists and
+    # autostart's .desktop-Exec= finding). Still excludes whitespace, '#'
+    # (would silently become a comment), and ':' (the loaded env var joins
+    # multiple file entries with IFS=:, so a literal ':' in a value would
+    # get mis-split into two allowlist entries).
+    if [[ ! "$value" =~ ^[A-Za-z0-9/][A-Za-z0-9._@+/-]{0,127}$ ]]; then
         echo "Error: invalid allowlist value '$value'" >&2
         exit 1
     fi
