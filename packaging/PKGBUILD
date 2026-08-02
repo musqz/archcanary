@@ -1,7 +1,7 @@
 # Maintainer: musqz <gummy-fang-deputy@duck.com>
 pkgname=archcanary
-pkgver=0.1.21
-pkgrel=2
+pkgver=0.1.22
+pkgrel=1
 pkgdesc="Layered security detection stack for Arch Linux — malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering"
 arch=('any')
 url="https://github.com/musqz/archcanary"
@@ -21,7 +21,7 @@ backup=('etc/archcanary/dkms_allowlist.conf'
         'etc/archcanary/autostart_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/musqz/$pkgname/archive/v$pkgver.tar.gz")
-sha256sums=('1e3c0bf5e2443c1b726dc4f365e9df827932f81345b2504d29180009fabb64cf')
+sha256sums=('SKIP')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
@@ -124,16 +124,28 @@ EOF
 EOF
 
   cat > "$pkgdir/etc/archcanary/autostart_allowlist.conf" << 'EOF'
-# Autostart Exec= names to skip during the XDG autostart check
-# (--check-autostart), system-wide allowlist. One Exec= name/basename per
-# line. Everything after # is a comment.
-# Add entries that are known-good but can't be resolved via $PATH or a
-# standard system prefix — e.g. a package-private helper binary the
-# non-PATH fallback (search of /usr/lib, /usr/libexec) still can't find, or
-# an AppImage/Flatpak export. Matched against the bare Exec= value as
-# written in the .desktop file (not a resolved path).
+# Names to skip during the XDG autostart check (--check-autostart),
+# system-wide allowlist. One entry per line. Everything after # is a
+# comment. Covers two separate findings within the same check, each with
+# its own matching rule:
 #
-# Example:
-# zeitgeist-datahub  # desktop activity logging, ships in a non-PATH libdir
+# 1. .desktop Exec= names that are known-good but can't be resolved via
+#    $PATH or a standard system prefix — e.g. a package-private helper
+#    binary the non-PATH fallback (search of /usr/lib, /usr/libexec) still
+#    can't find, or an AppImage/Flatpak export. Matched against the bare
+#    Exec= value exactly as written in the .desktop file (not a resolved
+#    path) — usually just a command name.
+#
+# 2. User systemd service ExecStart= binaries unowned by pacman. Matched
+#    against the ExecStart binary's exact, full path (NOT its basename —
+#    a basename match would let an unrelated binary sharing that name
+#    anywhere on disk slip through undetected). Useful for a package that
+#    ships its user unit via /etc/skel (copied into ~/.config/systemd/user/
+#    at account creation, so pacman never tracks that specific copy even
+#    though the binary itself is a normal pacman-owned file).
+#
+# Examples:
+# zeitgeist-datahub               # desktop activity logging, ships in a non-PATH libdir
+# /usr/bin/eos-update-notifier    # EndeavourOS update notifier, user unit ships via /etc/skel
 EOF
 }
