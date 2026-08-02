@@ -323,24 +323,28 @@ EOF
     if [[ ! -f /etc/archcanary/autostart_allowlist.conf ]]; then
         sudo tee /etc/archcanary/autostart_allowlist.conf >/dev/null << 'EOF'
 # Names to skip during the XDG autostart check (--check-autostart),
-# system-wide allowlist. One name/basename per line. Everything after # is
-# a comment. Covers two separate findings within the same check:
+# system-wide allowlist. One entry per line. Everything after # is a
+# comment. Covers two separate findings within the same check, each with
+# its own matching rule:
 #
 # 1. .desktop Exec= names that are known-good but can't be resolved via
 #    $PATH or a standard system prefix — e.g. a package-private helper
 #    binary the non-PATH fallback (search of /usr/lib, /usr/libexec) still
 #    can't find, or an AppImage/Flatpak export. Matched against the bare
-#    Exec= value as written in the .desktop file (not a resolved path).
+#    Exec= value exactly as written in the .desktop file (not a resolved
+#    path) — usually just a command name.
 #
 # 2. User systemd service ExecStart= binaries unowned by pacman. Matched
-#    against the ExecStart binary's basename. Useful for a package that
+#    against the ExecStart binary's exact, full path (NOT its basename —
+#    a basename match would let an unrelated binary sharing that name
+#    anywhere on disk slip through undetected). Useful for a package that
 #    ships its user unit via /etc/skel (copied into ~/.config/systemd/user/
 #    at account creation, so pacman never tracks that specific copy even
 #    though the binary itself is a normal pacman-owned file).
 #
 # Examples:
-# zeitgeist-datahub       # desktop activity logging, ships in a non-PATH libdir
-# eos-update-notifier     # EndeavourOS update notifier, user unit ships via /etc/skel
+# zeitgeist-datahub               # desktop activity logging, ships in a non-PATH libdir
+# /usr/bin/eos-update-notifier    # EndeavourOS update notifier, user unit ships via /etc/skel
 EOF
         sudo chmod 644 /etc/archcanary/autostart_allowlist.conf
     fi
