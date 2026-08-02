@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: `check_autostart`'s `.desktop` `Exec=` parsing didn't strip surrounding literal double quotes (allowed by the Desktop Entry Spec, and used by some installers — e.g. pCloud's — even when the path has no spaces to quote). Left quoted, the value was misclassified as an unresolvable bare name instead of an absolute path, and worse, was un-allowlistable: a real shell strips the quotes when the user types the exact suggested `--allowlist-add` command, so the stored (unquoted) value could never match the raw, still-quoted one compared at scan time. Reported live — the user could never get the suggested allowlist command to actually work. Quotes are now stripped before classification, display, and allowlist matching.
+
 ## v0.1.22 (2026-08-02)
 
 - Fix: `packaging/PKGBUILD`'s embedded `autostart_allowlist.conf` template had drifted from `install.sh`'s — a pure package install (`makepkg -si`/AUR helper) seeded the old template (missing the full-path unowned-ExecStart-binary documentation and example added below) instead of the current one. Same recurring drift class as the `configs/audit-rules.conf` fix earlier this file — synced.

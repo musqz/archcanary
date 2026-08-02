@@ -727,6 +727,47 @@ DESK
         fail "check_autostart: Flatpak libdir-fallback regression, rc=$rc, out: $out"
     fi
     rm -rf "$tmpdir11"
+
+    # Sub-test S: a quoted Exec= value (e.g. pCloud's installer wraps its
+    # launcher path in literal double quotes even with no spaces to quote)
+    # must have the quotes stripped before classification/display/allowlist
+    # matching — otherwise it's misclassified as an unresolvable bare name
+    # (starts with '"' not '/'), and the value is un-allowlistable: a real
+    # shell strips the quotes when the user types the suggested
+    # --allowlist-add command, so the stored value could never match the
+    # raw, still-quoted one used for comparison. Reported live.
+    local tmpdir12
+    tmpdir12=$(mktemp -d)
+    mkdir -p "$tmpdir12/.config/autostart"
+    cat > "$tmpdir12/.config/autostart/pcloud.desktop" << DESK
+[Desktop Entry]
+Type=Application
+Name=pCloud
+Exec="$tmpdir12/pcloud-launcher.sh"
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir12" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --no-color 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"Exec=$tmpdir12/pcloud-launcher.sh (outside"* && \
+          "$out" == *"--allowlist-add=autostart:$tmpdir12/pcloud-launcher.sh"* ]]; then
+        pass "check_autostart: quoted Exec= value has quotes stripped in WARNING/hint text"
+    else
+        fail "check_autostart: quoted Exec= should show unquoted value, rc=$rc, out: $out"
+    fi
+
+    local allow_file5
+    allow_file5=$(mktemp)
+    printf '%s\n' "$tmpdir12/pcloud-launcher.sh" > "$allow_file5"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir12" AUTOSTART_ALLOWLIST_FILE="$allow_file5" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: quoted Exec= value allowlisted with unquoted path matches"
+    else
+        fail "check_autostart: allowlisting the unquoted path should match quoted Exec=, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir12"
+    rm -f "$allow_file5"
 }
 
 # ---------------------------------------------------------------------------

@@ -2373,6 +2373,19 @@ check_autostart() {
                 local exec_val="${line#Exec=}"
                 exec_val=$(printf '%s' "$exec_val" | sed 's/[[:space:]]*%[a-zA-Z]//g' | awk '{print $1}')
                 [[ -z "$exec_val" ]] && continue
+                # Desktop Entry Spec allows (and some installers, e.g. pCloud's,
+                # use) a quoted Exec= value even with no spaces to quote — awk
+                # has no concept of quoting, so a wrapped "/path/to/bin" comes
+                # out with the literal quote characters still attached. Left
+                # alone, that (a) misclassifies an absolute path as an
+                # unresolvable bare name (starts with '"', not '/') and (b)
+                # makes the value un-allowlistable: a normal shell strips the
+                # quotes when the user types the suggested --allowlist-add
+                # command, so the stored value could never match this raw one.
+                if [[ "$exec_val" == \"*\" && ${#exec_val} -gt 1 ]]; then
+                    exec_val="${exec_val#\"}"
+                    exec_val="${exec_val%\"}"
+                fi
 
                 # $home_dir/bin and $home_dir/.local/bin are standard, common
                 # places for a user's own scripts (e.g. a DE-generated
