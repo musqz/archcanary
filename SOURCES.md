@@ -293,3 +293,45 @@ All threads on https://lists.archlinux.org/archives/list/aur-general@lists.archl
 - **Status:** Ongoing, updated as reports come in.
 - **Trust basis:** Same caveat as the aur-audit feed above — this is best-effort curation from unverified community reports, not independently corroborated incident data like sections 1-8. A package landing here means "reported as suspicious by someone in the community", not "confirmed malicious with a public writeup". `--check-list-overlap` deliberately doesn't require entries here to be deduplicated against the other official lists before being added — overlap is harmless once a package is in an official list.
 - **Relevant for:** Catching AUR malware between documented campaigns, before it's significant enough for its own writeup.
+
+---
+
+## 11. Second Wave — July 2026 Package Adoption Attack
+
+A separate, later campaign from the June 2026 atomic-lockfile/js-digest attack (sections 1-8 above) — same attacker infrastructure signature, different vector (malicious package *adoption* + follow-up commits, rather than a fresh supply-chain payload).
+
+### 11.1 Robin Candau — AUR Package Adoption Disabled
+- **URL:** https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/message/DRDEU3JUSC72CB265XHXPFA3DFSLXPBP/
+- **Date:** 2026-07-30, 16:22 UTC
+- **Author:** Robin Candau (Antiz), Arch Linux DevOps team
+- **Content:** Announces AUR package adoption disabled "due to the current influx of malicious package adoptions and follow-up commits." No package names given — just the containment measure and a request for the community to report suspicious adoptions/commits.
+- **Relevant for:** Official response timeline, containment measure.
+
+### 11.2 IFIN — New AUR Attack Prompts Adoption Lock
+- **URL:** https://discourse.ifin.network/t/new-aur-attack-prompts-adoption-lock/698
+- **Date:** 2026-07-30, updated 2026-07-31
+- **Author:** mttaggart (IFIN) — same author as section 5.1
+- **Content:** First confirmed package: `openconnect-sso` (dropper in the `build()` phase, hit from ~2026-07-29; offending commit since reverted, binary reportedly still reachable as a deeplink). Same Tor-based C2 exfil signature as the June campaign — SHA256 hashes for both payload stages, a `.onion` C2 address, a systemd-service-name persistence pattern, and a macOS LaunchDaemon pattern (`.com.apple.telemetry.<random>`). Explicitly not a closed incident as of the last update: "new malicious commits were still being discovered." Recommends blocking Tor egress and cross-checking installed packages against the aur-audit.wtako.net feed (section 9).
+- **Relevant for:** First named package, technical IOCs, explicit confirmation the scope isn't finalized.
+
+### 11.3 Tracking Issue — Upstream Project
+- **URL:** https://github.com/lenucksi/aur-malware-check/issues/52
+- **Date:** Opened 2026-07-30
+- **Content:** "Malware in openconnect-sso hit from 29th July 2026" — tracking issue on the original project archcanary forked from, linking the two aur-general threads below and the offending AUR commit directly.
+- **Relevant for:** Cross-reference to the original malware-check project's own tracking.
+
+### 11.4 Related aur-general Threads
+- https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/PR77K3SB6RFSTYP3KYOJOOX56SMXGBWO/
+- https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/thread/PMATLG676MPBWUJPZZ75WJ4H3BKE7TVL/
+- **Relevant for:** Original community reports that led to 11.2's writeup.
+
+### 11.5 FOSS Force — Public Reporting
+- **URL:** https://fossforce.com/2026/07/new-attack-puts-archs-aur-into-lockdown-again/
+- **Date:** 2026-08-01
+- **Author:** Christine Hall
+- **Content:** Independent public coverage, ties together 11.1/11.2 plus LWN.net's report (Joe Brockmeier) and the June incident's containment timeline (seeded ~June 12, contained June 16 via registration blocking, reopened July 13 with "minor, apparently ineffective" restrictions before this second wave). Also gives a higher total for the June campaign than section 1.1's initial announcement: "more than 1,500 infected packages" by the time it was fully contained — the count grew past the day-one "400+" figure as cleanup continued.
+- **Relevant for:** Independent corroboration, revised June-campaign total, public timeline.
+
+### 11.6 `openconnect-sso` in archcanary
+- **Added to:** `lists/community_reports.txt` (2026-08-02), annotated `[community report]` on hit.
+- **Why here and not a dedicated campaign list:** as of 11.2's last update the full scope of this wave isn't known yet — a single confirmed package fits the Community Reports list's stated purpose (11 above) better than a new campaign-specific list, which would imply a settled, bounded scope this wave doesn't have yet. Revisit if/when this wave gets its own confirmed package count and closure, the way the June campaign did.
