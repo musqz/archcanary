@@ -2372,9 +2372,15 @@ check_autostart() {
     # their autostart binary in a package-private dir like /usr/lib/<pkg>/ or
     # /usr/libexec/ rather than on $PATH — command -v alone can't see those,
     # producing a false "suspicious" verdict for a perfectly legitimate,
-    # pacman-owned binary. Override with AUTOSTART_LIBDIRS for testing.
+    # pacman-owned binary. Flatpak's own export dirs are included for the
+    # same reason (a Flatpak app not on $PATH in this scan's environment) —
+    # they're standardized, distro-integrated locations (/etc/profile.d/
+    # flatpak-bindir.sh adds them to PATH on any Flatpak-enabled system),
+    # not a per-app quirk, so trusting them outright is the same call already
+    # made for /usr/lib and /usr/libexec above. Override with AUTOSTART_LIBDIRS
+    # for testing.
     local -a _autostart_libdirs
-    IFS=: read -ra _autostart_libdirs <<< "${AUTOSTART_LIBDIRS:-/usr/lib:/usr/libexec}"
+    IFS=: read -ra _autostart_libdirs <<< "${AUTOSTART_LIBDIRS:-/usr/lib:/usr/libexec:/var/lib/flatpak/exports/bin:$home_dir/.local/share/flatpak/exports/bin}"
 
     local desktop_dir="$home_dir/.config/autostart"
     if [[ -d "$desktop_dir" ]]; then
@@ -2400,14 +2406,20 @@ check_autostart() {
                 # Conky's) — the user-systemd-service branch below already
                 # carries this same exception; this branch never had it,
                 # producing a false "suspicious" verdict for any legitimate
-                # personal script.
+                # personal script. Flatpak's export dirs get the same
+                # treatment — /etc/profile.d/flatpak-bindir.sh puts them on
+                # $PATH on any Flatpak-enabled system, so a resolved Flatpak
+                # app (command -v succeeds directly) needs to be recognized
+                # here too, not just via the non-PATH libdir search below.
                 local suspicious=false
                 if [[ "$exec_val" == /* ]]; then
                     if [[ "$exec_val" != /usr/* && "$exec_val" != /opt/* && \
                           "$exec_val" != /bin/* && "$exec_val" != /sbin/* && \
                           "$exec_val" != /usr/local/* && \
                           "$exec_val" != "$home_dir/bin/"* && \
-                          "$exec_val" != "$home_dir/.local/bin/"* ]]; then
+                          "$exec_val" != "$home_dir/.local/bin/"* && \
+                          "$exec_val" != /var/lib/flatpak/exports/bin/* && \
+                          "$exec_val" != "$home_dir/.local/share/flatpak/exports/bin/"* ]]; then
                         suspicious=true
                     fi
                 else
@@ -2417,6 +2429,8 @@ check_autostart() {
                         if [[ "$resolved" != /usr/* && "$resolved" != /opt/* && \
                               "$resolved" != /bin/* && "$resolved" != /sbin/* && \
                               "$resolved" != /usr/local/* && \
+                              "$resolved" != /var/lib/flatpak/exports/bin/* && \
+                              "$resolved" != "$home_dir/.local/share/flatpak/exports/bin/"* && \
                               "$resolved" != "$home_dir/bin/"* && \
                               "$resolved" != "$home_dir/.local/bin/"* ]]; then
                             suspicious=true
@@ -2435,8 +2449,13 @@ check_autostart() {
                         exec_glob_safe="${exec_glob_safe//\?/\\?}"
                         exec_glob_safe="${exec_glob_safe//\[/\\[}"
                         exec_glob_safe="${exec_glob_safe//\]/\\]}"
+                        # -L: Flatpak's exports/bin entries are symlinks (to
+                        # .../export/bin/<app-id> inside the app's own
+                        # sandboxed install dir) — plain -type f never matches
+                        # a symlink, so without -L this search would always
+                        # miss a Flatpak export regardless of AUTOSTART_LIBDIRS.
                         local libhit
-                        libhit=$(find "${_autostart_libdirs[@]}" -mindepth 1 -maxdepth 3 \
+                        libhit=$(find -L "${_autostart_libdirs[@]}" -mindepth 1 -maxdepth 3 \
                             -type f -name "$exec_glob_safe" -perm -u+x 2>/dev/null | head -1)
                         [[ -z "$libhit" ]] && suspicious=true
                     fi

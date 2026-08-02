@@ -690,6 +690,43 @@ DESK
         fail "check_autostart: expected REVIEW wording + allowlist hint, rc=$rc, out: $out"
     fi
     rm -rf "$tmpdir10"
+
+    # Sub-test Q: a Flatpak app resolved via $PATH (flatpak-bindir.sh puts
+    # Flatpak's export dir on PATH on any Flatpak-enabled system) must NOT
+    # be flagged — regression guard for a real false positive (Gearlever,
+    # MEGAsync, Eloquent all reported live as "suspicious").
+    local tmpdir11
+    tmpdir11=$(mktemp -d)
+    mkdir -p "$tmpdir11/.config/autostart" "$tmpdir11/.local/share/flatpak/exports/bin"
+    cat > "$tmpdir11/.config/autostart/flatpakapp.desktop" << 'DESK'
+[Desktop Entry]
+Type=Application
+Name=FlatpakApp
+Exec=re.sonny.Eloquent
+DESK
+    ln -s /bin/true "$tmpdir11/.local/share/flatpak/exports/bin/re.sonny.Eloquent"
+    rc=0
+    out=$(PATH="$tmpdir11/.local/share/flatpak/exports/bin:$PATH" AUTOSTART_HOME="$tmpdir11" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: Flatpak app resolved via \$PATH not flagged"
+    else
+        fail "check_autostart: Flatpak-on-PATH false positive regression, rc=$rc, out: $out"
+    fi
+
+    # Sub-test R: same Flatpak app, but NOT on $PATH (e.g. a minimal/cron-like
+    # scan environment) — must still resolve via the non-PATH libdir search
+    # now that Flatpak's export dirs are searched by default.
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir11" \
+        AUTOSTART_LIBDIRS="/usr/lib:/usr/libexec:/var/lib/flatpak/exports/bin:$tmpdir11/.local/share/flatpak/exports/bin" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: Flatpak app resolved via non-PATH libdir search not flagged"
+    else
+        fail "check_autostart: Flatpak libdir-fallback regression, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir11"
 }
 
 # ---------------------------------------------------------------------------
