@@ -549,6 +549,48 @@ DESK
         fail "check_autostart: X-GNOME-Autostart-enabled=false should be skipped, rc=$rc, out: $out"
     fi
     rm -rf "$tmpdir6"
+
+    # Sub-test K: user systemd service with an unowned ExecStart binary, not
+    # allowlisted → WARNING (regression guard — this branch had zero test
+    # coverage before the allowlist fix below was added).
+    local tmpdir7
+    tmpdir7=$(mktemp -d)
+    mkdir -p "$tmpdir7/.config/systemd/user"
+    cat > "$tmpdir7/.config/systemd/user/eos-update-notifier.service" << 'SVC'
+[Unit]
+Description=fake unowned service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fake-unowned-pkg/eos-update-notifier
+SVC
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: user service with unowned ExecStart binary"* ]]; then
+        pass "check_autostart: user service with unowned ExecStart, not allowlisted → WARNING"
+    else
+        fail "check_autostart: user service unowned-ExecStart regression, rc=$rc, out: $out"
+    fi
+
+    # Sub-test L: same unowned ExecStart binary, but its basename is
+    # allowlisted → INFO only, exit 0 (the eos-update-notifier case: the
+    # package ships its user unit via /etc/skel, so the copy materialized
+    # into ~/.config/systemd/user/ at account creation is never itself
+    # pacman-tracked even though the binary path normally would be).
+    local allow_file3
+    allow_file3=$(mktemp)
+    printf 'eos-update-notifier\n' > "$allow_file3"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7" AUTOSTART_ALLOWLIST_FILE="$allow_file3" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: user service allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: user service unowned ExecStart, allowlisted → INFO only, exit 0"
+    else
+        fail "check_autostart: allowlisted user service ExecStart → expected INFO+exit0, got rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7"
+    rm -f "$allow_file3"
 }
 
 # ---------------------------------------------------------------------------
