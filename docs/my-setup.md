@@ -12,8 +12,7 @@ Full overview of how this tool is deployed and how the pieces connect.
 | `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
 | `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window. `--no-gui` bypasses yad and runs a full scan in the terminal with the structured summary. |
 | `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes). Runs **automatically as a pacman PreTransaction hook** (`/usr/share/libalpm/hooks/traur.hook` → `traur-hook`, `AbortOnFail`) on every install/upgrade — including repo packages — and is also runnable by hand (`traur scan <pkg>`) |
-| `aurscan` | [AUR: aurscan-manticore-release-git](https://aur.archlinux.org/packages/aurscan-manticore-release-git) or [aurscan-manticore-bin-release-git](https://aur.archlinux.org/packages/aurscan-manticore-bin-release-git) ([manticore-projects/aurscan](https://github.com/manticore-projects/aurscan)) | LLM-based PKGBUILD scanner using Claude. Wired into yay as its **editor-gate** (`config.json` `editor=aurscan-gate` + `editmenu=true`): yay invokes it on each AUR PKGBUILD before building, so every `yay` build (and AUR dependency) is scanned transparently — a non-CLEAN verdict exits non-zero and aborts the build. Still runnable standalone (`aurscan <pkg>`). Requires the [`claude` CLI](https://code.claude.com/docs/en/setup) (`@anthropic-ai/claude-code`) as its LLM backend |
-| `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an independent offline layer that also runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
+| `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an offline layer that runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
 | `yad` | official repos | GTK dialog toolkit used by `archcanary-gui` |
 | `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
 | `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
@@ -74,13 +73,8 @@ traur — runs three ways:
           the GUI has no package name input
 
 yay install/upgrade  (yay -S <pkg>, yay -Syu, bare yay <term>)  — transparent, no alias
-    └── editor-gate (aurscan / Claude) + yay init.lua hooks fire on every build
+    └── yay init.lua hooks fire on every build
             — see "yay 13.0 integration" below for the full breakdown
-
-standalone aurscan (manual — audit without installing)
-    ├── aurscan <pkg>            — scan a single package
-    ├── aurscan --update-check   — audit pending updates without installing
-    └── aurscan --rules-only     — offline static rules only, no LLM call
 ```
 
 ### Scanner comparison
@@ -156,13 +150,7 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     └── extra_lists.conf                   # optional extra list subscriptions (paths/URLs)
 
 ~/.config/yay/
-    ├── init.lua                      # Lua hooks (age warning, pattern block, install log) — new in yay 13.0
-    └── config.json                   # editor=~/.local/bin/aurscan-gate + editmenu=true (the editor-gate)
-
-~/.local/bin/aurscan-gate             # editor-gate wrapper: exec env -u EDITOR -u VISUAL aurscan-edit "$@"
-/usr/local/bin/aurscan                # aurscan binary (standalone scans + the gate backend)
-/usr/local/bin/aurscan-edit           # edit-hook entrypoint yay invokes per PKGBUILD
-~/.local/bin/claude                   # LLM backend (curl -fsSL https://claude.ai/install.sh | bash)
+    └── init.lua                      # Lua hooks (age warning, pattern block, install log) — new in yay 13.0
 
 ~/.config/systemd/user/                   # installed by ./install.sh --system
     ├── archcanary-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
@@ -207,39 +195,20 @@ sudo pacman -S libnotify bpf yad polkit
 
 # AUR
 yay -S traur
-
-# aurscan — AUR (pick one)
-yay -S aurscan-manticore-release-git       # builds from source, needs Go
-yay -S aurscan-manticore-bin-release-git   # pre-built binary, no toolchain needed
-
-# claude CLI — LLM backend for aurscan
-curl -fsSL https://claude.ai/install.sh | bash
 ```
 
 ## yay 13.0 integration
 
-aurscan is wired into yay transparently as yay's **editor-gate** — no `alias yay=syay`, `yay` runs normally. Two independent layers fire on every AUR build:
-
-**1. The editor-gate (aurscan / Claude).** `~/.config/yay/config.json` sets `editor` to `~/.local/bin/aurscan-gate` and `editmenu = true`. yay invokes its editor on each AUR PKGBUILD it is about to build (including AUR dependencies); `aurscan-gate` is a one-line wrapper —
-
-```bash
-exec env -u EDITOR -u VISUAL aurscan-edit "$@"
-```
-
-— that runs aurscan's edit-hook (`aurscan-edit`) with `EDITOR`/`VISUAL` cleared, so a CLEAN scan proceeds without dropping you into a manual editor and a non-CLEAN verdict exits non-zero, aborting the build. Because yay only invokes the editor for actual builds, non-build operations (`yay -Syu` with nothing to build, `-Ss`, `-Q`, `--version`) are untouched — this is why the old `syay` wrapper alias was dropped.
-
-**2. The yay 13.0 Lua hooks** (`~/.config/yay/init.lua`) — seeded by `install.sh` **only if the file doesn't already exist** (source: [`configs/yay-init.lua`](../configs/yay-init.lua)). If you already have an `init.lua` from before a hook was added here, `install.sh` won't retrofit it — re-copy `configs/yay-init.lua` by hand (merging in any of your own customizations) to pick up new hooks. An offline backstop that runs alongside the editor-gate:
+The yay 13.0 Lua hooks (`~/.config/yay/init.lua`) — seeded by `install.sh` **only if the file doesn't already exist** (source: [`configs/yay-init.lua`](../configs/yay-init.lua)). If you already have an `init.lua` from before a hook was added here, `install.sh` won't retrofit it — re-copy `configs/yay-init.lua` by hand (merging in any of your own customizations) to pick up new hooks. An offline backstop that fires on every AUR build:
 
 | Hook | Event | What it does |
 |------|-------|--------------|
 | Upgrade-age warning | `UpgradeSelect` | Warns for any AUR upgrade whose PKGBUILD was modified < 3 days ago (prints hours since change) — a freshly rewritten PKGBUILD is the classic compromise signal |
 | Pattern block | `AURPreInstall` | Aborts the build if the PKGBUILD matches a known-malicious pattern: `npm install atomic-lockfile` (Atomic Arch wave 1), `bun install js-digest` (wave 2), or `curl`/`wget` piped to `bash`/`sh` |
-| aur-audit check | `AURPreInstall` | Aborts on a black (confirmed malicious) hit, warns on red (high-risk, unconfirmed) from the [aur-audit.wtako.net](https://wtako.net/services/aur-audit) feed synced by `--refresh` — the only protection against a malicious AUR package that doesn't require aurscan/an LLM |
+| aur-audit check | `AURPreInstall` | Aborts on a black (confirmed malicious) hit, warns on red (high-risk, unconfirmed) from the [aur-audit.wtako.net](https://wtako.net/services/aur-audit) feed synced by `--refresh` |
 | Install log | `PostInstall` | Logs every installed AUR package (name + version) via `yay.log.info` |
 
-Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and **`edit_menu = true`** — `editmenu`/`edit_menu` being on is **required** for the editor-gate: it forces yay to invoke its editor (`aurscan-gate`) on each PKGBUILD, which is the interception point for the scan. `config.json` mirrors the rest of the options and sets `editor=aurscan-gate`.
-
-> The two layers are complementary: the editor-gate (aurscan/Claude) catches novel or obfuscated payloads; the Lua hooks are a fast offline backstop for known campaign signatures and stale-rewrite upgrades, and run even if the LLM call is unavailable.
+Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and `edit_menu = true` (lets you review each PKGBUILD's diff before it builds).
 
 ## Shell completion and the `canary` alias
 
@@ -264,26 +233,6 @@ git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 # 2. Install dependencies (bpf provides bpftool for --check-bpftool; yad for GUI)
 sudo pacman -S libnotify bpf yad polkit
 yay -S traur
-
-# aurscan — AUR (pick one)
-yay -S aurscan-manticore-release-git       # builds from source, needs Go
-yay -S aurscan-manticore-bin-release-git   # pre-built binary, no toolchain needed
-
-# claude CLI — LLM backend for aurscan
-curl -fsSL https://claude.ai/install.sh | bash
-
-# Wire aurscan into yay as the editor-gate (transparent auto-scan on every build).
-# The gate wrapper and config.json editor are NOT set by either installer — do it once:
-cat > ~/.local/bin/aurscan-gate <<'EOF'
-#!/usr/bin/env bash
-# yay editor-gate for aurscan (gate-only): a CLEAN scan does not open a manual
-# editor; a non-OK scan exits non-zero and yay aborts the build.
-exec env -u EDITOR -u VISUAL aurscan-edit "$@"
-EOF
-chmod +x ~/.local/bin/aurscan-gate
-# Then in ~/.config/yay/config.json set:
-#   "editor": "/home/<you>/.local/bin/aurscan-gate"
-#   "editmenu": true
 
 # 3. Run install script (installs to ~/.local/bin by default)
 #    Also seeds ~/.config/yay/init.lua if not already present

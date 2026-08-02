@@ -504,10 +504,10 @@ for arg in "$@"; do
             echo "  --format=text|json        Output a JSON summary instead of the human-readable report"
             echo "                            (default: text; JSON goes to stdout, full narrative still logged)"
             echo "  --doctor                  Report install/config status of every stack element"
-            echo "                            (deps, install, systemd, aurscan, traur, yay/paru hooks) and exit"
+            echo "                            (deps, install, systemd, traur, yay hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
             echo "                            Sections: platform, deps, user, system, systemd, external"
-            echo "                            (tool names like aurscan/traur/yad also map to a section)"
+            echo "                            (tool names like traur/yad also map to a section)"
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
             echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
@@ -659,13 +659,13 @@ run_doctor() {
                 system|system_install|system-install|root) want[system]=1 ;;
                 systemd|automation|timer|timers)    want[systemd]=1 ;;
                 external|external_tools|external-tools|tools|preinstall|pre-install) want[external]=1 ;;
-                aurscan|traur|yay|paru|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
+                traur|yay|paru|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
                 platform|plat|distro)               want[platform]=1 ;;
                 all)                                for s in "${ordered[@]}"; do want[$s]=1; done ;;
                 *)
                     printf 'Unknown --doctor section: %s\n' "$s" >&2
                     printf 'Valid: platform, deps, user, system, systemd, external (or all).\n' >&2
-                    printf 'Tool names (aurscan, traur, yad, …) also map to a section.\n' >&2
+                    printf 'Tool names (traur, yad, …) also map to a section.\n' >&2
                     return 2 ;;
             esac
         done
@@ -888,38 +888,12 @@ run_doctor() {
     if [[ -n ${want[external]:-} ]]; then
         printf '%sPre-install layer (external tools)%s\n' "$B" "$N"
         local yay_init_lua="${XDG_CONFIG_HOME:-$real_home/.config}/yay/init.lua"
-        # Markers below are coupled to two OTHER projects' internal, unexported
-        # conventions (not a public API either project has committed to):
-        # aurscan's yayHookBegin/hookMarker constants (internal/yay/{yayhook,paru}.go)
-        # and archcanary's own configs/yay-init.lua header comment. If either
-        # project changes its string, update it here too — these checks fail
-        # silently (report a working hook as missing) rather than erroring out.
-        local _AURSCAN_YAY_MARKER='-- >>> aurscan begin'
-        local _AURSCAN_PARU_MARKER='# added by aurscan'
+        # Marker below is coupled to archcanary's own configs/yay-init.lua
+        # header comment (not a public API, just this project's own
+        # convention) — if that header ever changes, update this too. This
+        # check fails silently (reports a working hook as missing) rather
+        # than erroring out.
         local _ARCHCANARY_LUA_MARKER='yay 13.0 Lua hooks for the AUR security stack'
-        _opt_item "aurscan (pre-install PKGBUILD scanner)" \
-            "$(command -v aurscan >/dev/null 2>&1 && echo 0 || echo 1)" \
-            "" \
-            "binary: $(command -v aurscan 2>/dev/null || echo 'not found — yay -S aurscan-manticore-release-git (or aurscan-manticore-bin-release-git)')"
-        if command -v aurscan >/dev/null 2>&1; then
-            _opt_item "claude CLI (aurscan LLM backend)" \
-                "$(command -v claude >/dev/null 2>&1 && echo 0 || echo 1)" \
-                "" \
-                "$(command -v claude 2>/dev/null || echo 'not found — curl -fsSL https://claude.ai/install.sh | bash')"
-            if command -v yay >/dev/null 2>&1; then
-                _opt_item "aurscan yay hook (AURPostDownload pre-build scan)" \
-                    "$(_marker "$_AURSCAN_YAY_MARKER" "$yay_init_lua")" \
-                    "aurscan --install-yay-hook" \
-                    "marker: '$_AURSCAN_YAY_MARKER' in $yay_init_lua — without this, aurscan is installed but never runs"
-            fi
-            if command -v paru >/dev/null 2>&1; then
-                local paru_conf="${XDG_CONFIG_HOME:-$real_home/.config}/paru/paru.conf"
-                _opt_item "aurscan paru hook (PreBuildCommand pre-build scan)" \
-                    "$(_marker "$_AURSCAN_PARU_MARKER" "$paru_conf")" \
-                    "aurscan --install-paru-hook" \
-                    "marker: '$_AURSCAN_PARU_MARKER' in $paru_conf — without this, aurscan is installed but never runs"
-            fi
-        fi
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
         if command -v traur >/dev/null 2>&1; then
             _opt_item "traur pacman hook (auto-runs on every install)" \
