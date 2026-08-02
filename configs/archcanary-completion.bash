@@ -21,7 +21,15 @@ _archcanary() {
             COMPREPLY=($(compgen -W "auto always never" -- "$cur"))
             return 0
             ;;
-        --package-list|--malicious-npm-list|--chaos-rat-list|--russian-spam-list|--community-list|--extra-list|--log-file)
+        --format)
+            COMPREPLY=($(compgen -W "text json" -- "$cur"))
+            return 0
+            ;;
+        --allowlist-list|--allowlist-add|--allowlist-remove)
+            COMPREPLY=($(compgen -W "dkms systemd bpftool autostart" -- "$cur"))
+            return 0
+            ;;
+        --package-list|--malicious-npm-list|--chaos-rat-list|--russian-spam-list|--community-list|--extra-list|--extra-lists-add|--extra-lists-remove|--log-file)
             _filedir
             return 0
             ;;
@@ -36,7 +44,11 @@ _archcanary() {
         --no-notify --no-summary --run-lynis --doctor --version -V --help -h
         --log-file= --package-list= --malicious-npm-list= --chaos-rat-list=
         --russian-spam-list= --community-list= --extra-list= --start-date= --end-date=
-        --color= --doctor=
+        --color= --format= --doctor=
+        --allowlist-list= --allowlist-add= --allowlist-remove=
+        --extra-lists-list --extra-lists-add= --extra-lists-remove=
+        --aur-audit-status --aur-audit-enable --aur-audit-disable
+        --audit-rules-get --audit-rules-set --lynis-config-get --lynis-config-set
     "
     COMPREPLY=($(compgen -W "$flags" -- "$cur"))
     return 0
