@@ -1,7 +1,5 @@
 # Changelog
 
-## Unreleased
-
 ## v0.1.22 (2026-08-02)
 
 - Fix: `packaging/PKGBUILD`'s embedded `autostart_allowlist.conf` template had drifted from `install.sh`'s — a pure package install (`makepkg -si`/AUR helper) seeded the old template (missing the full-path unowned-ExecStart-binary documentation and example added below) instead of the current one. Same recurring drift class as the `configs/audit-rules.conf` fix earlier this file — synced.
