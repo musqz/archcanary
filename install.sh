@@ -322,17 +322,25 @@ EOF
     # /etc copy).
     if [[ ! -f /etc/archcanary/autostart_allowlist.conf ]]; then
         sudo tee /etc/archcanary/autostart_allowlist.conf >/dev/null << 'EOF'
-# Autostart Exec= names to skip during the XDG autostart check
-# (--check-autostart), system-wide allowlist. One Exec= name/basename per
-# line. Everything after # is a comment.
-# Add entries that are known-good but can't be resolved via $PATH or a
-# standard system prefix — e.g. a package-private helper binary the
-# non-PATH fallback (search of /usr/lib, /usr/libexec) still can't find, or
-# an AppImage/Flatpak export. Matched against the bare Exec= value as
-# written in the .desktop file (not a resolved path).
+# Names to skip during the XDG autostart check (--check-autostart),
+# system-wide allowlist. One name/basename per line. Everything after # is
+# a comment. Covers two separate findings within the same check:
 #
-# Example:
-# zeitgeist-datahub  # desktop activity logging, ships in a non-PATH libdir
+# 1. .desktop Exec= names that are known-good but can't be resolved via
+#    $PATH or a standard system prefix — e.g. a package-private helper
+#    binary the non-PATH fallback (search of /usr/lib, /usr/libexec) still
+#    can't find, or an AppImage/Flatpak export. Matched against the bare
+#    Exec= value as written in the .desktop file (not a resolved path).
+#
+# 2. User systemd service ExecStart= binaries unowned by pacman. Matched
+#    against the ExecStart binary's basename. Useful for a package that
+#    ships its user unit via /etc/skel (copied into ~/.config/systemd/user/
+#    at account creation, so pacman never tracks that specific copy even
+#    though the binary itself is a normal pacman-owned file).
+#
+# Examples:
+# zeitgeist-datahub       # desktop activity logging, ships in a non-PATH libdir
+# eos-update-notifier     # EndeavourOS update notifier, user unit ships via /etc/skel
 EOF
         sudo chmod 644 /etc/archcanary/autostart_allowlist.conf
     fi

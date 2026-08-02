@@ -2439,6 +2439,11 @@ check_autostart() {
     # User systemd services whose ExecStart= binary is unowned by pacman.
     # Expand %h (systemd home-dir specifier) before querying pacman.
     # Skip XDG user bin dirs — these are never tracked by pacman.
+    # Reuses AUTOSTART_ALLOWLIST/_autostart_allow (parsed above) matched against
+    # the ExecStart binary's basename — e.g. a package (EndeavourOS's
+    # eos-update-notifier) that ships its user unit via /etc/skel, so the copy
+    # materialized into ~/.config/systemd/user/ at account creation is never
+    # itself pacman-tracked even though /usr/bin/<binary> still is.
     local user_svc_dir="$home_dir/.config/systemd/user"
     if [[ -d "$user_svc_dir" ]]; then
         while IFS= read -r svc; do
@@ -2453,9 +2458,14 @@ check_autostart() {
             # /usr/local/bin/ are expected and not a persistence signal.
             [[ "$exec_bin" == "/usr/local/bin/"* ]] && continue
             if ! pacman -Qo "$exec_bin" &>/dev/null 2>&1; then
-                echo "  WARNING: user service with unowned ExecStart binary: $svc"
-                echo "    ExecStart=$exec_bin (not tracked by pacman)"
-                found=2
+                if _allowlist_contains "$(basename "$exec_bin")" _autostart_allow; then
+                    echo "  INFO: user service allowlisted (unowned ExecStart binary): $svc"
+                    echo "    ExecStart=$exec_bin"
+                else
+                    echo "  WARNING: user service with unowned ExecStart binary: $svc"
+                    echo "    ExecStart=$exec_bin (not tracked by pacman)"
+                    found=2
+                fi
             fi
         done < <(find "$user_svc_dir" -name '*.service' -type f 2>/dev/null)
     fi
