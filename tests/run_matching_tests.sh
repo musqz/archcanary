@@ -1071,6 +1071,60 @@ SCRIPT
 }
 
 # ---------------------------------------------------------------------------
+# --doctor: stale user-level bash completion silently shadowing a correct
+# system-level one — reported live (bash's dynamic loader checks the user
+# completions dir first, so a plain install done once and never repeated
+# after switching to --system/package installs leaves the wrong flags
+# completing forever, with no obvious symptom).
+# ---------------------------------------------------------------------------
+test_doctor_stale_completion() {
+    local fake_home out
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.local/share/bash-completion/completions" "$fake_home/.config/archcanary"
+
+    local sys_completion
+    sys_completion=$(mktemp)
+    printf 'system version content\n' > "$sys_completion"
+
+    # Sub-test A: user copy differs from system copy → WARN with the exact
+    # fix command.
+    printf 'stale user version content\n' > "$fake_home/.local/share/bash-completion/completions/archcanary"
+    out=$(HOME="$fake_home" XDG_DATA_HOME="$fake_home/.local/share" XDG_CONFIG_HOME="$fake_home/.config" \
+        ARCHCANARY_SYS_COMPLETION="$sys_completion" \
+        "$REPO_DIR/archcanary.sh" --doctor=user 2>&1) || true
+    if [[ "$out" == *"bash completion (user copy differs from system copy)"* && "$out" == *"install.sh"* ]]; then
+        pass "doctor: stale user completion copy detected, fix hint present"
+    else
+        fail "doctor: expected stale-completion WARN, out: $out"
+    fi
+
+    # Sub-test B: user copy matches system copy → no warning.
+    cp "$sys_completion" "$fake_home/.local/share/bash-completion/completions/archcanary"
+    out=$(HOME="$fake_home" XDG_DATA_HOME="$fake_home/.local/share" XDG_CONFIG_HOME="$fake_home/.config" \
+        ARCHCANARY_SYS_COMPLETION="$sys_completion" \
+        "$REPO_DIR/archcanary.sh" --doctor=user 2>&1) || true
+    if [[ "$out" != *"bash completion"* ]]; then
+        pass "doctor: matching completion copies → no false positive"
+    else
+        fail "doctor: in-sync completion copies should not warn, out: $out"
+    fi
+
+    # Sub-test C: only the user copy exists (plain install, no --system ever
+    # run) → nothing to shadow, no warning.
+    out=$(HOME="$fake_home" XDG_DATA_HOME="$fake_home/.local/share" XDG_CONFIG_HOME="$fake_home/.config" \
+        ARCHCANARY_SYS_COMPLETION="/nonexistent-sys-completion-xyz" \
+        "$REPO_DIR/archcanary.sh" --doctor=user 2>&1) || true
+    if [[ "$out" != *"bash completion"* ]]; then
+        pass "doctor: user-only install (no system copy) → no false positive"
+    else
+        fail "doctor: user-only completion copy should not warn, out: $out"
+    fi
+
+    rm -rf "$fake_home"
+    rm -f "$sys_completion"
+}
+
+# ---------------------------------------------------------------------------
 # _allowlist_cli value validation — regression coverage for the bug found
 # 2026-08-02: the value regex required the first char to be alphanumeric
 # and never allowed '/', so a real full-path autostart value (as required by
@@ -1194,6 +1248,9 @@ test_allowlist_cli
 
 $VERBOSE && msg "--- Test 17: RESULT banner skip-only wording ---"
 test_result_banner_skip_only_wording
+
+$VERBOSE && msg "--- Test 18: doctor stale bash completion detection ---"
+test_doctor_stale_completion
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
