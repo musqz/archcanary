@@ -822,14 +822,29 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: varsplit pattern missed, rc=$rc"
     fi
 
-    # Sub-test E: clean PKGBUILD → no WARNING
+    # Sub-test E: clean PKGBUILD → no WARNING (includes a standard
+    # `read -d $'\0'` NUL-delimited find -print0 loop — regression guard for
+    # a real false positive reported live: a single ANSI-C-quoted delimiter
+    # byte must not be flagged as hex/octal obfuscation)
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-clean" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
-        pass "pkgbuild_obfuscation: clean PKGBUILD → no false positive"
+        pass "pkgbuild_obfuscation: clean PKGBUILD (incl. read -d \$'\\0' idiom) → no false positive"
     else
-        fail "pkgbuild_obfuscation: clean PKGBUILD triggered WARNING — false positive"
+        fail "pkgbuild_obfuscation: clean PKGBUILD triggered WARNING — false positive, out: $out"
+    fi
+
+    # Sub-test G: genuine ANSI-C hex-escape obfuscation (3+ chained \xHH
+    # escapes spelling out a command) must still be caught — regression
+    # guard so the false-positive fix above didn't just gut the check.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-ansic" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"ANSI-C hex/octal quoting"* ]]; then
+        pass "pkgbuild_obfuscation: chained hex-escape obfuscation detected"
+    else
+        fail "pkgbuild_obfuscation: chained hex-escape obfuscation missed, rc=$rc, out: $out"
     fi
 
     # Sub-test F: summary table shows the softer "REVIEW" (not "INFECTED") for
