@@ -552,7 +552,11 @@ DESK
 
     # Sub-test K: user systemd service with an unowned ExecStart binary, not
     # allowlisted → WARNING (regression guard — this branch had zero test
-    # coverage before the allowlist fix below was added).
+    # coverage before the allowlist fix below was added). Pins
+    # AUTOSTART_ALLOWLIST_FILE to a nonexistent path so this can't spuriously
+    # pass/fail depending on whatever the real /etc/archcanary allowlist
+    # happens to contain on the machine running the suite (e.g. after
+    # running --allowlist-add=autostart against this exact fixture path).
     local tmpdir7
     tmpdir7=$(mktemp -d)
     mkdir -p "$tmpdir7/.config/systemd/user"
@@ -565,7 +569,7 @@ Type=oneshot
 ExecStart=/opt/fake-unowned-pkg/eos-update-notifier
 SVC
     rc=0
-    out=$(AUTOSTART_HOME="$tmpdir7" \
+    out=$(AUTOSTART_HOME="$tmpdir7" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"WARNING: user service with unowned ExecStart binary"* ]]; then
         pass "check_autostart: user service with unowned ExecStart, not allowlisted → WARNING"
@@ -573,14 +577,18 @@ SVC
         fail "check_autostart: user service unowned-ExecStart regression, rc=$rc, out: $out"
     fi
 
-    # Sub-test L: same unowned ExecStart binary, but its basename is
-    # allowlisted → INFO only, exit 0 (the eos-update-notifier case: the
+    # Sub-test L: same unowned ExecStart binary, allowlisted by its exact
+    # full path → INFO only, exit 0 (the eos-update-notifier case: the
     # package ships its user unit via /etc/skel, so the copy materialized
     # into ~/.config/systemd/user/ at account creation is never itself
-    # pacman-tracked even though the binary path normally would be).
+    # pacman-tracked even though the binary path normally would be). Uses
+    # the full ExecStart path, not just the basename — matching on basename
+    # alone would let an unrelated binary sharing that name anywhere on disk
+    # slip through, which is exactly what the full-path match here guards
+    # against (see the sibling failure-mode note on the WARNING case above).
     local allow_file3
     allow_file3=$(mktemp)
-    printf 'eos-update-notifier\n' > "$allow_file3"
+    printf '/opt/fake-unowned-pkg/eos-update-notifier\n' > "$allow_file3"
     rc=0
     out=$(AUTOSTART_HOME="$tmpdir7" AUTOSTART_ALLOWLIST_FILE="$allow_file3" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
@@ -589,8 +597,24 @@ SVC
     else
         fail "check_autostart: allowlisted user service ExecStart → expected INFO+exit0, got rc=$rc, out: $out"
     fi
+
+    # Sub-test M: allowlisting only the basename (not the full path) must NOT
+    # suppress the warning — regression guard for the basename-match bypass
+    # found in code review (an attacker-placed binary anywhere on disk
+    # sharing a legitimately-allowlisted basename must still be flagged).
+    local allow_file4
+    allow_file4=$(mktemp)
+    printf 'eos-update-notifier\n' > "$allow_file4"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7" AUTOSTART_ALLOWLIST_FILE="$allow_file4" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: user service with unowned ExecStart binary"* ]]; then
+        pass "check_autostart: basename-only allowlist entry does not suppress full-path finding"
+    else
+        fail "check_autostart: basename-only allowlist entry should NOT match, rc=$rc, out: $out"
+    fi
     rm -rf "$tmpdir7"
-    rm -f "$allow_file3"
+    rm -f "$allow_file3" "$allow_file4"
 }
 
 # ---------------------------------------------------------------------------
