@@ -3,12 +3,14 @@
 8188eu-dkms
 8192eu-dkms-git
 abntex
+accounts-qml-module-bin
 acpitool
 actual-ai
 adapta-gtk-theme-git
 adblock2privoxy
 adom-noteye
 adsuck
+aic94xx-firmware-bin
 aion-git
 akira-git
 akonadi-git
@@ -58,6 +60,7 @@ apwal
 aquaria-ose
 arachnophilia
 arcadia
+arch-update-bin
 archivemail
 archjh
 archlinux-themes-balou
@@ -90,8 +93,11 @@ atto-bin
 audible-activator-git
 audiere
 audiotube-git
+aur-scanner-bin
+aur-sync-vote-bin
 aura-browser
 aura-browser-git
+aurutils-bin
 auryo
 autohand-cli
 autolabel
@@ -154,6 +160,7 @@ borg-git
 bouml
 bpytop-git
 bracket
+bridge-utils-bin
 brightness-controller-git
 brother-hl3150cdw
 brother-hll6200dw
@@ -166,6 +173,7 @@ bs-platform
 btdex
 btdex-git
 burn-cd
+byobu-bin
 caelum
 caja-deja-dup-bzr
 camotics
@@ -319,6 +327,7 @@ dashcore
 datatype99
 davtools
 dbxcli
+debtap-bin
 deepin-mail-bin
 deepin-wine6-stable
 deheader
@@ -512,6 +521,7 @@ freeter
 frutool
 fs2-knossos
 fs2_open-mediavps
+fsearch-bin
 fspy
 fstar-git
 ft232r_prog
@@ -521,6 +531,7 @@ fuel
 fusion-icon
 fusion-icon-git
 futhark-bin
+fvs2-bin
 fwlogwatch
 g2
 g3data
@@ -592,6 +603,7 @@ gnome-specimen
 gnome-terminal-fedora
 gnome-usage-git
 gnome-xcf-thumbnailer
+gnu-netcat-bin
 gnuplot-git
 gnutls3.8.9
 gobyte-qt
@@ -619,10 +631,14 @@ gridmgr-git
 grim-git
 gr-osmosdr-git
 grpn
+grub-customizer-bin
 grub4dos
 grub-luks-keyfile
 gsettings-desktop-schemas-git
 gsettings-system-schemas-git
+gtk-engine-murrine-bin
+gtk2-bin
+gtk2-ng-git-bin
 gtkimageview
 gtksetpwc
 gtkterm-git
@@ -662,6 +678,7 @@ headphones
 hearthstone-linux-gui-appimage
 hearthstone-linux-gui-bin
 hepmc2
+hexchat-bin
 hexchat-otr
 hfstospell
 hifive1-sdk-git
@@ -672,6 +689,7 @@ homeassistant-supervised
 hop
 horst
 hotlinemiami
+howdy-next-bin
 howm-x11-git
 howto-bin
 hpgcc
@@ -680,6 +698,7 @@ hpoj
 htbrowser-bin
 htdig
 htop-vim-solarized-git
+http-parser-bin
 httpry
 huawei-stat-e220
 hudkit-wayland
@@ -690,6 +709,7 @@ hydrapaper-git
 hydrus-git
 hypervc-qt4
 hypr-git
+hyprkeys-git-bin
 i2c-ch341-dkms
 i3bar-river
 i3-gnome-git
@@ -744,6 +764,7 @@ jdk11-openj9-bin
 jdk17-jetbrains-bin
 jdk8-graalvm-bin
 jdk-openj9-bin
+jellium-desktop-git-bin
 jetbrains-mps
 jflex
 jin
@@ -908,6 +929,7 @@ linphone-desktop-all-git
 linphone-plugin-msx264
 linux-bcachefs-git
 linux-bcachefs-git-headers
+linux-cachyos-bin
 linux-cachyos-deckify-native
 linux-cachyos-deckify-native-headers
 linux-cachyos-native
@@ -962,6 +984,7 @@ magiwallet-magid-ruckard-raspi4
 magpie-wm
 make-3.81
 mako-center-git
+mangowm-bin
 mantissa
 manuskript
 mapbox-studio
@@ -975,6 +998,7 @@ mathsat-5
 mato-icons-git
 matrixbrandy
 maxima-git
+mbedtls2-bin
 mbm-gpsd-pl4nkton-git
 mcpatcher
 mcp-probe
@@ -1119,6 +1143,7 @@ nixnote2
 nixnote2-git
 n-ninja
 nocodb
+noctalia-git-bin
 noctyra-dotfiles-git
 noctyra-meta-git
 nodejs-broccoli-cli
@@ -1159,6 +1184,7 @@ nodejs-vim-debugger
 nodejs-webpack
 nodejs-ws
 nody-greeter
+nomacs-bin
 non-daw-git
 nordnm
 notepad---bin
@@ -1194,6 +1220,7 @@ oclint
 octave-hg
 octave-miscellaneous
 octocode
+octopi-bin
 ohcount
 ohcount-git
 oh-my-git
@@ -1214,6 +1241,7 @@ openmsx-catapult
 opennebula
 openpyn-nordvpn
 openssh-gui-git
+openssl-1.1-bin
 openstego
 openui5
 openxray
@@ -1246,6 +1274,7 @@ papirus-color-scheme
 papirus-maia-icon-theme-git
 paq8o
 parallel-python
+paru-git-bin
 pass-cli
 pb-for-desktop
 pbincli
@@ -1317,7 +1346,9 @@ pktstat
 planck
 plank-theme-arc
 plasma5-wallpapers-video-git
+plasma6-applets-appgrid-bin
 plasma6-applets-fancytasks
+plasma6-applets-panel-colorizer-bin
 plasma6-splashscreen-kuro-git
 playhouse
 playhouse-git
@@ -1345,6 +1376,7 @@ prisma4postgres-bin
 privacy-redirect-git
 profile-sync-daemon-zen
 protoc-gen-ts
+proton-rtsp
 psi-plus-plugins-git
 psi-plus-resources-git
 pulseaudio-dlna-cygn
@@ -1352,6 +1384,7 @@ pulsemixer-git
 puppy-browser
 purescript
 purple-facebook-git
+pwvucontrol-bin
 pygist-git
 pyload-ng
 pymacs
@@ -1418,6 +1451,7 @@ python-hnswlib-git
 python-hsaudiotag3k
 python-iminuit
 python-iminuit-docs
+python-inputs-bin
 python-iso3166
 python-isounidecode
 python-isr-git
@@ -1462,6 +1496,7 @@ python-sqliteschema
 python-stagger-git
 python-starlette-compress
 python-starsessions
+python-steam-bin
 python-steamcontroller-git
 python-tabledata
 python-tarantool
@@ -1494,6 +1529,9 @@ qshntoolsplit
 qt5-3d
 qt-inspector-git
 qt-solutions-git
+qt5-location-bin
+qt5-sensors-bin
+qt5-websockets-bin
 qtum-core
 qtvkbd
 quack
@@ -1661,6 +1699,7 @@ soundpaad-bin
 soxt
 spigot-plugin-essentials
 splashtop-business
+splix-bin
 spring-ba
 sqliteman
 sqsh
@@ -1767,9 +1806,11 @@ ttf-material-design-icons-git
 ttf-mutant-emoji
 ttf-pizzadude-bullets
 ttf-roboto-fontconfig
+ttf-symbola-bin
 tunacode-cli
 tup-git
 tuxboot-git
+tuxmanager-bin
 tvnamer
 tweeny
 typing-game-cli
@@ -1867,6 +1908,7 @@ wire-desktop
 wiringpi-git
 wlroots-nvidia
 wmtop
+woeusb-ng-bin
 word-snatchers-cli
 workbench
 workbuddy-bin
@@ -1880,7 +1922,9 @@ wxbase
 x2vnc-no-xinerama
 xapian-omega
 xarchiver-assume-name
+xclicker-bin
 xcursor-gt3
+xdg-terminal-exec-bin
 xerox-phaser-6000-6010
 xevdevserver
 xf86-input-cmt
@@ -1890,6 +1934,7 @@ xf86-input-mtrack-git
 xf86-input-wizardpen
 xfce-theme-bluebird
 xforms
+xfwm4-themes-bin
 xorg-transset
 xorg-xfsinfo
 xorg-xinit-git
