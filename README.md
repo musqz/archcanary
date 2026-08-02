@@ -136,9 +136,37 @@ run everything at once with `--full`.
 | `--full` | All of the above except `--check-list-overlap` | Partial |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam/Community Reports lists and the aur-audit black/red feed | — |
 | `--no-aur-audit` | Skip the aur-audit.wtako.net feed on `--refresh`. Persists via `AUR_AUDIT_ENABLE=false` in `~/.config/archcanary/env`, also toggleable from the GUI's Scan settings menu row | — |
+| `--verbose`, `-v`, `--debug` | Verbose output (`--debug` also enables `set -x`) | — |
+| `--log-file=PATH` | Write the full detail log to `PATH` (default: `~/.cache/archcanary/aur-check-<date>.log`) | — |
 | `--package-list=PATH` | Override the infected AUR package list | — |
+| `--malicious-npm-list=PATH` | Override the malicious npm package name list | — |
+| `--chaos-rat-list=PATH` | Override the CHAOS RAT (2025) package list | — |
+| `--russian-spam-list=PATH` | Override the Russian Spam Campaign (2026) list | — |
+| `--community-list=PATH` | Override the community-reported package list | — |
 | `--extra-list=PATH_OR_URL` | Load an additional package list (file or `https://` URL); repeatable | — |
+| `--start-date=YYYY-MM-DD` | Only flag packages installed on or after this date (env: `START_DATE`) | — |
+| `--end-date=YYYY-MM-DD` | Only flag packages installed on or before this date (env: `END_DATE`) | — |
+| `--no-notify` | Suppress the desktop notification on detection | — |
+| `--no-summary` | Suppress the check summary table at the end of a scan | — |
+| `--color=auto\|always\|never` | Control symbol/color output (default: `auto`; also obeys `NO_COLOR` env) | — |
+| `--format=text\|json` | Output a JSON summary instead of the human-readable report | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
+| `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `traur`/`yad` also map to a section) | — |
+| `--allowlist-list=NAME` | List entries in an allowlist and exit (`NAME`: `dkms`, `systemd`, `bpftool`, `autostart`) | No |
+| `--allowlist-add=NAME:VALUE` | Add `VALUE` to an allowlist and exit | Yes |
+| `--allowlist-remove=NAME:VALUE` | Remove `VALUE` from an allowlist and exit | Yes |
+| `--extra-lists-list` | List `~/.config/archcanary/extra_lists.conf` entries and exit | No |
+| `--extra-lists-add=VALUE` | Add a path/URL to `extra_lists.conf` and exit | No |
+| `--extra-lists-remove=VALUE` | Remove a path/URL from `extra_lists.conf` and exit | No |
+| `--aur-audit-status` | Print the aur-audit.wtako.net feed setting (`true`/`false`) and exit | No |
+| `--aur-audit-enable` | Enable the aur-audit.wtako.net feed on `--refresh` | No |
+| `--aur-audit-disable` | Disable the aur-audit.wtako.net feed on `--refresh` | No |
+| `--audit-rules-get` | Print the auditd rules file and exit | No |
+| `--audit-rules-set` | Read new auditd rules from stdin and save | Yes |
+| `--lynis-config-get` | Print the Lynis custom profile and exit | No |
+| `--lynis-config-set` | Read a new Lynis custom profile from stdin and save | Yes |
+| `--version`, `-V` | Show version and exit | — |
+| `--help`, `-h` | Show this help and exit | — |
 
 Both `install.sh` and the AUR package install bash tab-completion for every flag above (`archcanary --<TAB>`), loaded automatically via the `bash-completion` package — no `.bashrc` edits needed. If you'd rather type `canary`, add `alias canary=archcanary` to your `.bashrc`/`.zshrc`; the completion is already registered for that name too, so it works immediately.
 
