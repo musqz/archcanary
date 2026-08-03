@@ -1539,7 +1539,9 @@ print_list() {
 # ---------------------------------------------------------------------------
 check_current() {
     local found=()
+    declare -gA CURRENTLY_INSTALLED_MAP=()
     while IFS= read -r pkg; do
+        CURRENTLY_INSTALLED_MAP[$pkg]=1
         [[ -v INFECTED_LOOKUP["$pkg"] ]] || continue
         local install_date install_date_iso
         install_date=$(LC_ALL=C pacman -Qi -- "$pkg" 2>/dev/null | awk -F': ' '/^Install Date/ { print $2; exit }')
@@ -1594,6 +1596,12 @@ check_logs() {
     declare -A pkg_map
     for pkg in "${INFECTED_PKGS[@]}"; do pkg_map[$pkg]=1; done
 
+    # CURRENTLY_INSTALLED_MAP is populated by check_current(), which always
+    # runs immediately before this function — reused here instead of
+    # repeating its `pacman -Qmq` query, so a log hit for a package removed
+    # long ago can be reported as historical-only rather than an active
+    # infection.
+
     local re_date='^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:+-]+)\]'
     local re_alpm='\[ALPM\] ([a-z]+) ([^ ]+)'
     local total=${#log_files[@]} idx=0 file line datetime_str date_str action pkg
@@ -1623,16 +1631,19 @@ check_logs() {
             [[ -v pkg_map[$pkg] ]] || continue
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
 
+            local tag="LOG_HIT"
+            [[ -v CURRENTLY_INSTALLED_MAP[$pkg] ]] || tag="LOG_HIST"
+
             if [[ -v CHAOS_LOOKUP[$pkg] ]]; then
-                echo "LOG_HIT: $pkg ($action on $datetime_str) [CHAOS RAT campaign, 2025-07]"
+                echo "$tag: $pkg ($action on $datetime_str) [CHAOS RAT campaign, 2025-07]"
             elif [[ -v AUR_AUDIT_BLACK_LOOKUP[$pkg] ]]; then
-                echo "LOG_HIT: $pkg ($action on $datetime_str) [aur-audit: black]"
+                echo "$tag: $pkg ($action on $datetime_str) [aur-audit: black]"
             elif [[ -v AUR_AUDIT_RED_LOOKUP[$pkg] ]]; then
-                echo "LOG_HIT: $pkg ($action on $datetime_str) [aur-audit: red]"
+                echo "$tag: $pkg ($action on $datetime_str) [aur-audit: red]"
             elif [[ -v COMMUNITY_REPORTS_LOOKUP[$pkg] ]]; then
-                echo "LOG_HIT: $pkg ($action on $datetime_str) [community report]"
+                echo "$tag: $pkg ($action on $datetime_str) [community report]"
             else
-                echo "LOG_HIT: $pkg ($action on $datetime_str)"
+                echo "$tag: $pkg ($action on $datetime_str)"
             fi
         done < <(read_compressed_file "$file") || true
 
@@ -3154,17 +3165,34 @@ if ! $FOCUSED_MODE; then
         LOGS_TMP=$(mktemp)
         CLEANUP_FILES+=("$LOGS_TMP")
         check_logs 2>&1 | tee "$LOGS_TMP" || true
-        if grep -q 'LOG_HIT' "$LOGS_TMP" 2>/dev/null; then
-            echo "  WARNING: historical log matches (name-match against official compromised list):"
-            grep 'LOG_HIT' "$LOGS_TMP" | sed 's/LOG_HIT: /  - /'
+        _has_current_hit=false
+        _has_hist_hit=false
+        grep -q '^LOG_HIT:' "$LOGS_TMP" 2>/dev/null && _has_current_hit=true
+        grep -q '^LOG_HIST:' "$LOGS_TMP" 2>/dev/null && _has_hist_hit=true
+
+        if $_has_current_hit; then
+            echo "  WARNING: currently-installed package(s) with a matching log entry"
+            echo "  (name-match against official compromised list):"
+            grep '^LOG_HIT:' "$LOGS_TMP" | sed 's/^LOG_HIT: /  - /'
             echo "  NOTE: if the PKGBUILD looks clean now, the malicious commit may have been"
             echo "  reverted — check AUR git history around the install date/time above."
             echo "  Either way, treat the install-time window as a potential exposure."
             [[ 2 -gt $EXIT_CODE ]] && EXIT_CODE=2
             _log_ret=2
-        else
+        fi
+        if $_has_hist_hit; then
+            echo "  NOTE: historical-only log matches (package no longer installed):"
+            grep '^LOG_HIST:' "$LOGS_TMP" | sed 's/^LOG_HIST: /  - /'
+            echo "  These were removed at some point after the log entry above, so they are"
+            echo "  not an active infection — but if they were compromised while installed,"
+            echo "  treat that install-time window as a potential past exposure."
+            [[ 1 -gt $EXIT_CODE ]] && EXIT_CODE=1
+            [[ $_log_ret -lt 1 ]] && _log_ret=1
+        fi
+        if ! $_has_current_hit && ! $_has_hist_hit; then
             echo "  Clean: no historical log matches found."
         fi
+        unset _has_current_hit _has_hist_hit
         rm -f "$LOGS_TMP"
     else
         echo "  Skipped: /var/log/pacman.log not found."
