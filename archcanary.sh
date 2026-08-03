@@ -1543,7 +1543,7 @@ print_list() {
 # (Efficiency from commonsourcecs: pacman -Qmq in batch)
 # ---------------------------------------------------------------------------
 check_current() {
-    local found=()
+    local found=() found_pkgs=()
     declare -gA CURRENTLY_INSTALLED_MAP=()
     while IFS= read -r pkg; do
         CURRENTLY_INSTALLED_MAP[$pkg]=1
@@ -1568,6 +1568,7 @@ check_current() {
         else
             found+=("$pkg (installed: $install_date)")
         fi
+        found_pkgs+=("$pkg")
     done < <(pacman -Qmq "${INFECTED_PKGS[@]}" 2>/dev/null)
 
     if [[ ${#found[@]} -eq 0 ]]; then
@@ -1576,6 +1577,8 @@ check_current() {
     else
         echo "  WARNING: ${#found[@]} possibly infected package(s):"
         print_list found
+        echo "  Remove them:"
+        printf '    sudo pacman -Rns -- %s\n' "${found_pkgs[*]}"
         return 2
     fi
 }
@@ -1795,6 +1798,8 @@ check_systemd() {
     if [[ ${#found[@]} -gt 0 ]]; then
         echo "  WARNING: ${#found[@]} suspicious systemd unit(s) found:"
         print_list found
+        echo "  If you recognize any of these, mark it known-good:"
+        echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=systemd:<unit-name>"
         return 2
     fi
     echo "  Clean: no suspicious systemd units found."
@@ -1824,6 +1829,10 @@ check_ebpf() {
     if [[ ${#found[@]} -gt 0 ]]; then
         echo "  WARNING: eBPF rootkit traces found:"
         print_list found
+        echo "  No legitimate software creates files with these names — pinned BPF maps"
+        echo "  named after a hiding technique are a strong compromise indicator, not a"
+        echo "  configuration artifact. Recommend offline analysis before continuing to"
+        echo "  use this system normally."
         return 2
     fi
     echo "  Clean: no eBPF rootkit traces detected."
@@ -1931,6 +1940,8 @@ check_bpftool() {
                 else
                     echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
                     echo "  Unknown loaders: $resolved_str"
+                    echo "  Recognize this loader? Mark it known-good:"
+                    echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=bpftool:<loader-basename>"
                     echo "  If this looks like a false positive, report it at https://github.com/musqz/archcanary/issues"
                     worst_ret=1
                 fi
@@ -2178,6 +2189,11 @@ check_pkgbuild_caches() {
         echo "  Skipped: no AUR helper cache directories found."
     elif [[ $found_count -eq 0 ]]; then
         echo "  Clean: no malicious commands found in $scanned PKGBUILD/install file(s)."
+    else
+        echo
+        echo "  Remove the flagged cache dir(s) rather than building from them, then"
+        echo "  re-fetch the PKGBUILD directly from the AUR and diff it against what's"
+        echo "  flagged above before rebuilding."
     fi
     return $found_count
 }
@@ -2580,6 +2596,7 @@ check_autostart() {
                [[ "$line" =~ $re_eval_net ]]; then
                 echo "  WARNING: suspicious pattern in $rc:$lineno"
                 echo "    $line"
+                echo "    If you don't recognize this, remove the line from $rc."
                 found=2
             fi
         done < "$rc"
@@ -2700,7 +2717,13 @@ check_pkginteg() {
     echo "  (May take 30-60 seconds on large installs)"
 
     local raw findings count
-    raw=$(/usr/bin/pacman -Qkk 2>/dev/null)
+    # The "warning: <pkg>: <path> (SHA256 checksum mismatch)" lines this check
+    # actually cares about go to stderr — only the "backup file: ..." (expected
+    # divergence) and per-package summary lines are on stdout. 2>/dev/null here
+    # discarded exactly the findings the grep -v "^backup file:" below is meant
+    # to keep, so this check could never surface a real mismatch. 2>&1 merges
+    # both streams; the filters below still correctly separate them.
+    raw=$(/usr/bin/pacman -Qkk 2>&1)
 
     findings=$(
         printf '%s\n' "$raw" \
@@ -2716,12 +2739,21 @@ check_pkginteg() {
 
     count=$(wc -l <<< "$findings")
     printf '  %d file(s) with unexpected checksum mismatch:\n\n' "$count"
+    local -A _mismatch_pkgs=()
     while IFS= read -r line; do
         printf '  * %s\n' "$line"
+        # pacman -Qkk line format: "warning: <pkgname>: <path> (SHA256 checksum mismatch)"
+        local mpkg
+        mpkg=$(sed -n 's/^warning: \([^:]*\):.*/\1/p' <<< "$line")
+        [[ -n "$mpkg" ]] && _mismatch_pkgs["$mpkg"]=1
     done <<< "$findings"
     echo
     echo "  Note: some mismatches are benign (app-managed config files, browser policies)."
     echo "  Prioritise binaries in /usr/bin/, /usr/lib/, /usr/sbin/."
+    if [[ ${#_mismatch_pkgs[@]} -gt 0 ]]; then
+        echo "  Reinstall to restore the original files:"
+        printf '    sudo pacman -S -- %s\n' "${!_mismatch_pkgs[*]}"
+    fi
     return 1
 }
 

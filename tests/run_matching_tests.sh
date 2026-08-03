@@ -340,6 +340,13 @@ test_check_systemd_hardened() {
         fail "check_systemd: timer not detected — got: $out"
     fi
 
+    # Sub-test B2: WARNING output is followed by the allowlist remediation hint
+    if [[ "$out" == *"pkexec /usr/lib/archcanary/root-helper --allowlist-add=systemd:"* ]]; then
+        pass "check_systemd: allowlist hint present in WARNING output"
+    else
+        fail "check_systemd: allowlist hint missing from WARNING output, got: $out"
+    fi
+
     # Sub-test C: empty dir → clean
     local tmpdir
     tmpdir=$(mktemp -d)
@@ -403,6 +410,13 @@ test_check_autostart() {
         pass "check_autostart: curl|bash in .bashrc detected"
     else
         fail "check_autostart: .bashrc pattern not detected — out: $out"
+    fi
+
+    # Sub-test C2: shell-RC WARNING includes the "remove the line" hint
+    if [[ "$out" == *"If you don't recognize this, remove the line from"* ]]; then
+        pass "check_autostart: shell-RC WARNING includes remediation hint"
+    else
+        fail "check_autostart: shell-RC remediation hint missing — out: $out"
     fi
 
     # Sub-test D: clean home dir → clean
@@ -792,6 +806,16 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: base64 pattern missed, rc=$rc"
     fi
 
+    # Sub-test A2: cleanup hint present, exactly once (it's printed once after
+    # the whole scan loop, not per-pattern-match or per-file)
+    local hint_count
+    hint_count=$(grep -c "Remove the flagged cache dir(s)" <<< "$out")
+    if [[ "$out" == *"re-fetch the PKGBUILD directly from the AUR"* && "$hint_count" -eq 1 ]]; then
+        pass "pkgbuild_obfuscation: cleanup hint present exactly once"
+    else
+        fail "pkgbuild_obfuscation: cleanup hint missing/duplicated, hint_count=$hint_count, out: $out"
+    fi
+
     # Sub-test B: eval $(...) → WARNING
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-eval" \
@@ -957,6 +981,13 @@ SCRIPT
         pass "check_bpftool: unknown lsm loader → WARNING (exit 1)"
     else
         fail "check_bpftool: unknown lsm loader → expected WARNING+exit1, got rc=$rc, out: $out"
+    fi
+
+    # Sub-test A2: WARNING output is followed by the allowlist remediation hint
+    if [[ "$out" == *"pkexec /usr/lib/archcanary/root-helper --allowlist-add=bpftool:"* ]]; then
+        pass "check_bpftool: allowlist hint present in WARNING output"
+    else
+        fail "check_bpftool: allowlist hint missing from WARNING output, got: $out"
     fi
 
     # Sub-test B: same loader, allowlisted by basename → INFO only, exit 0
