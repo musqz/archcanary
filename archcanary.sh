@@ -2763,6 +2763,8 @@ check_pkginteg() {
     echo "  (May take 30-60 seconds on large installs)"
 
     local raw findings count stderr_tmp
+    # PACMAN_CMD overrides the real binary for testing (fake pacman script).
+    local pacman_cmd="${PACMAN_CMD:-/usr/bin/pacman}"
     # The "warning: <pkg>: <path> (SHA256 checksum mismatch)" lines this check
     # actually cares about go to stderr — only the "backup file: ..." (expected
     # divergence) and per-package summary lines are on stdout. 2>/dev/null used
@@ -2780,7 +2782,7 @@ check_pkginteg() {
     # a buffer, so each capture is clean before they're concatenated as text.
     stderr_tmp=$(mktemp)
     CLEANUP_FILES+=("$stderr_tmp")
-    raw=$(/usr/bin/pacman -Qkk 2>"$stderr_tmp")
+    raw=$("$pacman_cmd" -Qkk 2>"$stderr_tmp")
     raw+=$'\n'"$(cat "$stderr_tmp")"
     rm -f "$stderr_tmp"
 

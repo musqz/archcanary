@@ -997,6 +997,66 @@ test_check_kmod() {
 }
 
 # ---------------------------------------------------------------------------
+# Test: check_pkginteg — ELF vs non-binary mismatch classification
+# ---------------------------------------------------------------------------
+test_check_pkginteg() {
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --check-pkginteg --no-notify
+    )
+    local out rc=0
+    local elf_bin="$SCRIPT_DIR/fake_pkgbuilds/pkg-elf/helper-bin"
+
+    # Sub-test A: one ELF mismatch + one non-binary mismatch → ELF gets
+    # WARNING + reinstall command, non-binary gets softened to info: and
+    # doesn't affect severity, exit 1 (only the ELF one counts).
+    # Real pacman -Qkk splits output: "backup file:"/summary lines on
+    # stdout, the "warning:" lines this check parses on stderr.
+    local fake_pacman
+    fake_pacman=$(mktemp)
+    cat > "$fake_pacman" << EOF
+#!/bin/sh
+echo "fakepkg-elf: 1 total files, 1 altered files"
+echo "fakepkg-conf: 1 total files, 1 altered files"
+echo "warning: fakepkg-elf: $elf_bin (SHA256 checksum mismatch)" >&2
+echo "warning: fakepkg-conf: /etc/fake.conf (SHA256 checksum mismatch)" >&2
+EOF
+    chmod +x "$fake_pacman"
+
+    rc=0
+    out=$(PACMAN_CMD="$fake_pacman" "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"warning: fakepkg-elf:"* && "$out" == *"info: fakepkg-conf:"* && \
+          "$out" == *"WARNING: binary file(s) changed"* && "$out" == *"sudo pacman -S -- fakepkg-elf"* && \
+          "$out" == *"INFO: non-binary mismatches"* && "$out" == *"Packages: fakepkg-conf"* ]]; then
+        pass "check_pkginteg: ELF mismatch → WARNING+reinstall, non-binary → info, exit 1"
+    else
+        fail "check_pkginteg: mixed classification wrong, rc=$rc, out: $out"
+    fi
+
+    # Sub-test B: only a non-binary mismatch → exit 0 (clean), no WARNING
+    # anywhere — the whole point of the severity split.
+    local fake_pacman_nonbin
+    fake_pacman_nonbin=$(mktemp)
+    cat > "$fake_pacman_nonbin" << 'EOF'
+#!/bin/sh
+echo "fakepkg-conf: 1 total files, 1 altered files"
+echo "warning: fakepkg-conf: /etc/fake.conf (SHA256 checksum mismatch)" >&2
+EOF
+    chmod +x "$fake_pacman_nonbin"
+
+    rc=0
+    out=$(PACMAN_CMD="$fake_pacman_nonbin" "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"info: fakepkg-conf:"* && "$out" != *"WARNING: binary"* ]]; then
+        pass "check_pkginteg: only non-binary mismatch → exit 0 (clean), no WARNING"
+    else
+        fail "check_pkginteg: non-binary-only should be clean, rc=$rc, out: $out"
+    fi
+
+    rm -f "$fake_pacman" "$fake_pacman_nonbin"
+}
+
+# ---------------------------------------------------------------------------
 # Test 14: check_bpftool — unknown LSM loader detection + allowlist
 # ---------------------------------------------------------------------------
 test_check_bpftool_allowlist() {
@@ -1375,6 +1435,9 @@ test_pkgbuild_obfuscation
 
 $VERBOSE && msg "--- Test 13: check_kmod ---"
 test_check_kmod
+
+$VERBOSE && msg "--- Test check_pkginteg: ELF vs non-binary classification ---"
+test_check_pkginteg
 
 $VERBOSE && msg "--- Test 14: check_bpftool allowlist ---"
 test_check_bpftool_allowlist
