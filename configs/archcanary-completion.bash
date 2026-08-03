@@ -50,7 +50,7 @@ _archcanary() {
         --check-systemd --check-ebpf --check-npm-cache --check-bun-cache
         --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-bpftool
         --check-ldso --check-autostart --check-kmod --check-lynis
-        --check-pkginteg --check-list-overlap --full --refresh --no-aur-audit --verbose -v --debug
+        --check-pkginteg --check-list-overlap --search-packages= --full --refresh --no-aur-audit --verbose -v --debug
         --no-notify --no-summary --run-lynis --doctor --version -V --help -h
         --log-file= --package-list= --malicious-npm-list= --chaos-rat-list=
         --russian-spam-list= --community-list= --extra-list= --start-date= --end-date=
