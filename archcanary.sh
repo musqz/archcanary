@@ -86,6 +86,7 @@ NO_NOTIFY=false
 NO_SUMMARY=false
 DOCTOR=false
 DOCTOR_SECTIONS=""
+SEARCH_PACKAGES_ARG=""
 RUN_LYNIS=false
 _COLOR_ARG="auto"
 _FORMAT_ARG="text"
@@ -439,6 +440,7 @@ for arg in "$@"; do
         --russian-spam-list=*)   RUSSIAN_SPAM_LIST_OPT="${arg#*=}" ;;
         --community-list=*)      COMMUNITY_LIST_OPT="${arg#*=}" ;;
         --extra-list=*)          EXTRA_LIST_OPTS+=("${arg#*=}") ;;
+        --search-packages=*)     SEARCH_PACKAGES_ARG="${arg#*=}" ;;
         --start-date=*)          START_DATE_OPT="${arg#*=}" ;;
         --end-date=*)            END_DATE_OPT="${arg#*=}" ;;
         --no-aur-audit)          AUR_AUDIT_ENABLE=false ;;
@@ -484,6 +486,9 @@ for arg in "$@"; do
             echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
             echo "  --check-list-overlap  Note custom-list entries already covered by an official list, safe to"
             echo "                        remove — advisory only, not included in --full"
+            echo "  --search-packages=PKG[,PKG...]  Check package name(s) against every loaded threat list"
+            echo "                                   (no scan; prints a ready-to-copy 'pacman -Rns' command"
+            echo "                                   for any match) and exit"
             echo "  --run-lynis        Run a full Lynis audit (lynis audit system) and exit — not included in --full"
             echo "  --full             Enable all checks"
             echo "  --refresh          Download the latest package list before scanning (incl. aur-audit black/red feed)"
@@ -3071,6 +3076,57 @@ declare -A INFECTED_LOOKUP
 for p in "${INFECTED_PKGS[@]}"; do
     INFECTED_LOOKUP["$p"]=1
 done
+
+# ---------------------------------------------------------------------------
+# --search-packages=PKG[,PKG...] — standalone list lookup, independent of
+# what's installed locally. Same source-tagging elif chain as check_current/
+# check_logs (kept separate rather than a shared helper, matching how those
+# two already duplicate it). Never runs pacman itself — only echoes the
+# suggested removal command.
+# ---------------------------------------------------------------------------
+_search_packages_cli() {
+    local input="$1" pkg tag
+    local -a names=() hits=()
+    local -A seen=()
+    IFS=',' read -ra names <<< "$input"
+
+    for pkg in "${names[@]}"; do
+        pkg="${pkg//[[:space:]]/}"
+        [[ -n "$pkg" ]] || continue
+        [[ -v seen["$pkg"] ]] && continue
+        seen["$pkg"]=1
+        if [[ -v INFECTED_LOOKUP["$pkg"] ]]; then
+            if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then
+                tag="CHAOS RAT campaign, 2025-07"
+            elif [[ -v AUR_AUDIT_BLACK_LOOKUP["$pkg"] ]]; then
+                tag="aur-audit: black"
+            elif [[ -v AUR_AUDIT_RED_LOOKUP["$pkg"] ]]; then
+                tag="aur-audit: red"
+            elif [[ -v COMMUNITY_REPORTS_LOOKUP["$pkg"] ]]; then
+                tag="community report"
+            else
+                tag="package list"
+            fi
+            echo "  FLAGGED: $pkg [$tag]"
+            hits+=("$pkg")
+        else
+            echo "  clean: $pkg (not on any list)"
+        fi
+    done
+
+    if [[ ${#hits[@]} -gt 0 ]]; then
+        echo
+        echo "  Suggested removal (review before running):"
+        printf '    sudo pacman -Rns -- %s\n' "${hits[*]}"
+        return 2
+    fi
+    return 0
+}
+
+if [[ -n "$SEARCH_PACKAGES_ARG" ]]; then
+    _search_packages_cli "$SEARCH_PACKAGES_ARG"
+    exit $?
+fi
 
 if ! $FOCUSED_MODE; then
     # Per-list pkg counts from the previous run, so the banner below can show

@@ -114,6 +114,12 @@ command per affected file. A note, not a warning: never affects the exit
 status, never warns in the check summary, and not included in
 .BR \-\-full .
 .TP
+.B \-\-search\-packages= PKG [, PKG ...]
+Check package name(s) against every loaded threat list, independent of
+what's installed locally. No scan is run; prints a ready-to-copy
+.B pacman \-Rns
+command for any match, and exits.
+.TP
 .B \-\-full
 Enable all of the above checks.
 .SS List management
