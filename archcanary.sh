@@ -2798,20 +2798,54 @@ check_pkginteg() {
 
     count=$(wc -l <<< "$findings")
     printf '  %d file(s) with unexpected checksum mismatch:\n\n' "$count"
-    local -A _mismatch_pkgs=()
+    # Packages get bucketed by whether reinstalling would actually help. A lot
+    # of what pacman -Qkk flags is a file a pacman hook (or the package's own
+    # tooling) regenerates on every install/upgrade by design — depmod
+    # rewriting modules.dep/.alias/.symbols, vlc-cache-gen rewriting
+    # plugins.dat, Manjaro's firefox/networkmanager hooks overwriting their
+    # own branding, GHC/pacman-mirrors rewriting their own caches/state.
+    # Reinstalling those doesn't fix anything — the hook firing IS what
+    # re-diverges the file, so "reinstall to fix it" is actively wrong advice
+    # there. An ELF binary (magic-byte check, same technique check_pkgbuild_
+    # caches uses) is the case reinstalling genuinely restores: compiled code
+    # doesn't get legitimately regenerated post-install the way a cache/config
+    # file does. A package lands in the ELF bucket if ANY of its mismatched
+    # files is one; only-non-ELF packages go in the other bucket.
+    local -A _mismatch_pkgs_elf=() _mismatch_pkgs_other=()
     while IFS= read -r line; do
         printf '  * %s\n' "$line"
         # pacman -Qkk line format: "warning: <pkgname>: <path> (SHA256 checksum mismatch)"
-        local mpkg
+        local mpkg mfile magic
         mpkg=$(sed -n 's/^warning: \([^:]*\):.*/\1/p' <<< "$line")
-        [[ -n "$mpkg" ]] && _mismatch_pkgs["$mpkg"]=1
+        [[ -n "$mpkg" ]] || continue
+        mfile=$(sed -n 's/^warning: [^:]*: \(.*\) (SHA256 checksum mismatch)$/\1/p' <<< "$line")
+        magic=""
+        [[ -n "$mfile" && -r "$mfile" ]] && IFS= read -r -n4 magic < "$mfile" 2>/dev/null
+        if [[ "$magic" == $'\x7fELF' ]]; then
+            _mismatch_pkgs_elf["$mpkg"]=1
+        else
+            _mismatch_pkgs_other["$mpkg"]=1
+        fi
     done <<< "$findings"
+    # A package with at least one ELF mismatch only needs the reinstall
+    # suggestion once — drop it from the "won't help" bucket if present there.
+    local p
+    for p in "${!_mismatch_pkgs_elf[@]}"; do
+        unset '_mismatch_pkgs_other[$p]'
+    done
     echo
     echo "  Note: some mismatches are benign (app-managed config files, browser policies)."
     echo "  Prioritise binaries in /usr/bin/, /usr/lib/, /usr/sbin/."
-    if [[ ${#_mismatch_pkgs[@]} -gt 0 ]]; then
+    if [[ ${#_mismatch_pkgs_elf[@]} -gt 0 ]]; then
         echo "  Reinstall to restore the original files:"
-        printf '    sudo pacman -S -- %s\n' "${!_mismatch_pkgs[*]}"
+        printf '    sudo pacman -S -- %s\n' "${!_mismatch_pkgs_elf[*]}"
+    fi
+    if [[ ${#_mismatch_pkgs_other[@]} -gt 0 ]]; then
+        echo "  These packages' mismatches are all non-binary files (config/cache/state) —"
+        echo "  likely a pacman hook or the package's own tooling regenerating them by"
+        echo "  design. Reinstalling won't fix this (the hook re-fires and re-diverges"
+        echo "  it immediately), so only worth investigating if the change is unexpected:"
+        printf '    %s\n' "${!_mismatch_pkgs_other[*]}"
     fi
     return 1
 }
