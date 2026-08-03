@@ -481,6 +481,40 @@ Source: <a href=\"${repo}\">${repo}</a>" \
         2>/dev/null || true
 }
 
+# Shared Save-button flow for show_output() and run_action()'s pkexec branch
+# — file picker defaulting to the remembered directory, persists the chosen
+# directory for next time. $1 = path to the completed scan's temp output
+# file. mkdir/cp are guarded (not bare statements) — under this script's
+# set -euo pipefail, an unguarded failing command anywhere outside a
+# condition kills the whole GUI silently (see commit f04cf99).
+_save_scan_log() {
+    local tmpout="$1"
+    if ! mkdir -p "$GUI_LOG_SAVE_DIR" 2>/dev/null; then
+        yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            --text="Could not create save directory:\n<tt>${GUI_LOG_SAVE_DIR}</tt>" \
+            --width=420 --button="OK:0" 2>/dev/null || true
+        return
+    fi
+    local suggested chosen
+    suggested="$GUI_LOG_SAVE_DIR/aur-check-$(date +%Y%m%d-%H%M%S).log"
+    chosen=$(yad --file --save --confirm-overwrite \
+        --title="Save Scan Log — Archcanary" \
+        --window-icon=security-high --center \
+        --filename="$suggested" 2>/dev/null) || chosen=""
+    [[ -z "$chosen" ]] && return
+    if ! cp "$tmpout" "$chosen" 2>/dev/null; then
+        yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            --text="Could not save to:\n<tt>${chosen}</tt>" \
+            --width=420 --button="OK:0" 2>/dev/null || true
+        return
+    fi
+    GUI_LOG_SAVE_DIR="$(dirname "$chosen")"
+    _write_gui_env
+    yad --image=dialog-information --title="Archcanary" --window-icon=security-high --center \
+        --text="Scan log saved to:\n<tt>${chosen}</tt>" \
+        --button="OK:0" 2>/dev/null || true
+}
+
 # Run a command, stream output live to a text-info window, return its exit code.
 show_output() {
     local title="$1" scan_exit=0
@@ -517,26 +551,9 @@ show_output() {
     wait "$yad_pid" 2>/dev/null || yad_ret=$?
     exec 8>&-
 
-    # Save:0 — file picker defaults to the remembered directory (or
-    # archcanary.sh's own --log-file default the first time), with the same
-    # auto-timestamped name a CLI run would use. Picking a different
-    # directory updates GUI_LOG_SAVE_DIR for next time.
+    # Save:0
     if [[ "$yad_ret" -eq 0 ]]; then
-        mkdir -p "$GUI_LOG_SAVE_DIR"
-        local suggested chosen
-        suggested="$GUI_LOG_SAVE_DIR/aur-check-$(date +%Y%m%d-%H%M%S).log"
-        chosen=$(yad --file --save --confirm-overwrite \
-            --title="Save Scan Log — Archcanary" \
-            --window-icon=security-high --center \
-            --filename="$suggested" 2>/dev/null) || chosen=""
-        if [[ -n "$chosen" ]]; then
-            cp "$tmpout" "$chosen"
-            GUI_LOG_SAVE_DIR="$(dirname "$chosen")"
-            _write_gui_env
-            yad --image=dialog-information --title="Archcanary" --window-icon=security-high --center \
-                --text="Scan log saved to:\n<tt>${chosen}</tt>" \
-                --button="OK:0" 2>/dev/null || true
-        fi
+        _save_scan_log "$tmpout"
     fi
 
     _SHOW_OUTPUT_INFECTED_PKGS="$(_extract_infected_pkgs "$tmpout")"
@@ -852,23 +869,9 @@ run_action() {
         wait "$yad_pid" 2>/dev/null || yad_ret=$?
         exec 8>&-
 
-        # Save:0 — same picker/remember behavior as show_output()'s Save button.
+        # Save:0
         if [[ "$yad_ret" -eq 0 ]]; then
-            mkdir -p "$GUI_LOG_SAVE_DIR"
-            local suggested chosen
-            suggested="$GUI_LOG_SAVE_DIR/aur-check-$(date +%Y%m%d-%H%M%S).log"
-            chosen=$(yad --file --save --confirm-overwrite \
-                --title="Save Scan Log — Archcanary" \
-                --window-icon=security-high --center \
-                --filename="$suggested" 2>/dev/null) || chosen=""
-            if [[ -n "$chosen" ]]; then
-                cp "$tmpout" "$chosen"
-                GUI_LOG_SAVE_DIR="$(dirname "$chosen")"
-                _write_gui_env
-                yad --image=dialog-information --title="Archcanary" --window-icon=security-high --center \
-                    --text="Scan log saved to:\n<tt>${chosen}</tt>" \
-                    --button="OK:0" 2>/dev/null || true
-            fi
+            _save_scan_log "$tmpout"
         fi
 
         _update_status "$idx" "$scan_exit"
