@@ -2762,14 +2762,27 @@ check_pkginteg() {
     echo "  Verifying installed file checksums against pacman database..."
     echo "  (May take 30-60 seconds on large installs)"
 
-    local raw findings count
+    local raw findings count stderr_tmp
     # The "warning: <pkg>: <path> (SHA256 checksum mismatch)" lines this check
     # actually cares about go to stderr — only the "backup file: ..." (expected
-    # divergence) and per-package summary lines are on stdout. 2>/dev/null here
-    # discarded exactly the findings the grep -v "^backup file:" below is meant
-    # to keep, so this check could never surface a real mismatch. 2>&1 merges
-    # both streams; the filters below still correctly separate them.
-    raw=$(/usr/bin/pacman -Qkk 2>&1)
+    # divergence) and per-package summary lines are on stdout. 2>/dev/null used
+    # to discard exactly the findings the grep -v "^backup file:" below is meant
+    # to keep, so this check could never surface a real mismatch.
+    #
+    # Fix is NOT `2>&1` — stdout and stderr are buffered differently (stdout is
+    # block-buffered since it's not a TTY, stderr is unbuffered), so merging
+    # them into one command substitution interleaves writes unpredictably and
+    # can glue the tail of one stream's line onto the front of the other's
+    # mid-word (reported live: "backup file: libvirtwarning: libvirt: ..." and
+    # "rubwarning: shadow: ..." — real text from two different lines fused
+    # together with no newline between them). Capture stderr into a real file
+    # instead — same single pacman invocation, but the two streams never share
+    # a buffer, so each capture is clean before they're concatenated as text.
+    stderr_tmp=$(mktemp)
+    CLEANUP_FILES+=("$stderr_tmp")
+    raw=$(/usr/bin/pacman -Qkk 2>"$stderr_tmp")
+    raw+=$'\n'"$(cat "$stderr_tmp")"
+    rm -f "$stderr_tmp"
 
     findings=$(
         printf '%s\n' "$raw" \
