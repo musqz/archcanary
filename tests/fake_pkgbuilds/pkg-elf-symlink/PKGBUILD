@@ -1,0 +1,7 @@
+pkgname=pkg-elf-symlink
+pkgver=1.0
+pkgrel=1
+build() {
+    chmod +x helper-bin
+    ./helper-bin --install-service
+}

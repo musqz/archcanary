@@ -860,6 +860,45 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: expected REVIEW wording in summary, rc=$rc, out: $out"
     fi
+
+    # Sub-test H: ELF binary sitting directly next to PKGBUILD (committed to
+    # the package's own cache/git tree) → WARNING + inspect hint
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-elf" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: undocumented ELF binary in"* && \
+          "$out" == *"helper-bin"* && \
+          "$out" == *"inspect before building"* ]]; then
+        pass "pkgbuild_obfuscation: undocumented ELF binary next to PKGBUILD detected"
+    else
+        fail "pkgbuild_obfuscation: ELF-next-to-PKGBUILD not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test I: ELF binary under src/ (expected build-output location) →
+    # NOT flagged — regression guard against false positives on ordinary
+    # source downloads/build artifacts.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-elf-buildoutput" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* && "$out" != *"ELF"* ]]; then
+        pass "pkgbuild_obfuscation: ELF under src/ not flagged"
+    else
+        fail "pkgbuild_obfuscation: ELF under src/ incorrectly flagged, rc=$rc, out: $out"
+    fi
+
+    # Sub-test J: symlink (not a plain file) committed next to PKGBUILD,
+    # pointing at an ELF binary → still WARNING. Regression guard for a
+    # real gap found in code review: plain `find -type f` excludes symlinks
+    # (type l), so a symlinked ELF evaded Sub-test H's detection entirely
+    # until `find -L` was added.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-elf-symlink" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: undocumented ELF binary in"* && "$out" == *"helper-bin"* ]]; then
+        pass "pkgbuild_obfuscation: symlinked ELF binary next to PKGBUILD detected"
+    else
+        fail "pkgbuild_obfuscation: symlinked ELF binary not detected, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------

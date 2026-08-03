@@ -2174,6 +2174,38 @@ check_pkgbuild_caches() {
         done
     )
 
+    # --- Pattern 8: undocumented ELF binary committed directly to a
+    # package's cache/git tree (not build output under src/ or pkg/) ---
+    # A source-based PKGBUILD has no legitimate reason to ship a compiled
+    # binary in its own git-tracked directory — even -bin packages that
+    # install a vendor binary fetch it into src/ via source=() at build
+    # time, they don't commit it to the AUR git repo itself. -maxdepth 1
+    # relative to each PKGBUILD's own directory naturally excludes src/ and
+    # pkg/, which only exist as subdirectories after a build. -L follows
+    # symlinks before the -type test — a symlink to an ELF binary committed
+    # alongside PKGBUILD is the same undocumented-binary-execution pattern
+    # one level of indirection away, and plain -type f (no -L) misses it
+    # entirely since a symlink itself is type l, not f.
+    while IFS= read -r pkgbuild; do
+        local pdir
+        pdir="$(dirname "$pkgbuild")"
+        while IFS= read -r bin; do
+            local magic
+            IFS= read -r -n4 magic < "$bin" 2>/dev/null
+            if [[ "$magic" == $'\x7fELF' ]]; then
+                echo "  WARNING: undocumented ELF binary in $bin"
+                echo "    Source-based PKGBUILDs don't ship compiled binaries in their own git"
+                echo "    tree — inspect before building: file \"$bin\"; strings \"$bin\" | less"
+                found_count=2
+            fi
+        done < <(find -L "$pdir" -maxdepth 1 -type f 2>/dev/null)
+    done < <(
+        for dir in "${cache_dirs[@]}"; do
+            [[ -d "$dir" ]] || continue
+            find "$dir" -name "PKGBUILD" -type f 2>/dev/null
+        done
+    )
+
     if [[ $scanned -eq 0 ]]; then
         echo "  Skipped: no AUR helper cache directories found."
     elif [[ $found_count -eq 0 ]]; then

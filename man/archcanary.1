@@ -50,7 +50,12 @@ Scan the pnpm store, global installs, metadata cache, and dlx cache.
 Scan AUR helper caches for obfuscation patterns in PKGBUILD and
 .I .install
 files (base64 decode-to-shell, eval subshell, printf hex/octal,
-variable-split command reassembly).
+variable-split command reassembly), and for undocumented ELF binaries
+committed directly to a package's own cache/git tree (outside
+.I src/
+and
+.I pkg/
+build output).
 .TP
 .B \-\-check-bpftool
 Enumerate loaded eBPF programs, perf/kprobe attachments with owning PID
