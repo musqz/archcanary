@@ -2508,7 +2508,7 @@ check_autostart() {
                         echo "  WARNING: suspicious autostart entry: $desktop"
                         echo "    Exec=$exec_val (outside standard system path)"
                         echo "    If you recognize this app (e.g. an AppImage/Flatpak launcher or a"
-                        echo "    personal script), mark it known-good: archcanary --allowlist-add=autostart:$exec_val"
+                        echo "    personal script), mark it known-good: pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$exec_val"
                         found=2
                     fi
                 fi
@@ -2548,7 +2548,7 @@ check_autostart() {
                     echo "  WARNING: user service with unowned ExecStart binary: $svc"
                     echo "    ExecStart=$exec_bin (not tracked by pacman)"
                     echo "    If you recognize this (e.g. a package that ships its unit via /etc/skel),"
-                    echo "    mark it known-good: archcanary --allowlist-add=autostart:$exec_bin"
+                    echo "    mark it known-good: pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$exec_bin"
                     found=2
                 fi
             fi
