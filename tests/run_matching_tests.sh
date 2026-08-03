@@ -910,7 +910,27 @@ test_check_kmod() {
         fail "check_kmod: empty lsmod/dkms → expected clean, got: $out"
     fi
 
-    rm -f "$null_dkms" "$lsmod_evil" "$lsmod_empty"
+    # Sub-test C: DKMS module untracked by pacman, built for two kernels —
+    # WARNING + remediation hint (both allowlist and cleanup paths), shown
+    # once per module (not once per kernel entry).
+    local dkms_evil
+    dkms_evil=$(make_cmd_script "$(printf 'evil-driver/1.2.3, 6.18.41-1-lts, x86_64: installed\nevil-driver/1.2.3, 7.1.5-arch1-2, x86_64: installed\n')")
+
+    rc=0
+    out=$(LSMOD_CMD="$lsmod_empty" DKMS_CMD="$dkms_evil" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    local hint_count
+    hint_count=$(grep -c "pkexec /usr/lib/archcanary/root-helper --allowlist-add=dkms:evil-driver" <<< "$out")
+    if [[ $rc -eq 2 && "$out" == *"WARNING: DKMS module from untracked source: evil-driver/1.2.3"* && \
+          "$out" == *"pkexec /usr/lib/archcanary/root-helper --allowlist-add=dkms:evil-driver"* && \
+          "$out" == *"sudo dkms remove evil-driver/1.2.3 --all"* && \
+          "$hint_count" -eq 1 ]]; then
+        pass "check_kmod: untracked DKMS module → WARNING + both remediation paths, hint shown once"
+    else
+        fail "check_kmod: untracked DKMS module hint missing/wrong/duplicated, rc=$rc, hint_count=$hint_count, out: $out"
+    fi
+
+    rm -f "$null_dkms" "$lsmod_evil" "$lsmod_empty" "$dkms_evil"
 }
 
 # ---------------------------------------------------------------------------
