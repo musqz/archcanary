@@ -759,7 +759,8 @@ run_action() {
             --width=1000 --height=660 \
             --fontname="Monospace 10" \
             --wrap --tail --editable \
-            --button=Close:0 \
+            --button="Save:0" \
+            --button="Close:1" \
             < "$fifo" 2>/dev/null &
         local yad_pid=$!
         exec 8>"$fifo"
@@ -847,8 +848,29 @@ run_action() {
         # was still running, which closes the FIFO read end before we get here.
         printf '\n─── done ───\n' >&8 || true
 
-        wait "$yad_pid" 2>/dev/null || true
+        local yad_ret=0
+        wait "$yad_pid" 2>/dev/null || yad_ret=$?
         exec 8>&-
+
+        # Save:0 — same picker/remember behavior as show_output()'s Save button.
+        if [[ "$yad_ret" -eq 0 ]]; then
+            mkdir -p "$GUI_LOG_SAVE_DIR"
+            local suggested chosen
+            suggested="$GUI_LOG_SAVE_DIR/aur-check-$(date +%Y%m%d-%H%M%S).log"
+            chosen=$(yad --file --save --confirm-overwrite \
+                --title="Save Scan Log — Archcanary" \
+                --window-icon=security-high --center \
+                --filename="$suggested" 2>/dev/null) || chosen=""
+            if [[ -n "$chosen" ]]; then
+                cp "$tmpout" "$chosen"
+                GUI_LOG_SAVE_DIR="$(dirname "$chosen")"
+                _write_gui_env
+                yad --image=dialog-information --title="Archcanary" --window-icon=security-high --center \
+                    --text="Scan log saved to:\n<tt>${chosen}</tt>" \
+                    --button="OK:0" 2>/dev/null || true
+            fi
+        fi
+
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit" "$tmpout"; fi
         local _inf_pkgs="" _inf_allowlist_hint=""
