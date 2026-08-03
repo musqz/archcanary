@@ -2232,6 +2232,10 @@ check_pkgbuild_caches() {
         echo "  Remove the flagged cache dir(s) rather than building from them, then"
         echo "  re-fetch the PKGBUILD directly from the AUR and diff it against what's"
         echo "  flagged above before rebuilding."
+        echo
+        echo "  If this holds up, report it so others are protected too:"
+        echo "    archcanary: https://github.com/musqz/archcanary/issues/new?template=report-package.yml"
+        echo "    Arch AUR:   https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/"
     fi
     return $found_count
 }
