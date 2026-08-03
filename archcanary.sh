@@ -2667,17 +2667,31 @@ check_kmod() {
         local dkms_out
         dkms_out=$($dkms_cmd status 2>/dev/null) || dkms_out=""
         if [[ -n "$dkms_out" ]]; then
+            local -A _dkms_hint_shown=()
             while IFS= read -r entry; do
                 [[ -z "$entry" ]] && continue
-                local pkg_name
+                local pkg_name pkg_ver
                 # dkms status format: "name/version, kernel, arch: status"
                 pkg_name=$(awk -F'[/,]' '{print $1}' <<< "$entry" | xargs)
+                pkg_ver=$(awk -F'[/,]' '{print $2}' <<< "$entry" | xargs)
                 # Skip if pacman-tracked
                 pacman -Qi "$pkg_name" &>/dev/null 2>&1 && continue
                 if _allowlist_contains "$pkg_name" _dkms_allow; then
                     echo "  INFO: DKMS module allowlisted (not pacman-tracked): $entry"
                 else
                     echo "  WARNING: DKMS module from untracked source: $entry"
+                    # dkms status lists one entry per kernel a module is built
+                    # for, all sharing the same name/version — only show the
+                    # hint once per module instead of once per kernel.
+                    if [[ -z "${_dkms_hint_shown[$pkg_name/$pkg_ver]:-}" ]]; then
+                        echo "    Still using it (e.g. a proprietary driver never meant to be"
+                        echo "    pacman-tracked)? Mark it known-good:"
+                        echo "      pkexec /usr/lib/archcanary/root-helper --allowlist-add=dkms:$pkg_name"
+                        echo "    Leftover from a package you already removed? Clean up the"
+                        echo "    stale registration instead:"
+                        echo "      sudo dkms remove $pkg_name/$pkg_ver --all"
+                        _dkms_hint_shown["$pkg_name/$pkg_ver"]=1
+                    fi
                     found=2
                 fi
             done <<< "$dkms_out"
