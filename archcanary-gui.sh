@@ -86,8 +86,10 @@ grep -qiE '^AUR_AUDIT_ENABLE=false' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanar
 # Remembered scan-log save directory (show_output()'s Save button) — same
 # file, same "display cache, updated in place after Save" rule as above.
 GUI_LOG_SAVE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/archcanary"
-_remembered_dir="$(grep -oP '^GUI_LOG_SAVE_DIR=\K.*' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env" 2>/dev/null | tail -1)"
-[[ -n "$_remembered_dir" && -d "$_remembered_dir" ]] && GUI_LOG_SAVE_DIR="$_remembered_dir"
+_remembered_dir="$(grep -oP '^GUI_LOG_SAVE_DIR=\K.*' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env" 2>/dev/null | tail -1)" || true
+if [[ -n "$_remembered_dir" && -d "$_remembered_dir" ]]; then
+    GUI_LOG_SAVE_DIR="$_remembered_dir"
+fi
 unset _remembered_dir
 
 # Rewrites ~/.config/archcanary/env from the two known in-memory settings
