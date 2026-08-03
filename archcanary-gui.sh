@@ -83,6 +83,29 @@ REFRESHED=false
 AUR_AUDIT_ENABLE_GUI=true
 grep -qiE '^AUR_AUDIT_ENABLE=false' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env" 2>/dev/null && AUR_AUDIT_ENABLE_GUI=false
 
+# Remembered scan-log save directory (show_output()'s Save button) — same
+# file, same "display cache, updated in place after Save" rule as above.
+GUI_LOG_SAVE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/archcanary"
+_remembered_dir="$(grep -oP '^GUI_LOG_SAVE_DIR=\K.*' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env" 2>/dev/null | tail -1)" || true
+if [[ -n "$_remembered_dir" && -d "$_remembered_dir" ]]; then
+    GUI_LOG_SAVE_DIR="$_remembered_dir"
+fi
+unset _remembered_dir
+
+# Rewrites ~/.config/archcanary/env from the two known in-memory settings
+# (AUR_AUDIT_ENABLE_GUI, GUI_LOG_SAVE_DIR) — shared by scan_settings() and
+# show_output()'s Save button so neither one clobbers the other's line.
+# grep-only file, never sourced — see the security note above scan_settings().
+_write_gui_env() {
+    local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
+    mkdir -p "$cfg_dir"
+    {
+        printf '# archcanary settings — managed by archcanary-gui\n'
+        $AUR_AUDIT_ENABLE_GUI || printf 'AUR_AUDIT_ENABLE=false\n'
+        printf 'GUI_LOG_SAVE_DIR=%s\n' "$GUI_LOG_SAVE_DIR"
+    } > "$cfg_dir/env"
+}
+
 # Action data — order here is the canonical index used by run_action
 LABELS=(
     "Full scan"                 # 0  root
@@ -458,6 +481,40 @@ Source: <a href=\"${repo}\">${repo}</a>" \
         2>/dev/null || true
 }
 
+# Shared Save-button flow for show_output() and run_action()'s pkexec branch
+# — file picker defaulting to the remembered directory, persists the chosen
+# directory for next time. $1 = path to the completed scan's temp output
+# file. mkdir/cp are guarded (not bare statements) — under this script's
+# set -euo pipefail, an unguarded failing command anywhere outside a
+# condition kills the whole GUI silently (see commit f04cf99).
+_save_scan_log() {
+    local tmpout="$1"
+    if ! mkdir -p "$GUI_LOG_SAVE_DIR" 2>/dev/null; then
+        yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            --text="Could not create save directory:\n<tt>${GUI_LOG_SAVE_DIR}</tt>" \
+            --width=420 --button="OK:0" 2>/dev/null || true
+        return
+    fi
+    local suggested chosen
+    suggested="$GUI_LOG_SAVE_DIR/aur-check-$(date +%Y%m%d-%H%M%S).log"
+    chosen=$(yad --file --save --confirm-overwrite \
+        --title="Save Scan Log — Archcanary" \
+        --window-icon=security-high --center \
+        --filename="$suggested" 2>/dev/null) || chosen=""
+    [[ -z "$chosen" ]] && return
+    if ! cp "$tmpout" "$chosen" 2>/dev/null; then
+        yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            --text="Could not save to:\n<tt>${chosen}</tt>" \
+            --width=420 --button="OK:0" 2>/dev/null || true
+        return
+    fi
+    GUI_LOG_SAVE_DIR="$(dirname "$chosen")"
+    _write_gui_env
+    yad --image=dialog-information --title="Archcanary" --window-icon=security-high --center \
+        --text="Scan log saved to:\n<tt>${chosen}</tt>" \
+        --button="OK:0" 2>/dev/null || true
+}
+
 # Run a command, stream output live to a text-info window, return its exit code.
 show_output() {
     local title="$1" scan_exit=0
@@ -473,7 +530,8 @@ show_output() {
         --width=1000 --height=660 \
         --fontname="Monospace 10" \
         --wrap --tail --editable \
-        --button=Close:0 \
+        --button="Save:0" \
+        --button="Close:1" \
         < "$fifo" 2>/dev/null &
     yad_pid=$!
     exec 8>"$fifo"
@@ -489,8 +547,15 @@ show_output() {
     wait "$tail_pid" 2>/dev/null || true
     printf '\n─── done ───\n' >&8 || true
 
-    wait "$yad_pid" 2>/dev/null || true
+    local yad_ret=0
+    wait "$yad_pid" 2>/dev/null || yad_ret=$?
     exec 8>&-
+
+    # Save:0
+    if [[ "$yad_ret" -eq 0 ]]; then
+        _save_scan_log "$tmpout"
+    fi
+
     _SHOW_OUTPUT_INFECTED_PKGS="$(_extract_infected_pkgs "$tmpout")"
     _SHOW_OUTPUT_ALLOWLIST_HINT="$(_allowlistable_finding_present "$tmpout")"
     rm -f "$tmpout"
@@ -565,11 +630,8 @@ scan_settings() {
         --button="Save:0" --button="Cancel:1" \
         2>/dev/null) || return 0
 
-    {
-        printf '# archcanary settings — managed by archcanary-gui\n'
-        [[ "$result" == FALSE* ]] && printf 'AUR_AUDIT_ENABLE=false\n'
-    } > "$env_file"
     [[ "$result" == FALSE* ]] && AUR_AUDIT_ENABLE_GUI=false || AUR_AUDIT_ENABLE_GUI=true
+    _write_gui_env
 
     yad --image=dialog-information \
         --title="Archcanary" \
@@ -714,7 +776,8 @@ run_action() {
             --width=1000 --height=660 \
             --fontname="Monospace 10" \
             --wrap --tail --editable \
-            --button=Close:0 \
+            --button="Save:0" \
+            --button="Close:1" \
             < "$fifo" 2>/dev/null &
         local yad_pid=$!
         exec 8>"$fifo"
@@ -802,8 +865,15 @@ run_action() {
         # was still running, which closes the FIFO read end before we get here.
         printf '\n─── done ───\n' >&8 || true
 
-        wait "$yad_pid" 2>/dev/null || true
+        local yad_ret=0
+        wait "$yad_pid" 2>/dev/null || yad_ret=$?
         exec 8>&-
+
+        # Save:0
+        if [[ "$yad_ret" -eq 0 ]]; then
+            _save_scan_log "$tmpout"
+        fi
+
         _update_status "$idx" "$scan_exit"
         if [[ "$idx" -eq 0 ]]; then _propagate_full_scan "$scan_exit" "$tmpout"; fi
         local _inf_pkgs="" _inf_allowlist_hint=""

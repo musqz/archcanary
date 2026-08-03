@@ -320,9 +320,15 @@ _aur_audit_set_cli() {
     local enable="$1" f
     f="$(_aur_audit_env_path)"
     mkdir -p "$(dirname "$f")"
+    # Preserve GUI_LOG_SAVE_DIR (archcanary-gui.sh's remembered scan-log save
+    # directory) — this file has two writers, and rebuilding it from only
+    # this function's own known key would silently wipe the other one out.
+    local gui_log_dir
+    gui_log_dir="$(grep -oP '^GUI_LOG_SAVE_DIR=\K.*' "$f" 2>/dev/null | tail -1)" || true
     {
         printf '# archcanary settings — managed by archcanary-gui\n'
         [[ "$enable" == false ]] && printf 'AUR_AUDIT_ENABLE=false\n'
+        [[ -n "$gui_log_dir" ]] && printf 'GUI_LOG_SAVE_DIR=%s\n' "$gui_log_dir"
     } > "$f"
     if [[ "$enable" == false ]]; then
         echo "aur-audit: disabled"
