@@ -809,8 +809,8 @@ test_pkgbuild_obfuscation() {
     # Sub-test A2: cleanup hint present, exactly once (it's printed once after
     # the whole scan loop, not per-pattern-match or per-file)
     local hint_count
-    hint_count=$(grep -c "Remove the flagged cache dir(s)" <<< "$out")
-    if [[ "$out" == *"re-fetch the PKGBUILD directly from the AUR"* && "$hint_count" -eq 1 ]]; then
+    hint_count=$(grep -c "diff what's flagged above against a fresh clone" <<< "$out")
+    if [[ "$out" == *"don't delete this cache first"* && "$hint_count" -eq 1 ]]; then
         pass "pkgbuild_obfuscation: cleanup hint present exactly once"
     else
         fail "pkgbuild_obfuscation: cleanup hint missing/duplicated, hint_count=$hint_count, out: $out"
@@ -885,10 +885,23 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: expected REVIEW wording in summary, rc=$rc, out: $out"
     fi
 
-    # Sub-test H: ELF binary sitting directly next to PKGBUILD (committed to
-    # the package's own cache/git tree) → WARNING + inspect hint
+    # Sub-tests H/J/K need a real git repo to exercise the git-tracked check
+    # (see check_pkgbuild_caches) — can't commit a nested .git into this repo's
+    # own fixtures (git would store it as a gitlink, not real files, so it
+    # wouldn't survive a fresh clone elsewhere). Build one on the fly instead,
+    # reusing the existing static fixture content.
+    local gitcfg=(-c user.email=test@test -c user.name=test)
+
+    # Sub-test H: ELF binary sitting directly next to PKGBUILD, committed to
+    # the package's own git tree → WARNING + inspect hint
+    local elf_git_dir
+    elf_git_dir=$(mktemp -d)
+    cp -a "$fixtures/pkg-elf/." "$elf_git_dir/"
+    git -C "$elf_git_dir" init -q
+    git -C "$elf_git_dir" "${gitcfg[@]}" add -A
+    git -C "$elf_git_dir" "${gitcfg[@]}" commit -q -m init
     rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-elf" \
+    out=$(PKGBUILD_CACHE_DIRS="$elf_git_dir" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"WARNING: undocumented ELF binary in"* && \
           "$out" == *"helper-bin"* && \
@@ -897,10 +910,12 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: ELF-next-to-PKGBUILD not detected, rc=$rc, out: $out"
     fi
+    rm -rf "$elf_git_dir"
 
     # Sub-test I: ELF binary under src/ (expected build-output location) →
     # NOT flagged — regression guard against false positives on ordinary
-    # source downloads/build artifacts.
+    # source downloads/build artifacts. No git needed: excluded structurally
+    # by -maxdepth 1 before the git-tracked check ever runs.
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-elf-buildoutput" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
@@ -910,19 +925,51 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: ELF under src/ incorrectly flagged, rc=$rc, out: $out"
     fi
 
-    # Sub-test J: symlink (not a plain file) committed next to PKGBUILD,
-    # pointing at an ELF binary → still WARNING. Regression guard for a
-    # real gap found in code review: plain `find -type f` excludes symlinks
-    # (type l), so a symlinked ELF evaded Sub-test H's detection entirely
-    # until `find -L` was added.
+    # Sub-test J: symlink (not a plain file) committed to git next to
+    # PKGBUILD, pointing at an ELF binary → still WARNING. Regression guard
+    # for a real gap found in code review: plain `find -type f` excludes
+    # symlinks (type l), so a symlinked ELF evaded Sub-test H's detection
+    # entirely until `find -L` was added.
+    local symlink_git_dir
+    symlink_git_dir=$(mktemp -d)
+    cp -a "$fixtures/pkg-elf-symlink/." "$symlink_git_dir/"
+    git -C "$symlink_git_dir" init -q
+    git -C "$symlink_git_dir" "${gitcfg[@]}" add -A
+    git -C "$symlink_git_dir" "${gitcfg[@]}" commit -q -m init
     rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-elf-symlink" \
+    out=$(PKGBUILD_CACHE_DIRS="$symlink_git_dir" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"WARNING: undocumented ELF binary in"* && "$out" == *"helper-bin"* ]]; then
         pass "pkgbuild_obfuscation: symlinked ELF binary next to PKGBUILD detected"
     else
         fail "pkgbuild_obfuscation: symlinked ELF binary not detected, rc=$rc, out: $out"
     fi
+    rm -rf "$symlink_git_dir"
+
+    # Sub-test K: ELF binary present next to PKGBUILD but NOT committed to
+    # git (only PKGBUILD/.SRCINFO tracked) → NOT flagged. Regression guard
+    # for a real false positive reported live on pistol-bin/coolercontrol-bin:
+    # both are legitimate -bin packages whose source_$CARCH=() is a raw
+    # binary URL — makepkg downloads it straight into this same top-level
+    # dir as a normal part of building (confirmed by reproducing an actual
+    # `yay`-style build of pistol-bin: `git status` shows the binary as `??`,
+    # untracked), completely unrelated to what the maintainer committed.
+    local untracked_git_dir
+    untracked_git_dir=$(mktemp -d)
+    cp -a "$fixtures/pkg-elf/PKGBUILD" "$untracked_git_dir/"
+    git -C "$untracked_git_dir" init -q
+    git -C "$untracked_git_dir" "${gitcfg[@]}" add PKGBUILD
+    git -C "$untracked_git_dir" "${gitcfg[@]}" commit -q -m init
+    cp -a "$fixtures/pkg-elf/helper-bin" "$untracked_git_dir/"
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$untracked_git_dir" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* && "$out" != *"ELF"* ]]; then
+        pass "pkgbuild_obfuscation: untracked ELF (makepkg source download, not committed) not flagged"
+    else
+        fail "pkgbuild_obfuscation: untracked ELF incorrectly flagged, rc=$rc, out: $out"
+    fi
+    rm -rf "$untracked_git_dir"
 }
 
 # ---------------------------------------------------------------------------

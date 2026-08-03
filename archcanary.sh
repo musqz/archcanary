@@ -2210,10 +2210,25 @@ check_pkgbuild_caches() {
             local magic
             IFS= read -r -n4 magic < "$bin" 2>/dev/null
             if [[ "$magic" == $'\x7fELF' ]]; then
-                echo "  WARNING: undocumented ELF binary in $bin"
-                echo "    Source-based PKGBUILDs don't ship compiled binaries in their own git"
-                echo "    tree — inspect before building: file \"$bin\"; strings \"$bin\" | less"
-                found_count=2
+                # A -bin package's source=()/source_$CARCH=() often points at
+                # a raw binary URL — makepkg downloads it straight into this
+                # same top-level dir (src/ only gets a symlink back to it) as
+                # a normal, expected part of building, indistinguishable by
+                # plain file presence from something the maintainer actually
+                # committed. Only flag it if it's tracked in the package's own
+                # AUR git repo — genuinely part of the git tree, not a local
+                # build artifact (reported live: false positive on pistol-bin
+                # and coolercontrol-bin, both legitimate long-standing -bin
+                # packages). No git repo at all (non-git cache layout) is
+                # treated the same as untracked — nothing to compare against,
+                # so err toward not flagging rather than a guaranteed false
+                # positive on every raw-binary -bin package.
+                if git -C "$pdir" ls-files --error-unmatch -- "$(basename "$bin")" &>/dev/null; then
+                    echo "  WARNING: undocumented ELF binary in $bin"
+                    echo "    Source-based PKGBUILDs don't ship compiled binaries in their own git"
+                    echo "    tree — inspect before building: file \"$bin\"; strings \"$bin\" | less"
+                    found_count=2
+                fi
             fi
         done < <(find -L "$pdir" -maxdepth 1 -type f 2>/dev/null)
     done < <(
@@ -2229,9 +2244,10 @@ check_pkgbuild_caches() {
         echo "  Clean: no malicious commands found in $scanned PKGBUILD/install file(s)."
     else
         echo
-        echo "  Remove the flagged cache dir(s) rather than building from them, then"
-        echo "  re-fetch the PKGBUILD directly from the AUR and diff it against what's"
-        echo "  flagged above before rebuilding."
+        echo "  Before rebuilding: diff what's flagged above against a fresh clone of"
+        echo "  the same AUR package — don't delete this cache first, you need it to"
+        echo "  compare against. Still there upstream? Don't build it. Already gone"
+        echo "  upstream? Your local cache was just stale — safe to delete and re-fetch."
         echo
         echo "  If this holds up, report it so others are protected too:"
         echo "    archcanary: https://github.com/musqz/archcanary/issues/new?template=report-package.yml"
