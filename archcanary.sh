@@ -1595,6 +1595,14 @@ check_current() {
 # ---------------------------------------------------------------------------
 check_logs() {
     local log_files=()
+    # Per-source cutoff dates (YYYY-MM-DD) below which a name match predates
+    # any known compromise for that list — see the tag-selection logic
+    # further down for how these are used. Only set where SOURCES.md
+    # documents an actual campaign start date; Community Reports (no fixed
+    # scope/end date) and the aur-audit black/red feed (live, continuously
+    # updated, no per-entry historical date) intentionally have none.
+    local campaign_cutoff="2026-06-09"  # earliest documented malicious commit
+    local chaos_cutoff="2025-07-22"     # CHAOS RAT campaign discovery date
 
     # shellcheck disable=SC2086
     for file in $PACMAN_LOG_GLOB; do
@@ -1645,20 +1653,42 @@ check_logs() {
             [[ -v pkg_map[$pkg] ]] || continue
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
 
-            local tag="LOG_HIT"
-            [[ -v CURRENTLY_INSTALLED_MAP[$pkg] ]] || tag="LOG_HIST"
-
+            # Select this match's source annotation and, where a real
+            # campaign start date exists for that source, its cutoff --
+            # cutoff empty means "never downgrade" (no date to compare
+            # against). Russian Spam has no lookup array of its own (merged
+            # into INFECTED_PKGS untagged) and shares the base list's
+            # (earlier, safer) cutoff via the else branch below.
+            local tag cutoff="" annotation=""
             if [[ -v CHAOS_LOOKUP[$pkg] ]]; then
-                echo "$tag: $pkg ($action on $datetime_str) [CHAOS RAT campaign, 2025-07]"
+                cutoff="$chaos_cutoff"
+                annotation=" [CHAOS RAT campaign, 2025-07]"
             elif [[ -v AUR_AUDIT_BLACK_LOOKUP[$pkg] ]]; then
-                echo "$tag: $pkg ($action on $datetime_str) [aur-audit: black]"
+                annotation=" [aur-audit: black]"
             elif [[ -v AUR_AUDIT_RED_LOOKUP[$pkg] ]]; then
-                echo "$tag: $pkg ($action on $datetime_str) [aur-audit: red]"
+                annotation=" [aur-audit: red]"
             elif [[ -v COMMUNITY_REPORTS_LOOKUP[$pkg] ]]; then
-                echo "$tag: $pkg ($action on $datetime_str) [community report]"
+                annotation=" [community report]"
             else
-                echo "$tag: $pkg ($action on $datetime_str)"
+                cutoff="$campaign_cutoff"
             fi
+
+            # A match predating its source's cutoff is treated as
+            # essentially unrelated regardless of current install state --
+            # takes priority over the installed/historical split below. If
+            # a still-installed package's only logged actions predate the
+            # cutoff, a rebuild/upgrade always produces a new pacman.log
+            # line, so nothing on this system ever pulled a compromised
+            # version; that's just as safe to downgrade as a removed one.
+            if [[ -n "$cutoff" && "$date_str" < "$cutoff" ]]; then
+                tag="LOG_OLD"
+            elif [[ -v CURRENTLY_INSTALLED_MAP[$pkg] ]]; then
+                tag="LOG_HIT"
+            else
+                tag="LOG_HIST"
+            fi
+
+            echo "$tag: $pkg ($action on $datetime_str)$annotation"
         done < <(read_compressed_file "$file") || true
 
         log_info "[$idx/$total] Done with $(basename "$file")"
@@ -3370,14 +3400,20 @@ if ! $FOCUSED_MODE; then
 
     echo "--- [2] Historical pacman logs ---"
     _log_ret=0
-    if [[ -f /var/log/pacman.log ]]; then
+    _pacman_log_found=false
+    # shellcheck disable=SC2086
+    for _plf in $PACMAN_LOG_GLOB; do [[ -e "$_plf" ]] && _pacman_log_found=true && break; done
+    unset _plf
+    if $_pacman_log_found; then
         LOGS_TMP=$(mktemp)
         CLEANUP_FILES+=("$LOGS_TMP")
         check_logs 2>&1 | tee "$LOGS_TMP" || true
         _has_current_hit=false
         _has_hist_hit=false
+        _has_old_hit=false
         grep -q '^LOG_HIT:' "$LOGS_TMP" 2>/dev/null && _has_current_hit=true
         grep -q '^LOG_HIST:' "$LOGS_TMP" 2>/dev/null && _has_hist_hit=true
+        grep -q '^LOG_OLD:' "$LOGS_TMP" 2>/dev/null && _has_old_hit=true
 
         if $_has_current_hit; then
             echo "  WARNING: currently-installed package(s) with a matching log entry"
@@ -3398,10 +3434,16 @@ if ! $FOCUSED_MODE; then
             [[ 1 -gt $EXIT_CODE ]] && EXIT_CODE=1
             [[ $_log_ret -lt 1 ]] && _log_ret=1
         fi
-        if ! $_has_current_hit && ! $_has_hist_hit; then
+        if $_has_old_hit; then
+            echo "  NOTE: log match(es) predating the known compromise window for that"
+            echo "  list (the name later became malicious, but this specific"
+            echo "  install/upgrade happened before that) — almost certainly unrelated:"
+            grep '^LOG_OLD:' "$LOGS_TMP" | sed 's/^LOG_OLD: /  - /'
+        fi
+        if ! $_has_current_hit && ! $_has_hist_hit && ! $_has_old_hit; then
             echo "  Clean: no historical log matches found."
         fi
-        unset _has_current_hit _has_hist_hit
+        unset _has_current_hit _has_hist_hit _has_old_hit
         rm -f "$LOGS_TMP"
     else
         echo "  Skipped: /var/log/pacman.log not found."
