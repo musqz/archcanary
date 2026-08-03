@@ -1438,6 +1438,110 @@ test_allowlist_cli() {
 }
 
 # ---------------------------------------------------------------------------
+# check_logs — per-source cutoff dates against known compromise windows.
+# Regression coverage for a real report: python-future/clang15 (2023-2024
+# installs) were flagged identically to a genuine recent match, even though
+# the malicious-AUR campaign that put those names on the list didn't start
+# until 2026-06. check_current's `pacman -Qmq` has no command override, so
+# these fixture package names are only ever exercised as "not currently
+# installed" (LOG_HIST/LOG_OLD) here — the currently-installed LOG_HIT
+# branch is pre-existing, untouched-by-this-fix behavior with no override
+# mechanism available today.
+# ---------------------------------------------------------------------------
+test_check_logs() {
+    local tmpdir log_file pkglist chaoslist out rc
+
+    tmpdir=$(mktemp -d)
+    log_file="$tmpdir/pacman.log"
+    pkglist="$tmpdir/package_list.txt"
+    chaoslist="$tmpdir/chaos_rat.txt"
+    printf 'zzz-test-old-pkg\nzzz-test-new-pkg\n' > "$pkglist"
+    printf 'zzz-test-chaos-old\nzzz-test-chaos-new\n' > "$chaoslist"
+
+    cat > "$log_file" <<'EOF'
+[2026-06-01T10:00:00-0600] [ALPM] installed zzz-test-old-pkg (1.0-1)
+[2026-07-01T10:00:00-0600] [ALPM] installed zzz-test-new-pkg (1.0-1)
+[2025-01-01T10:00:00-0600] [ALPM] installed zzz-test-chaos-old (1.0-1)
+[2025-12-01T10:00:00-0600] [ALPM] installed zzz-test-chaos-new (1.0-1)
+[1999-01-01T10:00:00-0600] [ALPM] installed zzz-test-community-ancient (1.0-1)
+EOF
+
+    local base_args=(
+        --package-list="$pkglist"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --chaos-rat-list="$chaoslist"
+        --no-notify
+    )
+
+    rc=0
+    out=$(PACMAN_LOG_GLOB="$log_file" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+
+    # A: base-list entry before the campaign cutoff (2026-06-09) -> LOG_OLD
+    if [[ "$out" == *"LOG_OLD: zzz-test-old-pkg"* ]]; then
+        pass "check_logs: pre-cutoff base-list entry tagged LOG_OLD"
+    else
+        fail "check_logs: pre-cutoff base-list entry not tagged LOG_OLD, out: $out"
+    fi
+
+    # B: base-list entry after the campaign cutoff -> LOG_HIST (unchanged
+    # existing behavior), confirming the boundary works both directions
+    if [[ "$out" == *"LOG_HIST: zzz-test-new-pkg"* && "$out" != *"LOG_OLD: zzz-test-new-pkg"* ]]; then
+        pass "check_logs: post-cutoff base-list entry still LOG_HIST"
+    else
+        fail "check_logs: post-cutoff base-list entry wrongly tagged, out: $out"
+    fi
+
+    # C: CHAOS RAT entry before ITS OWN cutoff (2025-07-22) -> LOG_OLD
+    if [[ "$out" == *"LOG_OLD: zzz-test-chaos-old"* ]]; then
+        pass "check_logs: pre-cutoff CHAOS RAT entry tagged LOG_OLD"
+    else
+        fail "check_logs: pre-cutoff CHAOS RAT entry not tagged LOG_OLD, out: $out"
+    fi
+
+    # D: CHAOS RAT entry after its own (earlier) cutoff but still well
+    # before the base list's -> LOG_HIST, not LOG_OLD. Proves each source
+    # compares against its own cutoff, not one shared global date -- a
+    # base-list entry at this same date (2025-12-01) would be LOG_OLD.
+    if [[ "$out" == *"LOG_HIST: zzz-test-chaos-new"* && "$out" != *"LOG_OLD: zzz-test-chaos-new"* ]]; then
+        pass "check_logs: CHAOS RAT cutoff applied independently of base-list cutoff"
+    else
+        fail "check_logs: CHAOS RAT entry used the wrong cutoff, out: $out"
+    fi
+
+    # E: a source with no documented cutoff (Community Reports) is never
+    # downgraded to LOG_OLD, no matter how old the date is
+    rc=0
+    printf 'zzz-test-community-ancient\n' > "$tmpdir/community_reports.txt"
+    out=$(PACMAN_LOG_GLOB="$log_file" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"LOG_HIST: zzz-test-community-ancient"*"[community report]"* && \
+          "$out" != *"LOG_OLD: zzz-test-community-ancient"* ]]; then
+        pass "check_logs: source with no documented cutoff (community report) never downgraded"
+    else
+        fail "check_logs: community-report entry wrongly downgraded to LOG_OLD, out: $out"
+    fi
+
+    # F: LOG_OLD is exit-code-neutral -- a scan with only pre-cutoff matches
+    # (no LOG_HIT/LOG_HIST) still exits 0 and reports clean, unlike LOG_HIST
+    local only_old_log="$tmpdir/pacman-old-only.log"
+    printf '[2026-06-01T10:00:00-0600] [ALPM] installed zzz-test-old-pkg (1.0-1)\n' > "$only_old_log"
+    rc=0
+    out=$(PACMAN_LOG_GLOB="$only_old_log" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" >/dev/null 2>&1) || rc=$?
+    if [[ $rc -eq 0 ]]; then
+        pass "check_logs: LOG_OLD-only scan is exit-code-neutral (exit 0)"
+    else
+        fail "check_logs: LOG_OLD-only scan should exit 0, got rc=$rc"
+    fi
+
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -1503,6 +1607,9 @@ test_doctor_stale_completion
 
 $VERBOSE && msg "--- Test 19: doctor stale yay init.lua detection ---"
 test_doctor_stale_yay_init
+
+$VERBOSE && msg "--- Test 20: check_logs pre-campaign date correlation ---"
+test_check_logs
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
