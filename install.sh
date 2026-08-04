@@ -101,6 +101,22 @@ if $UNINSTALL; then
         echo "  kept:    $CONFIG_DIR (user config — remove manually if desired)"
     fi
 
+    # Remove archcanary's PreBuildCommand hook lines from paru.conf, if
+    # present — runs regardless of whether paru is still installed, since
+    # the config edit should be cleaned up either way. Only the marker
+    # comment line and the PreBuildCommand line right after it are removed;
+    # the [bin] header and any other content in the file are left alone —
+    # we can't prove the section has no unrelated keys around ours, and
+    # removing the header would silently reassign those to whatever section
+    # precedes it.
+    PARU_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/paru/paru.conf"
+    _paru_marker='archcanary PreBuildCommand hook'
+    if grep -qF -- "$_paru_marker" "$PARU_CONF" 2>/dev/null; then
+        _paru_ln=$(grep -nF -- "$_paru_marker" "$PARU_CONF" | head -1 | cut -d: -f1)
+        sed -i "${_paru_ln},$((_paru_ln + 1))d" "$PARU_CONF"
+        echo "  removed: archcanary PreBuildCommand hook from $PARU_CONF"
+    fi
+
     if $SYSTEM; then
         echo
         echo "Removing system components (requires root)..."
@@ -231,6 +247,25 @@ if [[ ! -f "$YAY_CONFIG_DIR/init.lua" ]]; then
     echo "  seeded:    $YAY_CONFIG_DIR/init.lua"
 else
     echo "  kept:      $YAY_CONFIG_DIR/init.lua (already exists)"
+fi
+
+# Seed paru's PreBuildCommand hook — only when paru is actually installed
+# (unlike yay's init.lua above, paru.conf may already exist with the user's
+# own unrelated settings, so we don't create one out of nowhere for a tool
+# that isn't in use). Never touches an existing PreBuildCommand line, ours
+# or the user's own, at any version — same "never overwrite" rule as yay's
+# init.lua.
+if command -v paru >/dev/null 2>&1; then
+    PARU_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/paru"
+    PARU_CONF="$PARU_CONFIG_DIR/paru.conf"
+    mkdir -p "$PARU_CONFIG_DIR"
+    if [[ -f "$PARU_CONF" ]] && grep -qE '^[[:space:]]*PreBuildCommand[[:space:]]*=' "$PARU_CONF" 2>/dev/null; then
+        echo "  kept:      $PARU_CONF (PreBuildCommand already set — see docs/my-setup.md, \"paru integration\" to update by hand)"
+    else
+        [[ -s "$PARU_CONF" ]] && printf '\n' >> "$PARU_CONF"
+        cat "$REPO_DIR/configs/paru-hook.conf" >> "$PARU_CONF"
+        echo "  seeded:    $PARU_CONF (PreBuildCommand hook appended)"
+    fi
 fi
 
 # The DKMS allowlist is a single system-wide file at /etc/archcanary/

@@ -209,14 +209,14 @@ enables color only when stdout is a terminal.
 .TP
 .B \-\-doctor
 Report the install and configuration status of every stack element
-(binary dependencies, systemd units, traur, yay hooks) and exit.
+(binary dependencies, systemd units, traur, yay/paru hooks) and exit.
 .TP
 \fB\-\-doctor\fR=\fISECTION\fR[,\fISECTION\fR...]
 Check only the named section(s) with extra per-item detail.
 Sections:
 .BR platform ", " deps ", " user ", " system ", " systemd ", " external .
 Tool names
-.RB ( traur ", " yad \&...)
+.RB ( traur ", " paru ", " yad \&...)
 are also accepted.
 .TP
 .B \-\-version ", " \-V
