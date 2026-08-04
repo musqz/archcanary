@@ -158,7 +158,13 @@ default to.
 A real 2025 incident used exactly this: a fake `google-chrome-stable` AUR
 package shipped an `.install` scriptlet that ran a Python command to download
 and execute malware *every single time Chrome launched* — not at build time at
-all, which is part of why it went unnoticed for as long as it did.
+all, so a review habit that only reads `build()`/`package()` would miss it
+entirely. It was still caught fast in practice (reported and removed within
+hours) — but that came from someone noticing odd behavior *after* installing
+it and reporting it on Reddit, not from anyone reading the `.install` file
+first. The point isn't that this technique is slow to get caught; it's that
+catching it this way depends on someone else noticing after the fact, which
+isn't something you want to rely on for your own system.
 
 **If a package ships an `.install` file, read it with the same scrutiny as
 `build()`.** It's not an afterthought.
