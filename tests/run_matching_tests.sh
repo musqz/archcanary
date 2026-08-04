@@ -1584,6 +1584,38 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# test_color_flag_validation — regression guard: --color used to silently
+# accept any value (falling through the case statement to colorless output)
+# instead of erroring like --format already does. Reported live: --color=
+# a hex code like #CAD451 produced no error, just silently disabled color.
+# ---------------------------------------------------------------------------
+test_color_flag_validation() {
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --no-notify --no-summary
+    )
+    local out rc=0
+
+    out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --color='#CAD451' 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"Error: --color must be 'auto', 'always', or 'never'"*"#CAD451"* ]]; then
+        pass "color_flag: invalid value rejected with exit 1 and clear error"
+    else
+        fail "color_flag: expected rejection of invalid value, rc=$rc, out: $out"
+    fi
+
+    for v in auto always never; do
+        rc=0
+        out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --color="$v" 2>&1) || rc=$?
+        if [[ "$out" != *"Error: --color must be"* ]]; then
+            pass "color_flag: valid value '$v' accepted"
+        else
+            fail "color_flag: valid value '$v' incorrectly rejected, out: $out"
+        fi
+    done
+}
+
+# ---------------------------------------------------------------------------
 # _allowlist_cli value validation — regression coverage for the bug found
 # 2026-08-02: the value regex required the first char to be alphanumeric
 # and never allowed '/', so a real full-path autostart value (as required by
@@ -1829,6 +1861,9 @@ test_doctor_stale_paru_hook
 
 $VERBOSE && msg "--- Test 22: install.sh paru.conf seed/uninstall logic ---"
 test_install_paru_conf
+
+$VERBOSE && msg "--- Test 23: --color flag validation ---"
+test_color_flag_validation
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
