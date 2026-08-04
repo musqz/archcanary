@@ -1168,9 +1168,19 @@ COMMUNITY_REPORTS_PKGS=()
 
 AUR_AUDIT_BLACK_LIST="${AUR_AUDIT_BLACK_LIST:-$AUR_CONFIG_DIR/aur_audit_black.txt}"
 AUR_AUDIT_BLACK_PKGS=()
+# Companion file: "pkgname YYYY-MM-DD" per line, the flagged version's own AUR
+# publish date (pubDateTs from the API) — lets check_logs tell "this pacman.log
+# entry predates the version that got flagged" from "it's the same or a later
+# one". Package-name-only aur_audit_black.txt/red.txt above are untouched by
+# this — configs/yay-init.lua's Lua hook reads those directly and must keep
+# seeing one bare name per line.
+AUR_AUDIT_BLACK_DATES_LIST="${AUR_AUDIT_BLACK_DATES_LIST:-$AUR_CONFIG_DIR/aur_audit_black_dates.txt}"
+AUR_AUDIT_BLACK_DATE_LINES=()
 
 AUR_AUDIT_RED_LIST="${AUR_AUDIT_RED_LIST:-$AUR_CONFIG_DIR/aur_audit_red.txt}"
 AUR_AUDIT_RED_PKGS=()
+AUR_AUDIT_RED_DATES_LIST="${AUR_AUDIT_RED_DATES_LIST:-$AUR_CONFIG_DIR/aur_audit_red_dates.txt}"
+AUR_AUDIT_RED_DATE_LINES=()
 
 # Fetch the aur-audit.wtako.net black/red feed on --refresh. Disable via
 # AUR_AUDIT_ENABLE=false (env), --no-aur-audit (one-off), or the GUI checkbox.
@@ -1385,11 +1395,21 @@ load_packages() {
 
         # aur-audit.wtako.net — community/third-party continuous AUR scan feed.
         # Paginated JSON API (no auth, no jq dependency: grep -oP field pull).
-        # Fails soft per filter, like the supplementary lists above.
+        # Fails soft per filter, like the supplementary lists above. Also
+        # captures each entry's pubDateTs (the flagged version's own AUR
+        # publish timestamp — epoch ms, RSS-style "pubDate" field, not
+        # wtako's own analysisOn scan time) into a companion "pkgname
+        # YYYY-MM-DD" dates file, so check_logs can tell a pacman.log entry
+        # that predates the flagged version from one that doesn't. Per-page
+        # name/date counts are verified equal before pairing — if a future
+        # API response ever drops the field for some entries, dates are
+        # skipped for that page (names still update) rather than risk
+        # silently misaligning name[i] with date[j].
         _refresh_aur_audit() {
-            local filter="$1" dest="$2" label="$3"
+            local filter="$1" dest="$2" label="$3" dates_dest="$4"
             local base="https://aur-audit.wtako.net/packages"
-            local cursor="" page page_names all=() n pages=0
+            local cursor="" page pages=0
+            local -a page_names page_dates_ms all=() all_dates=()
             echo "Fetching aur-audit $label list..."
             while :; do
                 page=$(curl -fsSL "${base}?filter=${filter}&limit=500${cursor:+&before=$cursor}" 2>/dev/null) || {
@@ -1397,23 +1417,34 @@ load_packages() {
                     return
                 }
                 mapfile -t page_names < <(grep -oP '"packageName":"\K[^"]*' <<<"$page")
+                mapfile -t page_dates_ms < <(grep -oP '"pubDateTs":\K[0-9]+' <<<"$page")
                 all+=("${page_names[@]}")
+                if [[ ${#page_names[@]} -eq ${#page_dates_ms[@]} ]]; then
+                    local i ds
+                    for i in "${!page_names[@]}"; do
+                        ds=$(date -d "@$(( page_dates_ms[i] / 1000 ))" +%F 2>/dev/null) || continue
+                        all_dates+=("${page_names[i]} $ds")
+                    done
+                fi
                 cursor=$(grep -oP '"nextCursor":\K[0-9]+' <<<"$page" || true)
                 pages=$((pages + 1))
                 [[ -n "$cursor" && $pages -lt 200 ]] || break
             done
-            n=${#all[@]}
-            if [[ $n -eq 0 ]]; then
+            if [[ ${#all[@]} -eq 0 ]]; then
                 echo >&2 "WARNING: aur-audit $label fetch returned 0 entries — keeping existing."
                 return
             fi
             printf '%s\n' "${all[@]}" | sort -u > "$dest"
             _chown_to_invoker "$dest"
             echo "Updated $dest ($(grep -c '^[^#[:space:]]' "$dest") entries)"
+            if [[ ${#all_dates[@]} -gt 0 ]]; then
+                printf '%s\n' "${all_dates[@]}" | sort -u > "$dates_dest"
+                _chown_to_invoker "$dates_dest"
+            fi
         }
         if [[ "$AUR_AUDIT_ENABLE" == true ]]; then
-            _refresh_aur_audit black "$AUR_AUDIT_BLACK_LIST" "black"
-            _refresh_aur_audit red   "$AUR_AUDIT_RED_LIST"   "red"
+            _refresh_aur_audit black "$AUR_AUDIT_BLACK_LIST" "black" "$AUR_AUDIT_BLACK_DATES_LIST"
+            _refresh_aur_audit red   "$AUR_AUDIT_RED_LIST"   "red"   "$AUR_AUDIT_RED_DATES_LIST"
         else
             echo "Skipping aur-audit.wtako.net fetch (disabled)."
         fi
@@ -1479,6 +1510,24 @@ load_packages() {
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             AUR_AUDIT_RED_PKGS+=("$line")
         done <"$AUR_AUDIT_RED_LIST"
+    fi
+
+    # Companion "pkgname YYYY-MM-DD" dates files — optional, only exist after
+    # a --refresh run that includes this feature. Absence (not yet refreshed,
+    # or a fetch that failed soft) just means check_logs falls back to its
+    # old no-cutoff behavior for that source, not an error.
+    AUR_AUDIT_BLACK_DATE_LINES=()
+    if [[ -f "$AUR_AUDIT_BLACK_DATES_LIST" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -n "$line" ]] && AUR_AUDIT_BLACK_DATE_LINES+=("$line")
+        done <"$AUR_AUDIT_BLACK_DATES_LIST"
+    fi
+
+    AUR_AUDIT_RED_DATE_LINES=()
+    if [[ -f "$AUR_AUDIT_RED_DATES_LIST" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -n "$line" ]] && AUR_AUDIT_RED_DATE_LINES+=("$line")
+        done <"$AUR_AUDIT_RED_DATES_LIST"
     fi
 
     # Extra lists — from extra_lists.conf and --extra-list= flags
@@ -1617,9 +1666,12 @@ check_logs() {
     # Per-source cutoff dates (YYYY-MM-DD) below which a name match predates
     # any known compromise for that list — see the tag-selection logic
     # further down for how these are used. Only set where SOURCES.md
-    # documents an actual campaign start date; Community Reports (no fixed
-    # scope/end date) and the aur-audit black/red feed (live, continuously
-    # updated, no per-entry historical date) intentionally have none.
+    # documents an actual campaign start date, or (aur-audit black/red) a
+    # per-package cutoff is available from AUR_AUDIT_{BLACK,RED}_DATE
+    # (populated from the flagged version's own AUR publish date, captured
+    # on --refresh — see _refresh_aur_audit). Community Reports has no fixed
+    # scope/end date and no per-entry date data at all, so it intentionally
+    # has no cutoff.
     local campaign_cutoff="2026-06-09"  # earliest documented malicious commit
     local chaos_cutoff="2025-07-22"     # CHAOS RAT campaign discovery date
 
@@ -1672,19 +1724,23 @@ check_logs() {
             [[ -v pkg_map[$pkg] ]] || continue
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
 
-            # Select this match's source annotation and, where a real
-            # campaign start date exists for that source, its cutoff --
-            # cutoff empty means "never downgrade" (no date to compare
-            # against). Russian Spam has no lookup array of its own (merged
+            # Select this match's source annotation and, where a date exists
+            # to compare against, its cutoff -- cutoff empty means "never
+            # downgrade". Russian Spam has no lookup array of its own (merged
             # into INFECTED_PKGS untagged) and shares the base list's
-            # (earlier, safer) cutoff via the else branch below.
+            # (earlier, safer) cutoff via the else branch below. aur-audit's
+            # cutoff is per-package (the flagged version's own AUR publish
+            # date) rather than one fixed constant -- falls back to "" (never
+            # downgrade, the old behavior) for a package with no date on file.
             local tag cutoff="" annotation=""
             if [[ -v CHAOS_LOOKUP[$pkg] ]]; then
                 cutoff="$chaos_cutoff"
                 annotation=" [CHAOS RAT campaign, 2025-07]"
             elif [[ -v AUR_AUDIT_BLACK_LOOKUP[$pkg] ]]; then
+                cutoff="${AUR_AUDIT_BLACK_DATE[$pkg]:-}"
                 annotation=" [aur-audit: black]"
             elif [[ -v AUR_AUDIT_RED_LOOKUP[$pkg] ]]; then
+                cutoff="${AUR_AUDIT_RED_DATE[$pkg]:-}"
                 annotation=" [aur-audit: red]"
             elif [[ -v COMMUNITY_REPORTS_LOOKUP[$pkg] ]]; then
                 annotation=" [community report]"
@@ -3280,6 +3336,20 @@ declare -A AUR_AUDIT_RED_LOOKUP
 for p in "${AUR_AUDIT_RED_PKGS[@]}"; do
     AUR_AUDIT_RED_LOOKUP["$p"]=1
     INFECTED_PKGS+=("$p")
+done
+
+# pkgname -> the flagged version's AUR publish date (YYYY-MM-DD), from the
+# companion dates files above — check_logs' per-package cutoff. A package
+# absent here (not yet re-refreshed since this feature shipped, or a fetch
+# that skipped dates) simply gets no cutoff, same as before this feature.
+declare -A AUR_AUDIT_BLACK_DATE
+for p in "${AUR_AUDIT_BLACK_DATE_LINES[@]}"; do
+    AUR_AUDIT_BLACK_DATE["${p%% *}"]="${p#* }"
+done
+
+declare -A AUR_AUDIT_RED_DATE
+for p in "${AUR_AUDIT_RED_DATE_LINES[@]}"; do
+    AUR_AUDIT_RED_DATE["${p%% *}"]="${p#* }"
 done
 
 # Extra lists — merged last so they appear in INFECTED_LOOKUP
