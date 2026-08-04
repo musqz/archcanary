@@ -782,6 +782,33 @@ DESK
     fi
     rm -rf "$tmpdir12"
     rm -f "$allow_file5"
+
+    # Sub-test T: absolute .desktop Exec= path under the skel dir must NOT be
+    # flagged — regression guard for a real false positive (an xfce4-panel
+    # crash-loop workaround script, xfce-pbw.sh, shipped via /etc/skel and
+    # referenced directly by the copied ~/.config/autostart/*.desktop rather
+    # than duplicated into each home dir; only root can write there, same
+    # trust bucket as /usr/local). AUTOSTART_SKEL_DIR overrides the real
+    # /etc/skel so this doesn't touch actual system state.
+    local tmpdir13 skeldir13
+    tmpdir13=$(mktemp -d)
+    skeldir13=$(mktemp -d)
+    mkdir -p "$tmpdir13/.config/autostart" "$skeldir13/.config/autostart"
+    cat > "$tmpdir13/.config/autostart/xfce-panel-workaround.desktop" << DESK
+[Desktop Entry]
+Type=Application
+Name=XfcePanelWorkaround
+Exec=$skeldir13/.config/autostart/xfce-pbw.sh
+DESK
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir13" AUTOSTART_SKEL_DIR="$skeldir13" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: absolute Exec= under skel dir not flagged"
+    else
+        fail "check_autostart: skel dir false positive regression, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir13" "$skeldir13"
 }
 
 # ---------------------------------------------------------------------------

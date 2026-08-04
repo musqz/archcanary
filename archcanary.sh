@@ -2512,6 +2512,10 @@ check_autostart() {
     local -a _autostart_libdirs
     IFS=: read -ra _autostart_libdirs <<< "${AUTOSTART_LIBDIRS:-/usr/lib:/usr/libexec:/var/lib/flatpak/exports/bin:$home_dir/.local/share/flatpak/exports/bin}"
 
+    # Override with AUTOSTART_SKEL_DIR for testing — real /etc/skel is a
+    # system path, not something a test should write to.
+    local skel_dir="${AUTOSTART_SKEL_DIR:-/etc/skel}"
+
     local desktop_dir="$home_dir/.config/autostart"
     if [[ -d "$desktop_dir" ]]; then
         while IFS= read -r desktop; do
@@ -2554,11 +2558,21 @@ check_autostart() {
                 # $PATH on any Flatpak-enabled system, so a resolved Flatpak
                 # app (command -v succeeds directly) needs to be recognized
                 # here too, not just via the non-PATH libdir search below.
+                # $skel_dir/* is trusted the same as /usr/local/* — both require
+                # root to write and neither is pacman-tracked by definition, but
+                # this check's own threat model is "could an unprivileged
+                # attacker have planted this," not "is this in a package db".
+                # /etc/skel ships distro/admin first-boot workaround scripts
+                # (e.g. an xfce4-panel crash-loop workaround referenced
+                # directly from a copied ~/.config/autostart/*.desktop rather
+                # than duplicated into each home dir) that only root could
+                # have placed there (reported live: xfce-pbw.sh).
                 local suspicious=false
                 if [[ "$exec_val" == /* ]]; then
                     if [[ "$exec_val" != /usr/* && "$exec_val" != /opt/* && \
                           "$exec_val" != /bin/* && "$exec_val" != /sbin/* && \
                           "$exec_val" != /usr/local/* && \
+                          "$exec_val" != "$skel_dir/"* && \
                           "$exec_val" != "$home_dir/bin/"* && \
                           "$exec_val" != "$home_dir/.local/bin/"* && \
                           "$exec_val" != /var/lib/flatpak/exports/bin/* && \
@@ -2572,6 +2586,7 @@ check_autostart() {
                         if [[ "$resolved" != /usr/* && "$resolved" != /opt/* && \
                               "$resolved" != /bin/* && "$resolved" != /sbin/* && \
                               "$resolved" != /usr/local/* && \
+                              "$resolved" != "$skel_dir/"* && \
                               "$resolved" != /var/lib/flatpak/exports/bin/* && \
                               "$resolved" != "$home_dir/.local/share/flatpak/exports/bin/"* && \
                               "$resolved" != "$home_dir/bin/"* && \
