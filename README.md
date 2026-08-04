@@ -152,7 +152,7 @@ run everything at once with `--full`.
 | `--color=auto\|always\|never` | Control symbol/color output (default: `auto`; also obeys `NO_COLOR` env) | — |
 | `--format=text\|json` | Output a JSON summary instead of the human-readable report | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
-| `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `traur`/`yad` also map to a section) | — |
+| `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `traur`/`paru`/`yad` also map to a section) | — |
 | `--allowlist-list=NAME` | List entries in an allowlist and exit (`NAME`: `dkms`, `systemd`, `bpftool`, `autostart`) | No |
 | `--allowlist-add=NAME:VALUE` | Add `VALUE` to an allowlist and exit | Yes |
 | `--allowlist-remove=NAME:VALUE` | Remove `VALUE` from an allowlist and exit | Yes |
@@ -247,6 +247,7 @@ does and how it's wired in:
 |---------|----------|
 | [traur](https://aur.archlinux.org/packages/traur) | Optional |
 | [yay](https://github.com/Jguer/yay) 13.0 | Optional |
+| [paru](https://github.com/Morganamilo/paru) | Optional |
 | [yad](https://github.com/v1cont/yad) | GUI only |
 | [noto-fonts-emoji](https://archlinux.org/packages/extra/any/noto-fonts-emoji/) | GUI only (🔐 icons) |
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Optional (`--check-bpftool`) |
@@ -259,10 +260,11 @@ Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malwar
 
 ### Detection Layers
 
-Two automatic layers fire at AUR install time — yay's offline `init.lua`
-hooks and traur's pacman `PreTransaction` hook — plus a continuous root
-scan (`archcanary --full`, weekly + on boot + after every pacman
-transaction), a desktop notifier on detection, and the on-demand GUI.
+Automatic layers fire at AUR install time — yay's offline `init.lua` hooks
+(or paru's native `PreBuildCommand` hook, whichever AUR helper you use) and
+traur's pacman `PreTransaction` hook — plus a continuous root scan
+(`archcanary --full`, weekly + on boot + after every pacman transaction), a
+desktop notifier on detection, and the on-demand GUI.
 
 See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
 (at-a-glance table included).
@@ -300,7 +302,7 @@ A hand-curated list (`community_reports.txt`), sourced from AUR malware reports 
 
 **On trusting it:** this is an independent, pseudonymous operator's project ("Saren" / wtako.net), not a security vendor — neither the site nor its API docs publish a scanning methodology or a track record, so there's nothing to verify the operator's credentials against. The trust here is in the integration, not the operator: the API is free, unauthenticated, and read-only (nothing about your system is ever sent to it), its hits are merged alongside archcanary's own sourced/cited lists rather than replacing them (see [SOURCES.md](SOURCES.md#9-aur-auditwtakonet-feed)), and the source is always visible in the `[aur-audit: black/red]` annotation. Treat it like any heuristic scanner: best-effort, not a guarantee.
 
-The same synced lists also gate installs directly: the `AURPreInstall` yay hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) aborts a build on a black hit and warns on a red hit — a pre-build check that needs no LLM. A black abort is a blocking action driven by this unverified third-party source; there's no per-source toggle, so the only way to opt out is to stop running `--refresh` (or delete `aur_audit_black.txt`/`aur_audit_red.txt` from `~/.config/archcanary/`), which makes both the hook and the scan-side check silently skip it.
+The same synced lists also gate installs directly: yay's `AURPreInstall` hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) checks the black/red list itself and aborts on a black hit, warns on a red hit — a pre-build check that needs no LLM. This one's yay-only for now — paru's [`PreBuildCommand` hook](docs/my-setup.md#paru-integration) runs `archcanary --check-pkgbuild` before every build, which covers the same PKGBUILD obfuscation patterns as yay's hook, but not this aur-audit lookup. A black abort is a blocking action driven by this unverified third-party source; there's no per-source toggle, so the only way to opt out is to stop running `--refresh` (or delete `aur_audit_black.txt`/`aur_audit_red.txt` from `~/.config/archcanary/`), which makes both the hook and the scan-side check silently skip it.
 
 ---
 
