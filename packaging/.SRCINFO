@@ -13,6 +13,7 @@ pkgbase = archcanary
 	optdepends = polkit: GUI privilege escalation for root checks
 	optdepends = bpf: bpftool for eBPF rootkit detection
 	optdepends = yay: AUR helper with Lua hook support
+	optdepends = paru: AUR helper with PreBuildCommand hook support
 	optdepends = bash-completion: tab-completion for archcanary/canary flags
 	backup = etc/archcanary/dkms_allowlist.conf
 	backup = etc/archcanary/systemd_allowlist.conf

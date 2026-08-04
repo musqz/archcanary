@@ -515,10 +515,10 @@ for arg in "$@"; do
             echo "  --format=text|json        Output a JSON summary instead of the human-readable report"
             echo "                            (default: text; JSON goes to stdout, full narrative still logged)"
             echo "  --doctor                  Report install/config status of every stack element"
-            echo "                            (deps, install, systemd, traur, yay hooks) and exit"
+            echo "                            (deps, install, systemd, traur, yay/paru hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
             echo "                            Sections: platform, deps, user, system, systemd, external"
-            echo "                            (tool names like traur/yad also map to a section)"
+            echo "                            (tool names like traur/paru/yad also map to a section)"
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
             echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
@@ -924,7 +924,7 @@ run_doctor() {
         # silently (reports a working hook as missing) rather than erroring
         # out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v2)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v3)"
         local _lua_label="yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
         if command -v traur >/dev/null 2>&1; then
@@ -942,6 +942,21 @@ run_doctor() {
                 "$yay_init_lua's archcanary-managed hooks are from an older version"
         else
             _opt "$_lua_label" "" "path: $yay_init_lua"
+        fi
+        if command -v paru >/dev/null 2>&1; then
+            local paru_conf="${XDG_CONFIG_HOME:-$real_home/.config}/paru/paru.conf"
+            local _ARCHCANARY_PARU_MARKER_STABLE='archcanary PreBuildCommand hook'
+            local _ARCHCANARY_PARU_MARKER_CURRENT="$_ARCHCANARY_PARU_MARKER_STABLE (v1)"
+            local _paru_label="paru PreBuildCommand hook (archcanary's pre-build PKGBUILD scan)"
+            if [[ "$(_marker "$_ARCHCANARY_PARU_MARKER_CURRENT" "$paru_conf")" -eq 0 ]]; then
+                _ok "$_paru_label" "path: $paru_conf"
+            elif [[ "$(_marker "$_ARCHCANARY_PARU_MARKER_STABLE" "$paru_conf")" -eq 0 ]]; then
+                _warn "$_paru_label (outdated)" \
+                    "edit $paru_conf by hand — see docs/my-setup.md, \"paru integration\" for the current PreBuildCommand line" \
+                    "$paru_conf's archcanary-managed hook is from an older version"
+            else
+                _opt "$_paru_label" "" "path: $paru_conf"
+            fi
         fi
         printf '\n'
     fi

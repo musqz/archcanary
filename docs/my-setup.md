@@ -13,6 +13,7 @@ Full overview of how this tool is deployed and how the pieces connect.
 | `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window. `--no-gui` bypasses yad and runs a full scan in the terminal with the structured summary. |
 | `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes). Runs **automatically as a pacman PreTransaction hook** (`/usr/share/libalpm/hooks/traur.hook` → `traur-hook`, `AbortOnFail`) on every install/upgrade — including repo packages — and is also runnable by hand (`traur scan <pkg>`) |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an offline layer that runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
+| `paru` `PreBuildCommand` hook | `~/.config/paru/paru.conf` | Native pre-build hook — runs `archcanary --check-pkgbuild` scoped to that package's own build directory before every build, only when paru is installed |
 | `yad` | official repos | GTK dialog toolkit used by `archcanary-gui` |
 | `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
 | `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
@@ -152,6 +153,9 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 ~/.config/yay/
     └── init.lua                      # Lua hooks (age warning, pattern block, install log) — new in yay 13.0
 
+~/.config/paru/
+    └── paru.conf              # PreBuildCommand hook appended (only if paru installed) — new in paru's [bin] PreBuildCommand
+
 ~/.config/systemd/user/                   # installed by ./install.sh --system
     ├── archcanary-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
     ├── archcanary-user.timer      # weekly + on boot
@@ -204,11 +208,19 @@ The yay 13.0 Lua hooks (`~/.config/yay/init.lua`) — seeded by `install.sh` **o
 | Hook | Event | What it does |
 |------|-------|--------------|
 | Upgrade-age warning | `UpgradeSelect` | Warns for any AUR upgrade whose PKGBUILD was modified < 3 days ago (prints hours since change) — a freshly rewritten PKGBUILD is the classic compromise signal |
-| Pattern block | `AURPreInstall` | Aborts the build if the PKGBUILD matches a known-malicious pattern: `npm install atomic-lockfile` (Atomic Arch wave 1), `bun install js-digest` (wave 2), or `curl`/`wget` piped to `bash`/`sh` |
+| Pattern block | `AURPreInstall` | Aborts the build if the PKGBUILD matches a known-malicious pattern: `npm install atomic-lockfile` (Atomic Arch wave 1), `bun install js-digest` (wave 2), `curl`/`wget` piped to `bash`/`sh`, `eval`+subshell, `printf` hex/octal obfuscation, variable-split command reassembly, base64-decode piped to a shell, chained ANSI-C hex/octal escapes (3+), or `rev`/`tr` piped to a shell — a Lua port of most of `check_pkgbuild_caches`' bash detections (the AUR-cache-wide obfuscation scan behind `--check-pkgbuild`; the ELF-binary-in-git-tree check has no Lua equivalent, since it needs filesystem/git access rather than just the PKGBUILD text) |
 | aur-audit check | `AURPreInstall` | Aborts on a black (confirmed malicious) hit, warns on red (high-risk, unconfirmed) from the [aur-audit.wtako.net](https://wtako.net/services/aur-audit) feed synced by `--refresh` |
 | Install log | `PostInstall` | Logs every installed AUR package (name + version) via `yay.log.info` |
 
 Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and `edit_menu = true` (lets you review each PKGBUILD's diff before it builds).
+
+## paru integration
+
+paru's native `PreBuildCommand` hook (`~/.config/paru/paru.conf`, `[bin]` section) — seeded by `install.sh` **only when paru is installed and no `PreBuildCommand` is already configured** (source: [`configs/paru-hook.conf`](../configs/paru-hook.conf)). Unlike yay's `init.lua`, this edits a file paru itself may already use for other settings, so seeding is gated on paru actually being present, and `install.sh` never touches an existing `PreBuildCommand` line — if you already have one (ours or your own), re-copy `configs/paru-hook.conf`'s line by hand to pick up a newer version.
+
+Runs `archcanary --check-pkgbuild` before every AUR build, scoped to just that package's own build directory (`PKGBUILD_CACHE_DIRS=.`) — a nonzero exit (pattern match found) genuinely aborts the build, since paru propagates `PreBuildCommand`'s exit status as a real error. `--no-notify --no-summary` keep this silent-unless-flagged on every single build. Fails open if archcanary isn't on `$PATH` (build proceeds rather than hard-blocking on a missing optional dependency).
+
+Uninstalling removes just the two hook lines (marker comment + `PreBuildCommand`) from `paru.conf` — the rest of the file, including the `[bin]` section header itself, is left untouched.
 
 ## Shell completion and the `canary` alias
 
@@ -235,7 +247,8 @@ sudo pacman -S libnotify bpf yad polkit
 yay -S traur
 
 # 3. Run install script (installs to ~/.local/bin by default)
-#    Also seeds ~/.config/yay/init.lua if not already present
+#    Also seeds ~/.config/yay/init.lua if not already present, and
+#    ~/.config/paru/paru.conf's PreBuildCommand if paru is installed
 bash ~/Github/archcanary/install.sh
 
 # Also install root helper + polkit policy (enables eBPF/kmod checks in the GUI)

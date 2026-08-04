@@ -1375,7 +1375,7 @@ test_doctor_stale_yay_init() {
     # with the exact re-copy fix command.
     fake_home=$(mktemp -d)
     mkdir -p "$fake_home/.config/yay"
-    sed 's/ (v2)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
+    sed 's/ (v3)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
     out=$(XDG_CONFIG_HOME="$fake_home/.config" "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
     if [[ "$out" == *"yay init.lua"*"(outdated)"* && "$out" == *"cp "*"configs/yay-init.lua"* ]]; then
         pass "doctor: outdated yay init.lua marker -> WARN with fix hint"
@@ -1395,6 +1395,192 @@ test_doctor_stale_yay_init() {
         fail "doctor: expected OPT for missing yay init.lua, out: $out"
     fi
     rm -rf "$fake_home"
+}
+
+# ---------------------------------------------------------------------------
+# test_doctor_stale_paru_hook — same three-state marker check as yay's
+# init.lua, but for paru's PreBuildCommand hook, plus a 4th sub-test
+# confirming the check only appears when `paru` is actually on $PATH (it
+# edits a config file paru itself may already use for other settings, so
+# unlike yay's unconditional check, this one is gated on `command -v paru`).
+# ---------------------------------------------------------------------------
+test_doctor_stale_paru_hook() {
+    local fake_home fake_bin out
+
+    # Fabricate a minimal `paru` on $PATH so `command -v paru` succeeds —
+    # the doctor check never actually invokes it, just checks presence.
+    fake_bin=$(mktemp -d)
+    printf '#!/bin/sh\nexit 0\n' > "$fake_bin/paru"
+    chmod +x "$fake_bin/paru"
+
+    # Sub-test A: current version marker present -> OK, no warning.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config/paru"
+    cp "$REPO_DIR/configs/paru-hook.conf" "$fake_home/.config/paru/paru.conf"
+    out=$(PATH="$fake_bin:$PATH" XDG_CONFIG_HOME="$fake_home/.config" \
+        "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
+    if [[ "$out" == *"[ OK ]  paru PreBuildCommand hook"* && "$out" != *"outdated"* ]]; then
+        pass "doctor: current paru hook marker -> OK, no false positive"
+    else
+        fail "doctor: expected OK for current paru hook, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    # Sub-test B: an older marker (no version suffix) -> WARN with a manual
+    # fix pointer (never a `cp`, unlike yay — paru.conf is a shared file).
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config/paru"
+    sed 's/ (v1)//' "$REPO_DIR/configs/paru-hook.conf" > "$fake_home/.config/paru/paru.conf"
+    out=$(PATH="$fake_bin:$PATH" XDG_CONFIG_HOME="$fake_home/.config" \
+        "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
+    if [[ "$out" == *"paru PreBuildCommand hook"*"(outdated)"* && \
+          "$out" == *"edit "*"paru.conf"*"by hand"* ]]; then
+        pass "doctor: outdated paru hook marker -> WARN with manual-edit hint"
+    else
+        fail "doctor: expected outdated-paru-hook WARN, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    # Sub-test C: paru installed, but no paru.conf at all -> optional.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config"
+    out=$(PATH="$fake_bin:$PATH" XDG_CONFIG_HOME="$fake_home/.config" \
+        "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
+    if [[ "$out" == *"[OPT ]  paru PreBuildCommand hook"* ]]; then
+        pass "doctor: paru installed, no paru.conf -> optional, no false positive"
+    else
+        fail "doctor: expected OPT for missing paru.conf, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    # Sub-test D: paru NOT on $PATH, even with a current paru.conf present ->
+    # the check doesn't appear at all. Validates the `command -v paru` gate.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config/paru"
+    cp "$REPO_DIR/configs/paru-hook.conf" "$fake_home/.config/paru/paru.conf"
+    out=$(XDG_CONFIG_HOME="$fake_home/.config" \
+        "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
+    if [[ "$out" != *"paru PreBuildCommand hook"* ]]; then
+        pass "doctor: paru not on \$PATH -> paru hook check omitted entirely"
+    else
+        fail "doctor: paru hook check should be gated on command -v paru, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    rm -rf "$fake_bin"
+}
+
+# ---------------------------------------------------------------------------
+# test_install_paru_conf — exercises the real paru-seeding/uninstall logic
+# lifted straight out of install.sh (not a hand-copied duplicate, to avoid
+# drift), run in isolation. Deliberately does NOT invoke install.sh itself:
+# on a machine with a real system-wide install (a genuine, common state —
+# hit live while developing this), install.sh's binary-install step checks
+# the literal, non-overridable path /usr/local/bin and shells out to sudo to
+# clean up a competing copy if one exists there. That's correct behavior for
+# a real install, but it means running install.sh end-to-end in a test can
+# reach for sudo against real system state — never safe to do from a test
+# suite. Extracting just the two paru-specific blocks below sidesteps that
+# entirely: neither one touches anything outside the fake $HOME.
+# ---------------------------------------------------------------------------
+_extract_paru_seed_block() {
+    awk '
+        found { print; if ($0 == "fi") exit }
+        !found && index($0, "if command -v paru >/dev/null 2>&1; then") { found=1; print }
+    ' "$REPO_DIR/install.sh"
+}
+_extract_paru_uninstall_block() {
+    awk '
+        found { print; if ($0 == "    fi") exit }
+        !found && index($0, "PARU_CONF=\"${XDG_CONFIG_HOME:-$HOME/.config}/paru/paru.conf\"") { found=1; print }
+    ' "$REPO_DIR/install.sh"
+}
+
+test_install_paru_conf() {
+    local fake_bin fake_home out seed_block uninstall_block
+
+    seed_block=$(_extract_paru_seed_block)
+    uninstall_block=$(_extract_paru_uninstall_block)
+    if [[ -z "$seed_block" || -z "$uninstall_block" ]]; then
+        fail "install_paru_conf: could not extract paru blocks from install.sh (anchors drifted?)"
+        return
+    fi
+
+    fake_bin=$(mktemp -d)
+    printf '#!/bin/sh\nexit 0\n' > "$fake_bin/paru"
+    chmod +x "$fake_bin/paru"
+
+    # Sub-test A: fresh install, no pre-existing paru.conf -> file created
+    # with our marked block.
+    fake_home=$(mktemp -d)
+    out=$(HOME="$fake_home" PATH="$fake_bin:$PATH" REPO_DIR="$REPO_DIR" bash -c "$seed_block" 2>&1)
+    if [[ "$out" == *"seeded:"* ]] && \
+       diff -q "$fake_home/.config/paru/paru.conf" "$REPO_DIR/configs/paru-hook.conf" >/dev/null 2>&1; then
+        pass "install: fresh paru.conf seeded with archcanary's hook block"
+    else
+        fail "install: fresh paru.conf seed failed, out: $out"
+    fi
+
+    # Sub-test B: re-run against the now-seeded file -> idempotent, "kept",
+    # file byte-for-byte unchanged (no double-append).
+    local before_sum after_sum
+    before_sum=$(md5sum "$fake_home/.config/paru/paru.conf" | cut -d' ' -f1)
+    out=$(HOME="$fake_home" PATH="$fake_bin:$PATH" REPO_DIR="$REPO_DIR" bash -c "$seed_block" 2>&1)
+    after_sum=$(md5sum "$fake_home/.config/paru/paru.conf" | cut -d' ' -f1)
+    if [[ "$out" == *"kept:"* && "$before_sum" == "$after_sum" ]]; then
+        pass "install: re-running seed is idempotent (kept, unchanged)"
+    else
+        fail "install: re-run should be idempotent, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    # Sub-test C: pre-existing paru.conf with the user's OWN unrelated
+    # PreBuildCommand and other settings -> must be left completely
+    # untouched, not clobbered or appended to.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config/paru"
+    cat > "$fake_home/.config/paru/paru.conf" << 'EOF'
+[options]
+BottomUp
+
+[bin]
+PreBuildCommand = echo my own custom hook
+EOF
+    before_sum=$(md5sum "$fake_home/.config/paru/paru.conf" | cut -d' ' -f1)
+    out=$(HOME="$fake_home" PATH="$fake_bin:$PATH" REPO_DIR="$REPO_DIR" bash -c "$seed_block" 2>&1)
+    after_sum=$(md5sum "$fake_home/.config/paru/paru.conf" | cut -d' ' -f1)
+    if [[ "$out" == *"kept:"* && "$before_sum" == "$after_sum" ]]; then
+        pass "install: pre-existing user PreBuildCommand is never touched"
+    else
+        fail "install: user's own PreBuildCommand should be untouched, out: $out"
+    fi
+    rm -rf "$fake_home"
+
+    # Sub-test D: uninstall removes exactly our two marked lines, leaves the
+    # [bin] header and unrelated surrounding content in place.
+    fake_home=$(mktemp -d)
+    mkdir -p "$fake_home/.config/paru"
+    cat > "$fake_home/.config/paru/paru.conf" << 'EOF'
+[options]
+BottomUp
+
+[bin]
+FileManager = nnn
+# archcanary PreBuildCommand hook (v1) — see docs/my-setup.md, "paru integration"
+PreBuildCommand = ! command -v archcanary >/dev/null 2>&1 || PKGBUILD_CACHE_DIRS=. archcanary --check-pkgbuild --no-notify --no-summary
+EOF
+    HOME="$fake_home" bash -c "$uninstall_block" >/dev/null 2>&1
+    if ! grep -q "archcanary PreBuildCommand hook" "$fake_home/.config/paru/paru.conf" && \
+       grep -q "^\[bin\]$" "$fake_home/.config/paru/paru.conf" && \
+       grep -q "^FileManager = nnn$" "$fake_home/.config/paru/paru.conf" && \
+       grep -q "^BottomUp$" "$fake_home/.config/paru/paru.conf"; then
+        pass "install: uninstall removes only the marked hook lines, keeps rest of file"
+    else
+        fail "install: uninstall should surgically remove only our 2 lines, got: $(cat "$fake_home/.config/paru/paru.conf")"
+    fi
+    rm -rf "$fake_home"
+
+    rm -rf "$fake_bin"
 }
 
 # ---------------------------------------------------------------------------
@@ -1637,6 +1823,12 @@ test_doctor_stale_yay_init
 
 $VERBOSE && msg "--- Test 20: check_logs pre-campaign date correlation ---"
 test_check_logs
+
+$VERBOSE && msg "--- Test 21: doctor stale paru PreBuildCommand hook detection ---"
+test_doctor_stale_paru_hook
+
+$VERBOSE && msg "--- Test 22: install.sh paru.conf seed/uninstall logic ---"
+test_install_paru_conf
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
