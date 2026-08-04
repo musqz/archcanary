@@ -3166,10 +3166,13 @@ _apply_ret() { # $1=return code  $2=check label  $3=explicitly requested (true/f
     fi
 }
 
-# Summary table — parallel arrays appended as each check runs.
+# Summary table — parallel arrays appended as each check runs. _SUMMARY_IDX
+# mirrors the "--- [N] ... ---" section number printed above each check's
+# own output, so a summary row can be traced back to its detail section.
 _SUMMARY_NAMES=()
 _SUMMARY_CODES=()
-_rec() { _SUMMARY_NAMES+=("$1"); _SUMMARY_CODES+=("$2"); }
+_SUMMARY_IDX=()
+_rec() { _SUMMARY_NAMES+=("$1"); _SUMMARY_CODES+=("$2"); _SUMMARY_IDX+=("${3:-}"); }
 
 # Checks tagged here are heuristic/behavior-based (prone to real false
 # positives — legitimate personal scripts, AppImage/Flatpak launchers in
@@ -3204,23 +3207,24 @@ _any_confirmed_infected() {
 }
 
 _print_summary() {
-    local _w=36
+    local _w=36 _iw=5
     printf '\n Check summary\n'
     printf ' %s\n' "$_SEP55"
     local i
     for i in "${!_SUMMARY_NAMES[@]}"; do
         local name="${_SUMMARY_NAMES[$i]}" code="${_SUMMARY_CODES[$i]}"
+        local idx="${_SUMMARY_IDX[$i]:+[${_SUMMARY_IDX[$i]}]}"
         case "$code" in
-            0)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_CLEAN" ;;
-            1)  printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_WARNINGS" ;;
+            0)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_CLEAN" ;;
+            1)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_WARNINGS" ;;
             2)  if _is_behavior_check_name "$name"; then
-                    printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_REVIEW_TXT"
+                    printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_REVIEW_TXT"
                 else
-                    printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_INFECTED_TXT"
+                    printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_INFECTED_TXT"
                 fi
                 ;;
-            77) printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_SKIPPED" ;;
-            78) printf ' %-*s %s\n'  "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
+            77) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED" ;;
+            78) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
         esac
     done
     printf ' %s\n' "$_SEP55"
@@ -3497,7 +3501,7 @@ if ! $FOCUSED_MODE; then
     log_info "Querying ${#INFECTED_PKGS[@]} packages via pacman -Qmq..."
     check_current && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "Package list (${#INFECTED_PKGS[@]} pkgs)" "$ret"
+    _rec "Package list (${#INFECTED_PKGS[@]} pkgs)" "$ret" "1"
     echo
 
     echo "--- [2] Historical pacman logs ---"
@@ -3550,7 +3554,7 @@ if ! $FOCUSED_MODE; then
     else
         echo "  Skipped: /var/log/pacman.log not found."
     fi
-    _rec "pacman.log history" "$_log_ret"
+    _rec "pacman.log history" "$_log_ret" "2"
     echo
 fi
 
@@ -3558,7 +3562,7 @@ if $CHECK_SYSTEMD; then
     echo "--- [3] Systemd persistence check ---"
     check_systemd && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "Systemd persistence" "$ret"
+    _rec "Systemd persistence" "$ret" "3"
     echo
 fi
 
@@ -3566,7 +3570,7 @@ if $CHECK_EBPF; then
     echo "--- [4] eBPF rootkit check ---"
     check_ebpf && ret=$? || ret=$?
     _apply_ret "$ret" ebpf
-    _rec "eBPF rootkit traces" "$ret"
+    _rec "eBPF rootkit traces" "$ret" "4"
     echo
 fi
 
@@ -3574,7 +3578,7 @@ if $CHECK_NPM_CACHE; then
     echo "--- [5] npm cache check ---"
     check_npm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "npm cache" "$ret"
+    _rec "npm cache" "$ret" "5"
     echo
 fi
 
@@ -3582,7 +3586,7 @@ if $CHECK_BUN_CACHE; then
     echo "--- [6] bun cache check ---"
     check_bun_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "bun cache" "$ret"
+    _rec "bun cache" "$ret" "6"
     echo
 fi
 
@@ -3590,7 +3594,7 @@ if $CHECK_YARN_CACHE; then
     echo "--- [6b] yarn cache check ---"
     check_yarn_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "yarn cache" "$ret"
+    _rec "yarn cache" "$ret" "6b"
     echo
 fi
 
@@ -3598,7 +3602,7 @@ if $CHECK_PNPM_CACHE; then
     echo "--- [6c] pnpm cache check ---"
     check_pnpm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "pnpm cache" "$ret"
+    _rec "pnpm cache" "$ret" "6c"
     echo
 fi
 
@@ -3606,7 +3610,7 @@ if $CHECK_PKGBUILD; then
     echo "--- [7] PKGBUILD/install file scan (obfuscation-aware) ---"
     check_pkgbuild_caches && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "PKGBUILD obfuscation scan" "$ret"
+    _rec "PKGBUILD obfuscation scan" "$ret" "7"
     echo
 fi
 
@@ -3614,7 +3618,7 @@ if $CHECK_BPFTOOL; then
     echo "--- [8] Loaded eBPF programs/links (bpftool) ---"
     check_bpftool && ret=$? || ret=$?
     _apply_ret "$ret" bpftool
-    _rec "eBPF programs (bpftool)" "$ret"
+    _rec "eBPF programs (bpftool)" "$ret" "8"
     echo
 fi
 
@@ -3622,7 +3626,7 @@ if $CHECK_LDSO; then
     echo "--- [9] ld.so.preload injection check ---"
     check_ldso && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "ld.so.preload injection" "$ret"
+    _rec "ld.so.preload injection" "$ret" "9"
     echo
 fi
 
@@ -3630,7 +3634,7 @@ if $CHECK_AUTOSTART; then
     echo "--- [10] XDG autostart + shell RC persistence check ---"
     check_autostart && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "XDG autostart + shell RCs" "$ret"
+    _rec "XDG autostart + shell RCs" "$ret" "10"
     echo
 fi
 
@@ -3638,7 +3642,7 @@ if $CHECK_KMOD; then
     echo "--- [11] Kernel module / DKMS audit ---"
     check_kmod && ret=$? || ret=$?
     _apply_ret "$ret" kmod
-    _rec "Kernel modules (DKMS)" "$ret"
+    _rec "Kernel modules (DKMS)" "$ret" "11"
     echo
 fi
 
@@ -3646,7 +3650,7 @@ if $CHECK_LYNIS; then
     echo "--- [12] Lynis hardening report ---"
     check_lynis && ret=$? || ret=$?
     _apply_ret "$ret" lynis "$EXPLICIT_LYNIS"
-    _rec "Lynis hardening" "$ret"
+    _rec "Lynis hardening" "$ret" "12"
     echo
 fi
 
@@ -3654,7 +3658,7 @@ if $CHECK_PKGINTEG; then
     echo "--- [13] Package file integrity ---"
     check_pkginteg && ret=$? || ret=$?
     _apply_ret "$ret" pkginteg
-    _rec "Package integrity" "$ret"
+    _rec "Package integrity" "$ret" "13"
     echo
 fi
 
@@ -3663,7 +3667,7 @@ if $CHECK_LIST_OVERLAP; then
     check_list_overlap
     # Always "clean" in the summary — this is a note, not a warning, so it
     # never signals a problem in the summary table itself.
-    _rec "List overlap check" 0
+    _rec "List overlap check" 0 "14"
     echo
 fi
 
