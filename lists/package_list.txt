@@ -1419,7 +1419,6 @@ python-hsaudiotag3k
 python-iminuit
 python-iminuit-docs
 python-iso3166
-python-isounidecode
 python-isr-git
 python-jsmin
 python-json2xml
