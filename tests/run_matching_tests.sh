@@ -1292,6 +1292,19 @@ SCRIPT
     else
         fail "result_banner: real finding should still say WARNINGS, rc=$rc, out: $out"
     fi
+
+    # Sub-test C: lynis pulled in only via --full (never asked for directly)
+    # and not installed — must not appear in the "optional check(s) skipped"
+    # line. Root-only checks (bpftool/kmod, also enabled by --full) still make
+    # the scan INCOMPLETE on their own; the point here is specifically that
+    # lynis's absence doesn't also get blamed.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --full 2>&1) || rc=$?
+    if [[ "$out" != *"optional check(s) skipped"*"lynis"* ]]; then
+        pass "result_banner: --full doesn't blame missing lynis unless --check-lynis was explicit"
+    else
+        fail "result_banner: lynis should not appear in optional-skip line under bare --full, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------

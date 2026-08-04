@@ -80,6 +80,8 @@ CHECK_LYNIS=false
 CHECK_PKGINTEG=false
 CHECK_LIST_OVERLAP=false
 CHECK_FULL=false
+# True only if --check-lynis was passed directly, not just via --full.
+EXPLICIT_LYNIS=false
 REFRESH_PACKAGE_LIST=false
 VERBOSE=false
 NO_NOTIFY=false
@@ -432,7 +434,7 @@ for arg in "$@"; do
         --check-ldso)       CHECK_LDSO=true ;;
         --check-autostart)  CHECK_AUTOSTART=true ;;
         --check-kmod)       CHECK_KMOD=true ;;
-        --check-lynis)      CHECK_LYNIS=true ;;
+        --check-lynis)      CHECK_LYNIS=true; EXPLICIT_LYNIS=true ;;
         --check-pkginteg)   CHECK_PKGINTEG=true ;;
         --check-list-overlap) CHECK_LIST_OVERLAP=true ;;
         --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_LYNIS=true; CHECK_PKGINTEG=true; CHECK_FULL=true ;;
@@ -3150,12 +3152,15 @@ SKIPPED_ROOT=()
 SKIPPED_MISSING=()
 
 # Fold a check's return code into EXIT_CODE; 77 means "skipped, needs root",
-# 78 means "skipped, optional tool not installed".
-_apply_ret() { # $1=return code  $2=check label
+# 78 means "skipped, optional tool not installed". A 78 only feeds into
+# SKIPPED_MISSING (and the INCOMPLETE verdict) when the check was requested
+# via its own --check-* flag, not just pulled in by --full.
+_apply_ret() { # $1=return code  $2=check label  $3=explicitly requested (true/false)
     if [[ "$1" -eq 77 ]]; then
         SKIPPED_ROOT+=("$2")
     elif [[ "$1" -eq 78 ]]; then
-        SKIPPED_MISSING+=("$2")
+        [[ "${3:-false}" == true ]] && SKIPPED_MISSING+=("$2")
+        true
     elif [[ "$1" -gt $EXIT_CODE ]]; then
         EXIT_CODE="$1"
     fi
@@ -3640,7 +3645,7 @@ fi
 if $CHECK_LYNIS; then
     echo "--- [12] Lynis hardening report ---"
     check_lynis && ret=$? || ret=$?
-    _apply_ret "$ret" lynis
+    _apply_ret "$ret" lynis "$EXPLICIT_LYNIS"
     _rec "Lynis hardening" "$ret"
     echo
 fi
