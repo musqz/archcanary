@@ -558,6 +558,10 @@ _init_color() {
         always) use=true ;;
         never)  use=false ;;
         auto)   [[ -z "${NO_COLOR:-}" && -t 1 ]] && use=true ;;
+        *)
+            echo "Error: --color must be 'auto', 'always', or 'never' (got '$_COLOR_ARG')" >&2
+            exit 1
+            ;;
     esac
     if $use; then
         _CG=$'\e[32m' _CY=$'\e[33m' _CR=$'\e[31m'
