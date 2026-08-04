@@ -1,6 +1,6 @@
 -- ~/.config/yay/init.lua
 --
--- yay 13.0 Lua hooks for the AUR security stack (v3).
+-- yay 13.0 Lua hooks for the AUR security stack (v4).
 -- Seeded to ~/.config/yay/init.lua by install.sh if not already present.
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
@@ -76,12 +76,38 @@ local function _archcanary_has_revtr_pipe_shell(pkgbuild)
   return false
 end
 
--- Static pattern check before build
+local function _archcanary_config_dir()
+  local xdg = os.getenv("XDG_CONFIG_HOME")
+  if xdg and xdg ~= "" then return xdg .. "/archcanary" end
+  return os.getenv("HOME") .. "/.config/archcanary"
+end
+
+local function _archcanary_load_pkg_set(path)
+  local set = {}
+  local f = io.open(path, "r")
+  if not f then return set end
+  for line in f:lines() do
+    if not line:match("^#") and line:match("%S") then
+      set[line] = true
+    end
+  end
+  f:close()
+  return set
+end
+
+-- Static pattern check + aur-audit.wtako.net black/red check, combined into
+-- one hook (rather than two separate AURPreInstall registrations) so there's
+-- a single "clean" confirmation line when nothing is found — matching
+-- traur's own "All packages look clean" message. Silence alone can't be
+-- told apart from "hook never ran"; an explicit clean line can. aur-audit
+-- lists are synced by `archcanary --refresh`, already run weekly by
+-- archcanary.timer — see docs/my-setup.md.
 yay.create_autocmd("AURPreInstall", {
-  desc = "block known malicious PKGBUILD patterns",
+  desc = "block known malicious PKGBUILD patterns + aur-audit black/red check",
   callback = function(event)
     local pkg      = event.match
     local pkgbuild = event.data.pkgbuild
+    local flagged  = false
 
     local patterns = {
       "npm install atomic%-lockfile",   -- Atomic Arch campaign wave 1
@@ -114,52 +140,34 @@ yay.create_autocmd("AURPreInstall", {
 
     for _, pattern in ipairs(patterns) do
       if pkgbuild:match(pattern) then
+        flagged = true
         yay.abort(pkg .. ": blocked — suspicious pattern: " .. pattern)
       end
     end
 
     if _archcanary_has_chained_ansi_c(pkgbuild) then
+      flagged = true
       yay.abort(pkg .. ": blocked — suspicious pattern: ANSI-C chained hex/octal escapes")
     end
     if _archcanary_has_revtr_pipe_shell(pkgbuild) then
+      flagged = true
       yay.abort(pkg .. ": blocked — suspicious pattern: rev/tr piped to shell")
     end
-  end,
-})
 
-local function _archcanary_config_dir()
-  local xdg = os.getenv("XDG_CONFIG_HOME")
-  if xdg and xdg ~= "" then return xdg .. "/archcanary" end
-  return os.getenv("HOME") .. "/.config/archcanary"
-end
-
-local function _archcanary_load_pkg_set(path)
-  local set = {}
-  local f = io.open(path, "r")
-  if not f then return set end
-  for line in f:lines() do
-    if not line:match("^#") and line:match("%S") then
-      set[line] = true
-    end
-  end
-  f:close()
-  return set
-end
-
--- aur-audit.wtako.net black/red check (complements the pattern block above;
--- lists are synced by `archcanary --refresh`, already run weekly by
--- archcanary.timer — see docs/my-setup.md)
-yay.create_autocmd("AURPreInstall", {
-  desc = "aur-audit.wtako.net black/red check",
-  callback = function(event)
-    local dir = _archcanary_config_dir()
+    local dir   = _archcanary_config_dir()
     local black = _archcanary_load_pkg_set(dir .. "/aur_audit_black.txt")
     local red   = _archcanary_load_pkg_set(dir .. "/aur_audit_red.txt")
 
-    if black[event.match] then
-      yay.abort(event.match .. ": aur-audit flagged BLACK (confirmed malicious) — https://aur-audit.wtako.net")
-    elseif red[event.match] then
-      yay.log.warn(event.match .. ": aur-audit flagged RED (high-risk, unconfirmed) — review before continuing")
+    if black[pkg] then
+      flagged = true
+      yay.abort(pkg .. ": aur-audit flagged BLACK (confirmed malicious) — https://aur-audit.wtako.net")
+    elseif red[pkg] then
+      flagged = true
+      yay.log.warn(pkg .. ": aur-audit flagged RED (high-risk, unconfirmed) — review before continuing")
+    end
+
+    if not flagged then
+      yay.log.info("archcanary: " .. pkg .. " PKGBUILD checks clean")
     end
   end,
 })

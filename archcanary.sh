@@ -924,7 +924,7 @@ run_doctor() {
         # silently (reports a working hook as missing) rather than erroring
         # out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v3)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v4)"
         local _lua_label="yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
         if command -v traur >/dev/null 2>&1; then
