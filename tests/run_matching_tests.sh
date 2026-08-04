@@ -1783,6 +1783,70 @@ EOF
         fail "check_logs: LOG_OLD-only scan should exit 0, got rc=$rc"
     fi
 
+    # G-J: aur-audit black/red per-package cutoff (the flagged version's own
+    # AUR publish date, captured into a companion "pkgname YYYY-MM-DD" dates
+    # file on --refresh) -- regression coverage for a real report: a 2021
+    # pacman.log entry for a package currently red-flagged got full
+    # LOG_HIT/INFECTED severity, even though the red verdict gave no
+    # indication the flagged behavior existed back in 2021. Unlike A-D above
+    # (one fixed cutoff per source), aur-audit's cutoff is per-package.
+    local audit_redlist audit_reddates audit_blacklist audit_blackdates audit_log
+    audit_redlist="$tmpdir/aur_audit_red.txt"
+    audit_reddates="$tmpdir/aur_audit_red_dates.txt"
+    audit_blacklist="$tmpdir/aur_audit_black.txt"
+    audit_blackdates="$tmpdir/aur_audit_black_dates.txt"
+    audit_log="$tmpdir/pacman-audit.log"
+
+    printf 'zzz-test-audit-red-old\nzzz-test-audit-red-new\nzzz-test-audit-red-nodate\n' > "$audit_redlist"
+    printf 'zzz-test-audit-red-old 2026-07-01\nzzz-test-audit-red-new 2026-07-01\n' > "$audit_reddates"
+    printf 'zzz-test-audit-black-old\n' > "$audit_blacklist"
+    printf 'zzz-test-audit-black-old 2026-07-01\n' > "$audit_blackdates"
+    cat > "$audit_log" <<'EOF'
+[2026-06-01T10:00:00-0600] [ALPM] installed zzz-test-audit-red-old (1.0-1)
+[2026-08-01T10:00:00-0600] [ALPM] installed zzz-test-audit-red-new (1.0-1)
+[2026-06-01T10:00:00-0600] [ALPM] installed zzz-test-audit-black-old (1.0-1)
+[1999-01-01T10:00:00-0600] [ALPM] installed zzz-test-audit-red-nodate (1.0-1)
+EOF
+
+    rc=0
+    out=$(PACMAN_LOG_GLOB="$audit_log" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports_empty.txt" \
+        AUR_AUDIT_RED_LIST="$audit_redlist" AUR_AUDIT_RED_DATES_LIST="$audit_reddates" \
+        AUR_AUDIT_BLACK_LIST="$audit_blacklist" AUR_AUDIT_BLACK_DATES_LIST="$audit_blackdates" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+
+    # G: red entry before ITS package's own publish-date cutoff -> LOG_OLD
+    if [[ "$out" == *"LOG_OLD: zzz-test-audit-red-old"*"[aur-audit: red]"* ]]; then
+        pass "check_logs: aur-audit red entry before its own pubDateTs cutoff -> LOG_OLD"
+    else
+        fail "check_logs: expected LOG_OLD for pre-cutoff aur-audit red entry, out: $out"
+    fi
+
+    # H: red entry after its cutoff -> LOG_HIST, not LOG_OLD
+    if [[ "$out" == *"LOG_HIST: zzz-test-audit-red-new"*"[aur-audit: red]"* && \
+          "$out" != *"LOG_OLD: zzz-test-audit-red-new"* ]]; then
+        pass "check_logs: aur-audit red entry after its own pubDateTs cutoff -> LOG_HIST"
+    else
+        fail "check_logs: expected LOG_HIST for post-cutoff aur-audit red entry, out: $out"
+    fi
+
+    # I: black entry before its cutoff -> LOG_OLD too (not just red)
+    if [[ "$out" == *"LOG_OLD: zzz-test-audit-black-old"*"[aur-audit: black]"* ]]; then
+        pass "check_logs: aur-audit black entry before its own pubDateTs cutoff -> LOG_OLD"
+    else
+        fail "check_logs: expected LOG_OLD for pre-cutoff aur-audit black entry, out: $out"
+    fi
+
+    # J: flagged package with NO entry in the dates file (e.g. not yet
+    # re-refreshed since this feature shipped) -> no cutoff available, falls
+    # back to the old "never downgrade" behavior even for an ancient date
+    if [[ "$out" == *"LOG_HIST: zzz-test-audit-red-nodate"*"[aur-audit: red]"* && \
+          "$out" != *"LOG_OLD: zzz-test-audit-red-nodate"* ]]; then
+        pass "check_logs: aur-audit entry with no date on file falls back to no-cutoff"
+    else
+        fail "check_logs: expected no-cutoff fallback for date-less aur-audit entry, out: $out"
+    fi
+
     rm -rf "$tmpdir"
 }
 
