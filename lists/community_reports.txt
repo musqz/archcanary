@@ -86,3 +86,7 @@ xclicker-bin
 xdg-terminal-exec-bin
 linux-cachyos-bin
 paru-git-bin
+google-chrome-stable
+chrome
+google-chrome-bin
+ttf-mac-fonts-all
