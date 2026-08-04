@@ -97,11 +97,10 @@ end
 
 -- Static pattern check + aur-audit.wtako.net black/red check, combined into
 -- one hook (rather than two separate AURPreInstall registrations) so there's
--- a single "clean" confirmation line when nothing is found — matching
--- traur's own "All packages look clean" message. Silence alone can't be
--- told apart from "hook never ran"; an explicit clean line can. aur-audit
--- lists are synced by `archcanary --refresh`, already run weekly by
--- archcanary.timer — see docs/my-setup.md.
+-- a single "clean" confirmation line when nothing is found. Silence alone
+-- can't be told apart from "hook never ran"; an explicit clean line can.
+-- aur-audit lists are synced by `archcanary --refresh`, already run weekly
+-- by archcanary.timer — see docs/my-setup.md.
 yay.create_autocmd("AURPreInstall", {
   desc = "block known malicious PKGBUILD patterns + aur-audit black/red check",
   callback = function(event)

@@ -11,7 +11,6 @@ Full overview of how this tool is deployed and how the pieces connect.
 |-----------|-----------------|---------|
 | `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
 | `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window. `--no-gui` bypasses yad and runs a full scan in the terminal with the structured summary. |
-| `traur` | [AUR: traur](https://aur.archlinux.org/packages/traur) | Trust scanner — 279 signals across PKGBUILD static analysis (reverse shells, download-and-execute, obfuscation, exfiltration), maintainer behaviour (new account, orphan takeover, typosquatting), AUR metadata (votes, popularity, orphaned), and git history (major rewrites, checksum removal, source domain changes). Runs **automatically as a pacman PreTransaction hook** (`/usr/share/libalpm/hooks/traur.hook` → `traur-hook`, `AbortOnFail`) on every install/upgrade — including repo packages — and is also runnable by hand (`traur scan <pkg>`) |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an offline layer that runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPreInstall`), and AUR install logging (`PostInstall`) |
 | `paru` `PreBuildCommand` hook | `~/.config/paru/paru.conf` | Native pre-build hook — runs `archcanary --check-pkgbuild` scoped to that package's own build directory before every build, only when paru is installed |
 | `yad` | official repos | GTK dialog toolkit used by `archcanary-gui` |
@@ -51,27 +50,6 @@ archcanary-gui (on-demand — desktop shortcut or app launcher)
             ├── standard checks run as user
             └── root checks (eBPF, bpftool, kmod) → pkexec → polkit auth → root-helper
                     └── streams output live, updates status on close
-
-traur — runs three ways:
-    ├── pacman PreTransaction hook (automatic — installed by the traur package)
-    │       └── /usr/share/libalpm/hooks/traur.hook → traur-hook   (AbortOnFail)
-    │               └── trust-scores every pacman install/upgrade (incl. repo pkgs);
-    │                   a failing score aborts the transaction before install
-    │
-    ├── GUI "Trust scan (traur)"  → traur scan  (no args)
-    │       └── bulk audit of ALL installed AUR packages
-    │               └── useful as a periodic sweep alongside archcanary
-    │
-    └── terminal: traur scan <pkg>  (manually vet a package before installing)
-            └── 279 signals, 4 weighted categories
-                    ├── Pkgbuild (0.45)   — static analysis: shells, download-exec, obfuscation, exfil, miners
-                    │       └── Safety analysis sub-signals — char-by-char construction, high-entropy heredocs, indirect exec
-                    ├── Behavioral (0.25) — maintainer: new account, batch creation, orphan takeover, typosquat
-                    ├── Metadata (0.15)   — AUR page: votes, popularity, orphaned, flagged, missing URL
-                    └── Temporal (0.15)   — git history: single commit, major rewrite, domain change, checksum drop
-                            └── trust score + per-signal breakdown
-    note: pre-install scan of a specific package requires the terminal —
-          the GUI has no package name input
 
 yay install/upgrade  (yay -S <pkg>, yay -Syu, bare yay <term>)  — transparent, no alias
     └── yay init.lua hooks fire on every build
@@ -196,9 +174,6 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 # bpf provides bpftool (--check-bpftool); yad is the GUI toolkit;
 # libnotify provides notify-send for the desktop alert
 sudo pacman -S libnotify bpf yad polkit
-
-# AUR
-yay -S traur
 ```
 
 ## yay 13.0 integration
@@ -208,7 +183,7 @@ The yay 13.0 Lua hooks (`~/.config/yay/init.lua`) — seeded by `install.sh` **o
 | Hook | Event | What it does |
 |------|-------|--------------|
 | Upgrade-age warning | `UpgradeSelect` | Warns for any AUR upgrade whose PKGBUILD was modified < 3 days ago (prints hours since change) — a freshly rewritten PKGBUILD is the classic compromise signal |
-| Pattern block + aur-audit check | `AURPreInstall` | One combined hook: aborts if the PKGBUILD matches a known-malicious pattern (`npm install atomic-lockfile`, `bun install js-digest`, `curl`/`wget` piped to `bash`/`sh`, `eval`+subshell, `printf` hex/octal obfuscation, variable-split command reassembly, base64-decode piped to a shell, chained ANSI-C hex/octal escapes (3+), or `rev`/`tr` piped to a shell — a Lua port of most of `check_pkgbuild_caches`' bash detections; the ELF-binary-in-git-tree check has no Lua equivalent, since it needs filesystem/git access rather than just the PKGBUILD text) or aborts/warns on a black/red hit from the [aur-audit.wtako.net](https://wtako.net/services/aur-audit) feed synced by `--refresh`. Prints `archcanary: <pkg> PKGBUILD checks clean` when neither finds anything — matching `traur`'s own "All packages look clean" — since otherwise silence is indistinguishable from the hook never having run at all |
+| Pattern block + aur-audit check | `AURPreInstall` | One combined hook: aborts if the PKGBUILD matches a known-malicious pattern (`npm install atomic-lockfile`, `bun install js-digest`, `curl`/`wget` piped to `bash`/`sh`, `eval`+subshell, `printf` hex/octal obfuscation, variable-split command reassembly, base64-decode piped to a shell, chained ANSI-C hex/octal escapes (3+), or `rev`/`tr` piped to a shell — a Lua port of most of `check_pkgbuild_caches`' bash detections; the ELF-binary-in-git-tree check has no Lua equivalent, since it needs filesystem/git access rather than just the PKGBUILD text) or aborts/warns on a black/red hit from the [aur-audit.wtako.net](https://wtako.net/services/aur-audit) feed synced by `--refresh`. Prints `archcanary: <pkg> PKGBUILD checks clean` when neither finds anything — an explicit clean line, since otherwise silence is indistinguishable from the hook never having run at all |
 | Install log | `PostInstall` | Logs every installed AUR package (name + version) via `yay.log.info` |
 
 Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and `edit_menu = true` (lets you review each PKGBUILD's diff before it builds).
@@ -227,10 +202,6 @@ Both install paths (`install.sh` and the AUR package) drop a bash-completion scr
 
 The `canary` completion works standalone, but `canary` itself is only a *name* until you actually alias it — add `alias canary=archcanary` to `.bashrc`/`.zshrc` yourself if you want the shorter command; `install.sh` deliberately doesn't inject this (same "never touch the user's shell rc" rule as everything else here).
 
-## Known false positives
-
-See [false-positives.md](false-positives.md) for documented signals that fire on benign packages and how to verify them.
-
 ## Systemd unit files
 
 See [systemd.md](systemd.md) for the full service and timer contents.
@@ -243,7 +214,6 @@ git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 
 # 2. Install dependencies (bpf provides bpftool for --check-bpftool; yad for GUI)
 sudo pacman -S libnotify bpf yad polkit
-yay -S traur
 
 # 3. Run install script (installs to ~/.local/bin by default)
 #    Also seeds ~/.config/yay/init.lua if not already present, and
