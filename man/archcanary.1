@@ -10,7 +10,6 @@ is a layered security detection stack for Arch Linux.
 It integrates and orchestrates existing security tools \(em
 .BR lynis ,
 .BR bpftool ,
-.BR traur ,
 and others \(em into a single unified scanner, while also performing
 its own checks for malicious AUR packages, systemd and eBPF persistence,
 npm/bun/yarn/pnpm cache poisoning, PKGBUILD obfuscation, kernel module
@@ -209,14 +208,14 @@ enables color only when stdout is a terminal.
 .TP
 .B \-\-doctor
 Report the install and configuration status of every stack element
-(binary dependencies, systemd units, traur, yay/paru hooks) and exit.
+(binary dependencies, systemd units, yay/paru hooks) and exit.
 .TP
 \fB\-\-doctor\fR=\fISECTION\fR[,\fISECTION\fR...]
 Check only the named section(s) with extra per-item detail.
 Sections:
 .BR platform ", " deps ", " user ", " system ", " systemd ", " external .
 Tool names
-.RB ( traur ", " paru ", " yad \&...)
+.RB ( paru ", " yad \&...)
 are also accepted.
 .TP
 .B \-\-version ", " \-V
@@ -269,7 +268,6 @@ Lynis report file read by
 .I /usr/lib/archcanary/
 System library directory.
 .SH SEE ALSO
-.BR traur (1),
 .BR yay (8),
 .BR pacman (8),
 .BR auditd (8),

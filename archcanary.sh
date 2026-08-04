@@ -515,10 +515,10 @@ for arg in "$@"; do
             echo "  --format=text|json        Output a JSON summary instead of the human-readable report"
             echo "                            (default: text; JSON goes to stdout, full narrative still logged)"
             echo "  --doctor                  Report install/config status of every stack element"
-            echo "                            (deps, install, systemd, traur, yay/paru hooks) and exit"
+            echo "                            (deps, install, systemd, yay/paru hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
             echo "                            Sections: platform, deps, user, system, systemd, external"
-            echo "                            (tool names like traur/paru/yad also map to a section)"
+            echo "                            (tool names like paru/yad also map to a section)"
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
             echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
@@ -674,13 +674,13 @@ run_doctor() {
                 system|system_install|system-install|root) want[system]=1 ;;
                 systemd|automation|timer|timers)    want[systemd]=1 ;;
                 external|external_tools|external-tools|tools|preinstall|pre-install) want[external]=1 ;;
-                traur|yay|paru|hooks|lua|init.lua) want[external]=1 ;;  # tool names → their section
+                yay|paru|hooks|lua|init.lua)        want[external]=1 ;;  # tool names → their section
                 platform|plat|distro)               want[platform]=1 ;;
                 all)                                for s in "${ordered[@]}"; do want[$s]=1; done ;;
                 *)
                     printf 'Unknown --doctor section: %s\n' "$s" >&2
                     printf 'Valid: platform, deps, user, system, systemd, external (or all).\n' >&2
-                    printf 'Tool names (traur, yad, …) also map to a section.\n' >&2
+                    printf 'Tool names (paru, yad, …) also map to a section.\n' >&2
                     return 2 ;;
             esac
         done
@@ -930,13 +930,6 @@ run_doctor() {
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
         local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v4)"
         local _lua_label="yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
-        _opt_dep "traur (pre-install behavioral scanner)" traur traur "279-signal pre-install scanner"
-        if command -v traur >/dev/null 2>&1; then
-            _opt_item "traur pacman hook (auto-runs on every install)" \
-                "$(_file /usr/share/libalpm/hooks/traur.hook)" \
-                "" \
-                "path: /usr/share/libalpm/hooks/traur.hook"
-        fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         if [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_CURRENT" "$yay_init_lua")" -eq 0 ]]; then
             _ok "$_lua_label" "path: $yay_init_lua"

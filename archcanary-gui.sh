@@ -55,10 +55,6 @@ PKEXEC="$(command -v pkexec 2>/dev/null || true)"
 HAS_ROOT=false
 [[ -n "$PKEXEC" && -x "$ROOT_HELPER" ]] && HAS_ROOT=true
 
-TRAUR="$(command -v traur 2>/dev/null || true)"
-HAS_TRAUR=false
-[[ -n "$TRAUR" ]] && HAS_TRAUR=true
-
 LYNIS="$(command -v lynis 2>/dev/null || true)"
 HAS_LYNIS=false
 [[ -n "$LYNIS" ]] && HAS_LYNIS=true
@@ -121,13 +117,12 @@ LABELS=(
     "eBPF programs – bpftool"   # 10 root
     "Kernel modules"            # 11 root
     "Manage allowlists"         # 12
-    "Trust scan (traur)"        # 13
-    "Edit config"               # 14
-    "Lynis hardening report"   # 15
-    "Run Lynis audit"          # 16  root
-    "Pacman integrity"         # 17
-    "About"                    # 18
-    "Scan settings"            # 19
+    "Edit config"               # 13
+    "Lynis hardening report"   # 14
+    "Run Lynis audit"          # 15  root
+    "Pacman integrity"         # 16
+    "About"                    # 17
+    "Scan settings"            # 18
 )
 
 FLAGS=(
@@ -144,7 +139,6 @@ FLAGS=(
     "--check-bpftool --no-summary"
     "--check-kmod --no-summary"
     "__manage_allowlists__"
-    "__traur__"
     "__edit_config__"
     "--check-lynis --no-notify --no-summary"
     "--run-lynis"
@@ -156,7 +150,7 @@ FLAGS=(
 NEEDS_ROOT=(
     true false false false false false false false false
     true true true
-    false false false
+    false false
     true
     true
     true
@@ -170,11 +164,10 @@ declare -A STATUS
 for _i in "${!LABELS[@]}"; do STATUS[$_i]="  ?"; done
 STATUS[0]="   "   # Full scan — blank until first run
 STATUS[12]="   "  # Manage allowlists — config dialog, no scan verdict
-STATUS[13]="   "  # traur — opens its own output window, no verdict here
-STATUS[14]="   "  # Edit config — config dialog, no scan verdict
-STATUS[15]="   "  # Lynis hardening report — informational, no pass/fail verdict
-STATUS[18]="   "  # About — no scan verdict
-STATUS[19]="   "  # Scan settings — config dialog, no scan verdict
+STATUS[13]="   "  # Edit config — config dialog, no scan verdict
+STATUS[14]="   "  # Lynis hardening report — informational, no pass/fail verdict
+STATUS[17]="   "  # About — no scan verdict
+STATUS[18]="   "  # Scan settings — config dialog, no scan verdict
 unset _i
 
 # Derive full-scan status (row 0) from whichever individual checks have results.
@@ -192,7 +185,7 @@ _infer_full_status() {
 
 _update_status() {
     local idx=$1 code=$2
-    [[ $idx -eq 15 ]] && return  # Lynis hardening report — informational, stays blank
+    [[ $idx -eq 14 ]] && return  # Lynis hardening report — informational, stays blank
     case $code in
         0) STATUS[$idx]=" ✅" ;;
         1) STATUS[$idx]=" ⚠ " ;;
@@ -204,7 +197,7 @@ _update_status() {
 declare -A _SCAN_TAG=(
     [1]='3'  [2]='5'  [3]='6'  [4]='6b' [5]='6c'
     [6]='7'  [7]='9'  [8]='10' [9]='4'  [10]='8' [11]='11'
-    [15]='12'
+    [14]='12'
 )
 
 # After a full scan (idx 0), set each check row from ITS OWN section in the
@@ -705,21 +698,6 @@ run_action() {
         return
     fi
 
-    if [[ "$flags" == "__traur__" ]]; then
-        if ! $HAS_TRAUR; then
-            yad --image=dialog-warning \
-                --title="traur not installed" \
-                --window-icon=security-high --center \
-                --text="<b>traur</b> is not installed.\n\nInstall it from AUR:\n  <tt>${AUR_HELPER} -S traur</tt>" \
-                --width=360 2>/dev/null || true
-            return
-        fi
-        local scan_exit=0
-        show_output "Trust scan" "$TRAUR" scan && scan_exit=0 || scan_exit=$?
-        _update_status "$idx" "$scan_exit"
-        return
-    fi
-
     read -ra flag_arr <<< "$flags"
 
     # Full scan (idx 0) always refreshes the package list on the first run of
@@ -911,19 +889,18 @@ build_list_args() {
 
     _sep "Root checks"
     for i in 9 10 11; do _row "$i" "🔐  ${LABELS[$i]}"; done
-    _row 16 "🔐  ${LABELS[16]}"
+    _row 15 "🔐  ${LABELS[15]}"
 
     _sep "Utilities"
-    $HAS_LYNIS   && _row 15 "🔐  ${LABELS[15]}"
-    $HAS_TRAUR   && _row 13
-    _row 17 "🔐  ${LABELS[17]}"
+    $HAS_LYNIS   && _row 14 "🔐  ${LABELS[14]}"
+    _row 16 "🔐  ${LABELS[16]}"
     _sep "Settings"
     _row 12
-    _row 14
+    _row 13
     local aa_state="ON"
     $AUR_AUDIT_ENABLE_GUI || aa_state="OFF"
-    _row 19 "${LABELS[19]}  (aur-audit sync: ${aa_state})"
-    _row 18
+    _row 18 "${LABELS[18]}  (aur-audit sync: ${aa_state})"
+    _row 17
 }
 
 # Main loop

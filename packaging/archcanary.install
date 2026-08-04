@@ -38,10 +38,10 @@ post_install() {
   echo "  polkit policy, /etc allowlists). Per-user setup can't be done from here"
   echo "  since it has to run as YOUR user, not the pacman transaction — run:"
   echo "    archcanary --doctor"
-  echo "  to see exactly what's still missing (yay hooks, traur, lynis)"
+  echo "  to see exactly what's still missing (yay hooks, lynis)"
   echo "  and the precise command to fix each one."
   echo ""
-  echo "  Optional add-ons: traur (pre-install trust scanner), lynis (hardening auditor)."
+  echo "  Optional add-ons: lynis (hardening auditor)."
   echo "  See: https://github.com/musqz/archcanary"
   echo ""
 }

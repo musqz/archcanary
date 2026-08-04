@@ -152,7 +152,7 @@ run everything at once with `--full`.
 | `--color=auto\|always\|never` | Control symbol/color output (default: `auto`; also obeys `NO_COLOR` env) | — |
 | `--format=text\|json` | Output a JSON summary instead of the human-readable report | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
-| `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `traur`/`paru`/`yad` also map to a section) | — |
+| `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `paru`/`yad` also map to a section) | — |
 | `--allowlist-list=NAME` | List entries in an allowlist and exit (`NAME`: `dkms`, `systemd`, `bpftool`, `autostart`) | No |
 | `--allowlist-add=NAME:VALUE` | Add `VALUE` to an allowlist and exit | Yes |
 | `--allowlist-remove=NAME:VALUE` | Remove `VALUE` from an allowlist and exit | Yes |
@@ -245,7 +245,6 @@ does and how it's wired in:
 
 | Project | Required |
 |---------|----------|
-| [traur](https://aur.archlinux.org/packages/traur) | Optional |
 | [yay](https://github.com/Jguer/yay) 13.0 | Optional |
 | [paru](https://github.com/Morganamilo/paru) | Optional |
 | [yad](https://github.com/v1cont/yad) | GUI only |
@@ -260,11 +259,10 @@ Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malwar
 
 ### Detection Layers
 
-Automatic layers fire at AUR install time — yay's offline `init.lua` hooks
-(or paru's native `PreBuildCommand` hook, whichever AUR helper you use) and
-traur's pacman `PreTransaction` hook — plus a continuous root scan
-(`archcanary --full`, weekly + on boot + after every pacman transaction), a
-desktop notifier on detection, and the on-demand GUI.
+An automatic layer fires at AUR build time — yay's offline `init.lua` hooks,
+or paru's native `PreBuildCommand` hook, whichever AUR helper you use — plus
+a continuous root scan (`archcanary --full`, weekly + on boot + after every
+pacman transaction), a desktop notifier on detection, and the on-demand GUI.
 
 See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
 (at-a-glance table included).
@@ -326,7 +324,6 @@ The same synced lists also gate installs directly: yay's `AURPreInstall` hook (s
 - [docs/overview.md](docs/overview.md) — lifecycle diagram, at-a-glance table
 - [docs/systemd.md](docs/systemd.md) — systemd unit files and automated scan setup
 - [docs/my-setup.md](docs/my-setup.md) — full personal stack, component connections, reinstall steps
-- [docs/false-positives.md](docs/false-positives.md) — documented benign signals and how to verify
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to report a malicious/suspicious AUR package
 - [SOURCES.md](SOURCES.md) — full numbered source references
 
