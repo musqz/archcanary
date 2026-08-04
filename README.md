@@ -322,6 +322,7 @@ The same synced lists also gate installs directly: yay's `AURPreInstall` hook (s
 ## Documentation
 
 - [docs/overview.md](docs/overview.md) — lifecycle diagram, at-a-glance table
+- [docs/reading-pkgbuilds.md](docs/reading-pkgbuilds.md) — how to review a PKGBUILD yourself, for beginners — what a normal one looks like, real red flags from real attacks
 - [docs/systemd.md](docs/systemd.md) — systemd unit files and automated scan setup
 - [docs/my-setup.md](docs/my-setup.md) — full personal stack, component connections, reinstall steps
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to report a malicious/suspicious AUR package
