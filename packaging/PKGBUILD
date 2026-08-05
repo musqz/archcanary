@@ -1,6 +1,6 @@
 # Maintainer: musqz <gummy-fang-deputy@duck.com>
 pkgname=archcanary
-pkgver=0.1.25
+pkgver=0.1.26
 pkgrel=1
 pkgdesc="Layered security detection stack for Arch Linux — malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering"
 arch=('any')
@@ -22,7 +22,7 @@ backup=('etc/archcanary/dkms_allowlist.conf'
         'etc/archcanary/autostart_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/musqz/$pkgname/archive/v$pkgver.tar.gz")
-sha256sums=('a050d65eb45a95e26fce75d84607c948e2a0f4c221a8ce63ab024791e1d7643f')
+sha256sums=('SKIP')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
@@ -68,11 +68,14 @@ package() {
   install -Dm644 configs/archcanary.desktop \
     "$pkgdir/usr/share/applications/archcanary.desktop"
 
-  # Systemd system units (root scan: weekly timer + pacman-triggered path)
+  # Systemd system units (root scan: weekly timer + pacman-triggered path;
+  # scan-all-homes: opt-in weekly sweep of every real local user's home)
   for _unit in systemd/system/archcanary.service \
                systemd/system/archcanary.timer \
                systemd/system/archcanary.path \
-               systemd/system/archcanary-onchange.service; do
+               systemd/system/archcanary-onchange.service \
+               systemd/system/archcanary-scan-all-homes.service \
+               systemd/system/archcanary-scan-all-homes.timer; do
     install -Dm644 "$_unit" "$pkgdir/usr/lib/systemd/system/$(basename "$_unit")"
   done
 
