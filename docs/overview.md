@@ -10,11 +10,12 @@ install time, *after* install (continuously), and *on detection*.
 flowchart TD
     subgraph AT["1 · AT install — automatic"]
         U["yay -S pkg / yay -Syu / yay &lt;term&gt;"] --> SEL["UpgradeSelect<br/>age warn"]
-        SEL --> PRI["AURPreInstall<br/>pattern block + aur-audit"]
+        SEL --> REV["yay diff/edit/clean menus<br/>(human review) + source download"]
+        REV --> PDL["AURPostDownload<br/>pattern block + aur-audit"]
         UP["paru -S pkg"] --> PBC["PreBuildCommand<br/>--check-pkgbuild"]
-        PRI -->|blocked| AB["build / install aborted"]
+        PDL -->|blocked| AB["build / install aborted"]
         PBC -->|blocked| AB
-        PRI -->|clean| POST["PostInstall<br/>log AUR installs"]
+        PDL -->|clean| POST["PostInstall<br/>log AUR installs"]
         PBC -->|clean| OK["package installed"]
         POST --> OK
     end
