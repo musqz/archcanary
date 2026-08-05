@@ -240,7 +240,8 @@ _show_infected_dialog() {
     yad --image=dialog-error \
         --title="Infected — Archcanary" \
         --window-icon=security-high --center \
-        --width=520 \
+        --width=520 --height=380 \
+        --text-info --fontname="sans 10" \
         --text="<b>Infected or compromised indicators detected.</b>\n\n<b>1.</b>  ${step1}\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
         --button="OK:0" 2>/dev/null || true
 }
