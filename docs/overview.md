@@ -11,8 +11,8 @@ flowchart TD
     subgraph AT["1 · AT install — automatic"]
         U["yay -S pkg / yay -Syu / yay &lt;term&gt;"] --> SEL["UpgradeSelect<br/>age warn"]
         SEL --> REV["yay diff/edit/clean menus<br/>(human review) + source download"]
-        REV --> PDL["AURPostDownload<br/>pattern block + aur-audit"]
-        UP["paru -S pkg"] --> PBC["PreBuildCommand<br/>--check-pkgbuild"]
+        REV --> PDL["AURPostDownload<br/>Lua port: pattern block + aur-audit<br/>(not the archcanary binary)"]
+        UP["paru -S pkg"] --> PBC["PreBuildCommand<br/>archcanary --check-pkgbuild"]
         PDL -->|blocked| AB["build / install aborted"]
         PBC -->|blocked| AB
         PDL -->|clean| POST["PostInstall<br/>log AUR installs"]
