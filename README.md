@@ -53,19 +53,21 @@ Every scan prints a per-check summary before the final verdict:
 ```
  Check summary
  ───────────────────────────────────────────────────────
- Package list (1943 pkgs)            ✅  clean
- pacman.log history                  ✅  clean
- Systemd persistence                 ✅  clean
- eBPF rootkit traces                 ✅  clean
- npm cache                           ✅  clean
- bun cache                           ✅  clean
- yarn cache                          ✅  clean
- pnpm cache                          ✅  clean
- PKGBUILD obfuscation scan           ✅  clean
- eBPF programs (bpftool)             ⚠   skipped (needs root)
- ld.so.preload injection             ✅  clean
- XDG autostart + shell RCs           ✅  clean
- Kernel modules (DKMS)               ⚠   skipped (needs root)
+ [1]  Package list (2506 pkgs)             ✅  clean
+ [2]  pacman.log history                   ✅  clean
+ [3]  Systemd persistence                  ✅  clean
+ [4]  eBPF rootkit traces                  ✅  clean
+ [5]  npm cache                            ✅  clean
+ [6]  bun cache                            ✅  clean
+ [6b] yarn cache                           ✅  clean
+ [6c] pnpm cache                           ✅  clean
+ [7]  PKGBUILD obfuscation scan            ✅  clean
+ [8]  eBPF programs (bpftool)              ✅  clean
+ [9]  ld.so.preload injection              ✅  clean
+ [10] XDG autostart + shell RCs            ✅  clean
+ [11] Kernel modules (DKMS)                ✅  clean
+ [12] Lynis hardening                      ✅  clean
+ [13] Package integrity                    ✅  clean
  ───────────────────────────────────────────────────────
 ============================================================
  RESULT: CLEAN - No indicators found.
