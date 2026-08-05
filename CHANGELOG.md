@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.26 (2026-08-05)
+
+- Added: `--scan-all-homes` — enumerates real local users and runs the npm/bun/yarn/pnpm/pkgbuild/autostart checks against each of their homes, not just yours (privilege-dropped per user via `sudo -u`). Closes the gap where `archcanary-user.timer` only covers whoever enables it themselves. New `archcanary-scan-all-homes.service`/`.timer`, opt-in and off by default.
+- Added: `--help`/`-h` for `install.sh` (usage, uninstall, what `--system` sets up).
+- Added: check-summary rows are now numbered to match their detail section.
+- Fix: `install.sh --system` called `sudo` per-command (~20+ invocations) — now funnels every root step through one script (`lib/archcanary-root-install.sh`), so a restricted sudoers config only needs to allowlist one command. Reported on the Arch Linux forum.
+- Fix: unrecognized CLI flags were silently ignored — or, in `install.sh`, misread as a bin-dir path — instead of erroring; both now reject with a clear message.
+- Fix: the "Infected" GUI dialog could render wildly oversized and unresizable on some GTK/theme setups. Switched from a plain `--text=` label to `--text-info`, which actually respects `--height`. Reported on the Arch Linux forum.
+- Fix: `configs/yay-init.lua`'s PKGBUILD-scan hook ran on `AURPreInstall`, before yay's own diff/edit review menus. Moved to `AURPostDownload` so the scan runs after human review, not before it.
+- Fix: yay's Lua hook was seeded even when yay wasn't installed; now gated on `command -v yay`, matching the existing paru check.
+- Fix: a scan without `--check-lynis`/`--run-lynis` was marked `INCOMPLETE` for missing Lynis data it never asked for.
+- Docs: noted paru's `PreBuildCommand` hook has the same before-review timing as yay's old hook, with no equivalent fix available — paru exposes no post-review hook (confirmed in paru's own source). Sudoers example scoped to the local hostname instead of `ALL`.
+- Docs: added a PKGBUILD-reading guide, later rewritten as a practical reference; fixed a false timeline implication in the Chrome RAT writeup.
+- Chore: dropped stale `python-isounidecode` from the package list.
+
 ## v0.1.25 (2026-08-04)
 
 - Docs: added two AUR incidents to `SOURCES.md` that surfaced while comparing traur's old pattern database against archcanary's own incident record — Acroread (2018, orphan-package-takeover, curl download-and-persist, systemd persistence; narrative-only, since `acroread` is a legitimate package today and archcanary's cutoff mechanism can't express a bounded compromise window) and the `google-chrome-stable` RAT (2025, a brand-new account's `.install` scriptlet running Python download-and-execute on every Chrome launch; confirmed as a separate incident from the already-tracked CHAOS RAT wave). Added `google-chrome-stable`/`chrome`/`google-chrome-bin`/`ttf-mac-fonts-all` to `community_reports.txt` — verified none currently exist as real AUR packages, so zero collision risk.
