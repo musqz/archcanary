@@ -322,6 +322,8 @@ A hand-curated list (`community_reports.txt`), sourced from AUR malware reports 
 
 The same synced lists also gate installs directly: yay's `AURPostDownload` hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) checks the black/red list itself and aborts on a black hit, warns on a red hit — a pre-build check that needs no LLM. This one's yay-only for now — paru's [`PreBuildCommand` hook](docs/my-setup.md#paru-integration) runs `archcanary --check-pkgbuild` before every build, which covers the same PKGBUILD obfuscation patterns as yay's hook, but not this aur-audit lookup. A black abort is a blocking action driven by this unverified third-party source; there's no per-source toggle, so the only way to opt out is to stop running `--refresh` (or delete `aur_audit_black.txt`/`aur_audit_red.txt` from `~/.config/archcanary/`), which makes both the hook and the scan-side check silently skip it.
 
+The GUI's "Scan settings" checkbox is framed as "I have an internet connection" rather than an aur-audit-specific toggle — turning it off also stops Full scan from attempting `--refresh` at all, not just the aur-audit sync (CLI users are unaffected: `--no-aur-audit`/`--aur-audit-enable`/`--aur-audit-disable` still work exactly as documented above, since typing `--refresh` yourself already implies you know whether you have a connection). Turning it off only stops *refreshing* `aur_audit_black.txt`/`aur_audit_red.txt` — it doesn't delete files already fetched, so the yay hook keeps using whatever was last synced, indefinitely, with no signal that the data may now be stale.
+
 ---
 
 ## What to Do If Infected
