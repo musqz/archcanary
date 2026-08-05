@@ -44,6 +44,12 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     exit 0
 fi
 
+if [[ -n "${1:-}" ]]; then
+    echo "ERROR: unknown option: $1" >&2
+    echo "Run 'archcanary-gui --help' for usage." >&2
+    exit 1
+fi
+
 if [[ $EUID -eq 0 ]]; then
     echo "ERROR: do not run archcanary-gui as root or with sudo." >&2
     echo "Run it as your regular user — root checks are handled via pkexec (polkit)." >&2
