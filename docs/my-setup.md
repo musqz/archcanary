@@ -76,14 +76,14 @@ Run the scanner directly:
 # bpftool) need root; without it they are skipped and the run is reported as
 # INCOMPLETE (exit 1, WARNINGS) rather than CLEAN, so a partial scan is never
 # mistaken for an all-clear.
-sudo ~/.local/bin/archcanary --full
+sudo archcanary --full
 
 # User-level checks run fine without root:
 archcanary --check-systemd
 archcanary --check-pkgbuild
 
 # A single root-requiring check:
-sudo ~/.local/bin/archcanary --check-kmod
+sudo archcanary --check-kmod
 
 # Full scan without the GUI — terminal output with structured summary table.
 # Extra flags pass through (e.g. --refresh).
@@ -100,10 +100,11 @@ archcanary --doctor=deps
 archcanary --doctor=user,system
 ```
 
-> Root checks use the **full path** under `sudo`. `sudo` resets `$PATH` to its
-> `secure_path` (set in `/etc/sudoers`), which does not include `~/.local/bin`, so a
-> bare `sudo archcanary` fails with *command not found*. The script then
-> resolves your config from `$SUDO_USER`, so the lists are still found.
+> With `--system`, the binary lives at `/usr/local/bin/archcanary`, which is on
+> sudo's default PATH — bare `sudo archcanary` just works, resolving your
+> config from `$SUDO_USER`. A plain (non-`--system`) install puts it in
+> `~/.local/bin` instead, which typically isn't on sudo's `secure_path`, so
+> that setup needs the full path: `sudo ~/.local/bin/archcanary --full`.
 
 The GUI is for interactive desktop use; the CLI covers everything else (SSH, cron, systemd, scripting).
 
@@ -115,8 +116,8 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 ## Install locations
 
 ```
-~/.local/bin/archcanary        # main script
-~/.local/bin/archcanary-gui          # yad GUI script
+/usr/local/bin/archcanary        # main script (--system; plain install uses ~/.local/bin instead)
+/usr/local/bin/archcanary-gui          # yad GUI script
 
 ~/.config/archcanary/
     ├── package_list.txt                   # refreshed weekly via --refresh
