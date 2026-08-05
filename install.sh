@@ -14,6 +14,36 @@ set -euo pipefail
 #   only needs to permit that one script, not each command it used to run.
 # ---------------------------------------------------------------------------
 
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h)
+            echo "Usage: ./install.sh [--system] [bin-dir]"
+            echo "       ./install.sh uninstall [--system]"
+            echo "       ./install.sh --help"
+            echo
+            echo "Install:"
+            echo "  ./install.sh               User install → ~/.local/bin (or ~/bin if that's on PATH instead)"
+            echo "  ./install.sh /custom/dir   User install to a specific bin dir"
+            echo "  ./install.sh --system      System install → /usr/local/bin (sudo)"
+            echo "                             Adds: root helper + polkit policy, systemd automated"
+            echo "                             scan units, auditd rules (if auditd is installed)"
+            echo
+            echo "Uninstall:"
+            echo "  ./install.sh uninstall            Remove the user install"
+            echo "  ./install.sh uninstall --system   Remove the system install (sudo)"
+            echo
+            echo "Notes:"
+            echo "  - A system install removes any user-install copies and vice versa, so"
+            echo "    PATH never has two competing versions."
+            echo "  - --system needs sudo but funnels every root step through one script"
+            echo "    (lib/archcanary-root-install.sh) — see README for the sudoers line to"
+            echo "    add if your sudo access is restricted to a command allowlist."
+            echo "  - man page: man archcanary"
+            exit 0
+            ;;
+    esac
+done
+
 if [[ $EUID -eq 0 ]]; then
     echo "ERROR: do not run install.sh as root or with sudo." >&2
     echo "Run it as your regular user — it calls sudo internally for system components." >&2
