@@ -332,14 +332,10 @@ The GUI's "Scan settings" checkbox is framed as "I have an internet connection" 
 
 1. **Preserve the system** — do not power off; use forensic acquisition from trusted media
 2. **Rotate all credentials** — Discord, GitHub, npm, Slack, Teams, SSH keys, Vault tokens, cloud keys
-3. **Check for persistence** — `systemctl list-units --type=service --state=running`; run `--check-systemd`
-4. **Check for eBPF rootkit** — `ls -la /sys/fs/bpf/hidden_*`; run `sudo archcanary --check-bpftool`
-5. **Check for library injection** — `cat /etc/ld.so.preload`; run `archcanary --check-ldso`
-6. **Check for user-space persistence** — run `archcanary --check-autostart`
-7. **Check for rogue kernel modules** — run `sudo archcanary --check-kmod`
-8. **Clean from trusted media** — boot from Arch ISO, mount filesystem, remove malicious units
-9. **Consider reinstallation** — the rootkit makes the system untrustworthy once active
-10. **Report** — https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/
+3. **Run a full scan if you haven't already** — `sudo archcanary --refresh --full` covers systemd persistence, eBPF rootkit traces, library injection, autostart persistence, and kernel modules in one pass; the individual `--check-systemd`/`--check-bpftool`/`--check-ldso`/`--check-autostart`/`--check-kmod` flags are there if you'd rather check one area at a time
+4. **Clean from trusted media** — boot from Arch ISO, mount filesystem, remove malicious units
+5. **Consider reinstallation** — the rootkit makes the system untrustworthy once active
+6. **Report** — https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/
 
 ---
 
