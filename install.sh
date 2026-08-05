@@ -71,17 +71,16 @@ fi
 # Parse arguments: optional "uninstall" verb, optional bin-dir
 UNINSTALL=false
 SYSTEM=false
+USER_BIN="${DEFAULT_BIN}"
 for arg in "$@"; do
     case "$arg" in
         uninstall) UNINSTALL=true ;;
         --system)  SYSTEM=true ;;
-    esac
-done
-
-USER_BIN="${DEFAULT_BIN}"
-for arg in "$@"; do
-    case "$arg" in
-        uninstall|--system) ;;
+        -*)
+            echo "ERROR: unknown option: $arg" >&2
+            echo "Run './install.sh --help' for usage." >&2
+            exit 1
+            ;;
         *) USER_BIN="$arg" ;;
     esac
 done

@@ -548,6 +548,10 @@ for arg in "$@"; do
             # shell splits "system" off into its own argument.
             if $DOCTOR && [[ "$arg" != -* ]]; then
                 DOCTOR_SECTIONS+="${DOCTOR_SECTIONS:+,}$arg"
+            else
+                echo "Error: unknown option: $arg" >&2
+                echo "Run '$0 --help' for usage." >&2
+                exit 1
             fi
             ;;
     esac
