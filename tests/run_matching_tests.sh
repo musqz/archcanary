@@ -696,7 +696,7 @@ Exec=$tmpdir10/Applications/SomeApp.AppImage
 DESK
     rc=0
     out=$(AUTOSTART_HOME="$tmpdir10" \
-        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --no-color 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --color=never 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"REVIEW"* && "$out" != *"INFECTED"* && \
           "$out" == *"--allowlist-add=autostart:"* ]]; then
         pass "check_autostart: summary shows REVIEW + allowlist hint present"
@@ -761,7 +761,7 @@ Exec="$tmpdir12/pcloud-launcher.sh"
 DESK
     rc=0
     out=$(AUTOSTART_HOME="$tmpdir12" \
-        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --no-color 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --color=never 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"Exec=$tmpdir12/pcloud-launcher.sh (outside"* && \
           "$out" == *"--allowlist-add=autostart:$tmpdir12/pcloud-launcher.sh"* ]]; then
         pass "check_autostart: quoted Exec= value has quotes stripped in WARNING/hint text"
@@ -905,7 +905,7 @@ test_pkgbuild_obfuscation() {
     # the same certainty for both).
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-base64" \
-        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --no-color 2>&1) || rc=$?
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" --color=never 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"REVIEW"* && "$out" != *"INFECTED"* ]]; then
         pass "pkgbuild_obfuscation: summary shows REVIEW, not INFECTED"
     else
@@ -1245,7 +1245,7 @@ test_result_banner_skip_only_wording() {
     local base_args=(
         --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
         --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
-        --no-notify --no-color
+        --no-notify --color=never
     )
     local out rc=0
 
@@ -1388,7 +1388,7 @@ test_doctor_stale_yay_init() {
     # with the exact re-copy fix command.
     fake_home=$(mktemp -d)
     mkdir -p "$fake_home/.config/yay"
-    sed 's/ (v4)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
+    sed 's/ (v5)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
     out=$(XDG_CONFIG_HOME="$fake_home/.config" "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
     if [[ "$out" == *"yay init.lua"*"(outdated)"* && "$out" == *"cp "*"configs/yay-init.lua"* ]]; then
         pass "doctor: outdated yay init.lua marker -> WARN with fix hint"

@@ -1,6 +1,6 @@
 -- ~/.config/yay/init.lua
 --
--- yay 13.0 Lua hooks for the AUR security stack (v4).
+-- yay 13.0 Lua hooks for the AUR security stack (v5).
 -- Seeded to ~/.config/yay/init.lua by install.sh if not already present.
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
@@ -96,12 +96,17 @@ local function _archcanary_load_pkg_set(path)
 end
 
 -- Static pattern check + aur-audit.wtako.net black/red check, combined into
--- one hook (rather than two separate AURPreInstall registrations) so there's
--- a single "clean" confirmation line when nothing is found. Silence alone
--- can't be told apart from "hook never ran"; an explicit clean line can.
--- aur-audit lists are synced by `archcanary --refresh`, already run weekly
--- by archcanary.timer — see docs/my-setup.md.
-yay.create_autocmd("AURPreInstall", {
+-- one hook (rather than two separate AURPostDownload registrations) so
+-- there's a single "clean" confirmation line when nothing is found. Silence
+-- alone can't be told apart from "hook never ran"; an explicit clean line
+-- can. aur-audit lists are synced by `archcanary --refresh`, already run
+-- weekly by archcanary.timer — see docs/my-setup.md.
+--
+-- AURPostDownload, not AURPreInstall: fires after yay's diff/edit/clean
+-- review menus and makepkg --verifysource, so it scans the PKGBUILD as
+-- reviewed/edited rather than a stale pre-review copy — still before
+-- compatibility checks, PGP prompts, build, and install.
+yay.create_autocmd("AURPostDownload", {
   desc = "block known malicious PKGBUILD patterns + aur-audit black/red check",
   callback = function(event)
     local pkg      = event.match
