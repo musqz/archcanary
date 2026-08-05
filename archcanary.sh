@@ -2995,8 +2995,13 @@ check_kmod() {
                 # dkms status format: "name/version, kernel, arch: status"
                 pkg_name=$(awk -F'[/,]' '{print $1}' <<< "$entry" | xargs)
                 pkg_ver=$(awk -F'[/,]' '{print $2}' <<< "$entry" | xargs)
-                # Skip if pacman-tracked
-                pacman -Qi "$pkg_name" &>/dev/null 2>&1 && continue
+                # Skip if pacman-tracked. dkms's own self-reported name is
+                # often the upstream driver name without Arch's "-dkms"
+                # package suffix (e.g. module "broadcom-wl" vs package
+                # "broadcom-wl-dkms"), so also resolve ownership via the
+                # module's own dkms.conf before concluding it's untracked.
+                { pacman -Qi "$pkg_name" ||
+                  pacman -Qo "/usr/src/$pkg_name-$pkg_ver/dkms.conf"; } &>/dev/null 2>&1 && continue
                 if _allowlist_contains "$pkg_name" _dkms_allow; then
                     echo "  INFO: DKMS module allowlisted (not pacman-tracked): $entry"
                 else

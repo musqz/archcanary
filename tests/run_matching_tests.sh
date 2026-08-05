@@ -1067,7 +1067,44 @@ test_check_kmod() {
         fail "check_kmod: untracked DKMS module hint missing/wrong/duplicated, rc=$rc, hint_count=$hint_count, out: $out"
     fi
 
-    rm -f "$null_dkms" "$lsmod_evil" "$lsmod_empty" "$dkms_evil"
+    # Sub-test D: DKMS's self-reported module name doesn't match its actual
+    # pacman package (the common "-dkms" suffix convention, e.g. module
+    # "broadcom-wl" <- package "broadcom-wl-dkms") — must resolve via the
+    # module's own dkms.conf ownership, not just `pacman -Qi <bare name>`,
+    # or every such package false-positives as untracked.
+    local fake_bin
+    fake_bin=$(mktemp -d)
+    cat > "$fake_bin/pacman" << 'FAKEPACMAN'
+#!/bin/sh
+case "$1" in
+    -Ql) exit 0 ;;
+    -Qi) exit 1 ;;
+    -Qo)
+        case "$2" in
+            */broadcom-wl-*/dkms.conf) echo "broadcom-wl-dkms is owned by broadcom-wl-dkms 1.0-1"; exit 0 ;;
+            *) exit 1 ;;
+        esac
+        ;;
+    *) exit 1 ;;
+esac
+FAKEPACMAN
+    chmod +x "$fake_bin/pacman"
+
+    local dkms_suffix_mismatch
+    dkms_suffix_mismatch=$(make_cmd_script "broadcom-wl/6.30.223.271, 6.18.39-1-arch, x86_64: installed
+")
+
+    rc=0
+    out=$(PATH="$fake_bin:$PATH" LSMOD_CMD="$lsmod_empty" DKMS_CMD="$dkms_suffix_mismatch" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" != *"untracked source"* ]]; then
+        pass "check_kmod: DKMS module name with -dkms-suffixed package resolved via dkms.conf ownership, not flagged"
+    else
+        fail "check_kmod: -dkms suffix mismatch incorrectly flagged untracked, rc=$rc, out: $out"
+    fi
+
+    rm -f "$null_dkms" "$lsmod_evil" "$lsmod_empty" "$dkms_evil" "$dkms_suffix_mismatch"
+    rm -rf "$fake_bin"
 }
 
 # ---------------------------------------------------------------------------
