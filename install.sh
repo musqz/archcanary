@@ -239,22 +239,22 @@ for f in package_list.txt malicious_npm_packages.txt; do
     fi
 done
 
-# Seed yay Lua hooks if not already present
+# Seed yay Lua hooks — only when yay is actually installed. Never touches
+# an existing init.lua (may hold the user's own unrelated hooks).
 YAY_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/yay"
-if [[ ! -f "$YAY_CONFIG_DIR/init.lua" ]]; then
-    mkdir -p "$YAY_CONFIG_DIR"
-    cp "$REPO_DIR/configs/yay-init.lua" "$YAY_CONFIG_DIR/init.lua"
-    echo "  seeded:    $YAY_CONFIG_DIR/init.lua"
-else
-    echo "  kept:      $YAY_CONFIG_DIR/init.lua (already exists)"
+if command -v yay >/dev/null 2>&1; then
+    if [[ ! -f "$YAY_CONFIG_DIR/init.lua" ]]; then
+        mkdir -p "$YAY_CONFIG_DIR"
+        cp "$REPO_DIR/configs/yay-init.lua" "$YAY_CONFIG_DIR/init.lua"
+        echo "  seeded:    $YAY_CONFIG_DIR/init.lua"
+    else
+        echo "  kept:      $YAY_CONFIG_DIR/init.lua (already exists)"
+    fi
 fi
 
-# Seed paru's PreBuildCommand hook — only when paru is actually installed
-# (unlike yay's init.lua above, paru.conf may already exist with the user's
-# own unrelated settings, so we don't create one out of nowhere for a tool
-# that isn't in use). Never touches an existing PreBuildCommand line, ours
-# or the user's own, at any version — same "never overwrite" rule as yay's
-# init.lua.
+# Seed paru's PreBuildCommand hook — only when paru is actually installed.
+# Never touches an existing PreBuildCommand line, ours or the user's own,
+# at any version — same "never overwrite" rule as yay's init.lua above.
 if command -v paru >/dev/null 2>&1; then
     PARU_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/paru"
     PARU_CONF="$PARU_CONFIG_DIR/paru.conf"
