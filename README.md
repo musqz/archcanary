@@ -135,8 +135,9 @@ run everything at once with `--full`.
 | `--run-lynis` | Run `lynis audit system`, stream output | Yes |
 | `--check-pkginteg` | Verify installed file checksums via `pacman -Qkk`. Reports SHA256 mismatches on non-backup, non-factory files. Backup files (pacman-managed configs expected to diverge) and `/factory/` paths are filtered out. Prioritise hits in `/usr/bin/`, `/usr/lib/`, `/usr/sbin/`. | Yes |
 | `--check-list-overlap` | A note, not a warning: custom (`--extra-list`) entries already covered by an official list are grouped by file, with a ready-to-run `sed` command to remove them — safe to remove, since the official list is authoritative. Never affects the exit code or the check summary, and not included in `--full`. Also reachable from the GUI: Edit config → List overlap check. | No |
+| `--scan-all-homes` | Enumerate real local users (UID range from `/etc/login.defs`, valid shell, home dir exists) and run the npm/bun/yarn/pnpm/pkgbuild/autostart checks against each of their homes, not just yours — privilege-dropped per user via `sudo -u`. For shared/multi-user machines; not included in `--full`. | Yes |
 | `--search-packages=PKG[,PKG...]` | Check package name(s) against every loaded threat list, independent of what's installed — no scan, prints a ready-to-copy `pacman -Rns` command for any match, and exits. | No |
-| `--full` | All of the above except `--check-list-overlap` | Partial |
+| `--full` | All of the above except `--check-list-overlap` and `--scan-all-homes` | Partial |
 | `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam/Community Reports lists and the aur-audit black/red feed | — |
 | `--no-aur-audit` | Skip the aur-audit.wtako.net feed on `--refresh`. Persists via `AUR_AUDIT_ENABLE=false` in `~/.config/archcanary/env`, also toggleable from the GUI's Scan settings menu row | — |
 | `--verbose`, `-v`, `--debug` | Verbose output (`--debug` also enables `set -x`) | — |
@@ -227,6 +228,7 @@ youruser ALL=(root) /usr/bin/bash /path/to/archcanary/lib/archcanary-root-instal
 - User notifier: watches `/var/lib/archcanary/last-scan.log`, fires a desktop alert on `INFECTED`
 - pkexec root helper for GUI-triggered root checks (eBPF, bpftool, kmod, Lynis)
 - auditd ruleset at `/etc/audit/rules.d/30-archcanary.rules` when auditd is installed (seeded from template, editable via GUI)
+- `archcanary-scan-all-homes.timer`, opt-in and disabled by default (see below) — covers other local users' home checks that the per-user timer only covers for whoever enables it themselves
 
 **Neither install path enables the timers automatically** — activation is always a manual, explicit step:
 
@@ -236,6 +238,11 @@ sudo systemctl enable --now archcanary.timer archcanary.path
 
 # User-scope scan and desktop notifier
 systemctl --user enable --now archcanary-user.timer archcanary-notify.path
+
+# Optional, machine-wide: weekly scan of every other real local user's home
+# too, not just yours (see --scan-all-homes above) — off by default even
+# after --system install, since it touches every local user's data
+sudo systemctl enable --now archcanary-scan-all-homes.timer
 ```
 
 Until you run these, `archcanary --doctor` will correctly show `[WARN]` for all four automation entries — that's expected, not a bug. Re-run `--doctor` after enabling to confirm they flip to `[ OK ]`.

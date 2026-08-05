@@ -1,0 +1,9 @@
+[Unit]
+Description=archcanary scan of all local users' homes (root, opt-in)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+StateDirectory=archcanary
+ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --scan-all-homes --no-notify --log-file=/var/lib/archcanary/last-scan-all-homes.log

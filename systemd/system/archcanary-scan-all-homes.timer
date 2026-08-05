@@ -1,0 +1,10 @@
+[Unit]
+Description=Run archcanary scan of all local users' homes weekly
+
+[Timer]
+OnBootSec=15min
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

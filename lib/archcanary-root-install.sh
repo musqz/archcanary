@@ -203,9 +203,12 @@ EOF
        "$REPO_DIR"/systemd/system/archcanary.timer \
        "$REPO_DIR"/systemd/system/archcanary-onchange.service \
        "$REPO_DIR"/systemd/system/archcanary.path \
+       "$REPO_DIR"/systemd/system/archcanary-scan-all-homes.service \
+       "$REPO_DIR"/systemd/system/archcanary-scan-all-homes.timer \
        /etc/systemd/system/
     systemctl daemon-reload
     echo "  installed: /etc/systemd/system/archcanary.{service,timer,path} + -onchange.service (not enabled — see below)"
+    echo "  installed: /etc/systemd/system/archcanary-scan-all-homes.{service,timer} (opt-in, not enabled — see below)"
     ;;
 
 uninstall-bins)
@@ -226,10 +229,13 @@ uninstall-bins)
 
 uninstall-components)
     systemctl disable --now archcanary.timer archcanary.path 2>/dev/null || true
+    systemctl disable --now archcanary-scan-all-homes.timer 2>/dev/null || true
     rm -f /etc/systemd/system/archcanary.service \
           /etc/systemd/system/archcanary.timer \
           /etc/systemd/system/archcanary-onchange.service \
-          /etc/systemd/system/archcanary.path
+          /etc/systemd/system/archcanary.path \
+          /etc/systemd/system/archcanary-scan-all-homes.service \
+          /etc/systemd/system/archcanary-scan-all-homes.timer
     systemctl daemon-reload
     echo "  kept:    /var/lib/archcanary (scan history — remove manually if desired)"
     echo "  removed: systemd units (system scan + user notifier)"

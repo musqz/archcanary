@@ -1629,6 +1629,201 @@ test_color_flag_validation() {
 }
 
 # ---------------------------------------------------------------------------
+# --scan-all-homes. _enumerate_local_users and _run_scan_all_homes are only
+# ever reached past archcanary.sh's own `[[ $EUID -eq 0 ]]` guard for this
+# flag, and this suite never runs as real root (never safe to do from a
+# test — see the policy note elsewhere in this file) — so those two are
+# tested by extracting just the function definitions via sed and sourcing
+# them directly, bypassing the CLI/root-guard entirely. The root guard
+# itself and the --full exclusion don't need that: they're testable through
+# the real CLI as a normal non-root user.
+# ---------------------------------------------------------------------------
+_sah_extract_fns() {
+    sed -n '/^_enumerate_local_users()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_run_scan_all_homes()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_sah_parse_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_sah_status_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
+}
+
+test_enumerate_local_users() {
+    local fns scratch fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    mkdir -p "$scratch/alice" "$scratch/bob" "$scratch/carol"
+    # nohome deliberately not created — the home-dir-exists filter must
+    # exclude it.
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+root:x:0:0::/root:/bin/bash
+daemon:x:1:1::/usr/bin:/usr/bin/nologin
+service:x:900:900::/var/lib/service:/usr/bin/nologin
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/zsh
+carol:x:1002:1002::$scratch/carol:/usr/bin/nologin
+nohome:x:1003:1003::$scratch/nohome:/bin/bash
+EOF
+
+    local out
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _enumerate_local_users users
+        printf '%s\n' \"\${users[@]}\"
+    ")
+    if [[ "$out" == *"alice:$scratch/alice"* && "$out" == *"bob:$scratch/bob"* && \
+          "$out" != *"root:"* && "$out" != *"daemon:"* && "$out" != *"service:"* && \
+          "$out" != *"carol:"* && "$out" != *"nohome:"* ]]; then
+        pass "enumerate_local_users: UID range, nologin/false shell, and missing-home filters all apply"
+    else
+        fail "enumerate_local_users: unexpected user set, out: $out"
+    fi
+
+    local out2
+    out2=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_ALL_HOMES_EXCLUDE='bob'
+        _enumerate_local_users users
+        printf '%s\n' \"\${users[@]}\"
+    ")
+    if [[ "$out2" == *"alice:"* && "$out2" != *"bob:"* ]]; then
+        pass "enumerate_local_users: SCAN_ALL_HOMES_EXCLUDE skips the named user"
+    else
+        fail "enumerate_local_users: exclude list not respected, out: $out2"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+test_scan_all_homes_worst_of_n() {
+    local fns scratch fake_bin fake_passwd empty_list
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$scratch/bob/.config/autostart" "$scratch/carol" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/bash
+carol:x:1002:1002::$scratch/carol:/bin/bash
+EOF
+
+    cat > "$scratch/bob/.config/autostart/evil.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Suspicious
+Exec=$scratch/does-not-exist-binary
+EOF
+
+    # Fake sudo: -H -u <user> -- <cmd...>. carol's invocation fails outright
+    # (simulates a real sudo/auth failure) so the "no parseable output ->
+    # WARNING, not silent CLEAN" path gets exercised too.
+    cat > "$fake_bin/sudo" <<EOF
+#!/usr/bin/env bash
+shift; shift
+user="\$1"; shift
+shift
+if [[ "\$user" == carol ]]; then
+    exit 1
+fi
+home=\$(awk -F: -v u="\$user" '\$1==u{print \$6}' "$fake_passwd")
+HOME="\$home" exec "\$@"
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    empty_list="$scratch/empty_list.txt"
+    echo "nonexistent-malicious-pkg-xyz" > "$empty_list"
+
+    local out
+    out=$(PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='$REPO_DIR/archcanary.sh'
+        EXIT_CODE=0
+        _SUMMARY_NAMES=(); _SUMMARY_CODES=(); _SUMMARY_IDX=()
+        _rec() { _SUMMARY_NAMES+=(\"\$1\"); _SUMMARY_CODES+=(\"\$2\"); _SUMMARY_IDX+=(\"\${3:-}\"); }
+        MALICIOUS_NPM_LIST='$empty_list'
+        PACKAGE_LIST_FILE='$empty_list'
+        CHAOS_RAT_LIST='$empty_list'
+        RUSSIAN_SPAM_LIST='$empty_list'
+        COMMUNITY_REPORTS_LIST='$empty_list'
+        _run_scan_all_homes
+        for i in \"\${!_SUMMARY_NAMES[@]}\"; do
+            echo \"\${_SUMMARY_NAMES[\$i]}=\${_SUMMARY_CODES[\$i]}\"
+        done
+        echo \"EXIT_CODE=\$EXIT_CODE\"
+    " 2>&1)
+
+    if [[ "$out" == *"XDG autostart + shell RCs=2"* ]]; then
+        pass "scan_all_homes: worst-of-N reflects the flagged user's autostart finding"
+    else
+        fail "scan_all_homes: expected 'XDG autostart + shell RCs=2', out: $out"
+    fi
+    if [[ "$out" == *"npm cache=0"* ]]; then
+        pass "scan_all_homes: an unrelated check stays clean when no user triggers it"
+    else
+        fail "scan_all_homes: expected 'npm cache=0', out: $out"
+    fi
+    if [[ "$out" == *"=== user: alice"* && "$out" == *"=== user: bob"* ]]; then
+        pass "scan_all_homes: narrative log includes per-user sections"
+    else
+        fail "scan_all_homes: expected per-user narrative sections, out: $out"
+    fi
+    if [[ "$out" == *"WARNING: no log produced for carol"* || \
+          "$out" == *"WARNING: could not evaluate result for carol"* ]]; then
+        pass "scan_all_homes: a failed per-user subprocess is reported as WARNING, not silently CLEAN"
+    else
+        fail "scan_all_homes: expected a WARNING for carol's failed subprocess, out: $out"
+    fi
+    if [[ "$out" == *"EXIT_CODE=2"* ]]; then
+        pass "scan_all_homes: EXIT_CODE reflects the worst finding across all users"
+    else
+        fail "scan_all_homes: expected EXIT_CODE=2, out: $out"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+test_scan_all_homes_root_guard() {
+    local out rc=0
+    out=$("$REPO_DIR/archcanary.sh" --scan-all-homes 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"--scan-all-homes requires root"* ]]; then
+        pass "scan_all_homes: non-root invocation rejected with a clear error"
+    else
+        fail "scan_all_homes: expected root-required rejection, rc=$rc, out: $out"
+    fi
+
+    # --doctor bypasses the guard (nothing root-requiring actually runs) and
+    # instead reports the flag as ignored, matching --refresh/--full's
+    # existing "ignored under --doctor" convention.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" --doctor --scan-all-homes 2>&1) || rc=$?
+    if [[ "$out" == *"following flags are ignored with --doctor"*"--scan-all-homes"* ]]; then
+        pass "scan_all_homes: --doctor --scan-all-homes bypasses the root guard, reports as ignored"
+    else
+        fail "scan_all_homes: expected --doctor to bypass the guard and report ignored flag, rc=$rc, out: $out"
+    fi
+}
+
+test_scan_all_homes_flag_wiring() {
+    local out rc=0
+    out=$("$REPO_DIR/archcanary.sh" --full \
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt" \
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" \
+        --no-notify --no-summary 2>&1) || rc=$?
+    if [[ "$out" != *"--scan-all-homes requires root"* ]]; then
+        pass "scan_all_homes: --full does not implicitly enable --scan-all-homes"
+    else
+        fail "scan_all_homes: --full incorrectly triggered the --scan-all-homes root guard, out: $out"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # _allowlist_cli value validation — regression coverage for the bug found
 # 2026-08-02: the value regex required the first char to be alphanumeric
 # and never allowed '/', so a real full-path autostart value (as required by
@@ -1941,6 +2136,18 @@ test_install_paru_conf
 
 $VERBOSE && msg "--- Test 23: --color flag validation ---"
 test_color_flag_validation
+
+$VERBOSE && msg "--- Test 24: enumerate_local_users filtering ---"
+test_enumerate_local_users
+
+$VERBOSE && msg "--- Test 25: scan-all-homes worst-of-N aggregation ---"
+test_scan_all_homes_worst_of_n
+
+$VERBOSE && msg "--- Test 26: scan-all-homes root guard ---"
+test_scan_all_homes_root_guard
+
+$VERBOSE && msg "--- Test 27: scan-all-homes flag wiring (--full exclusion) ---"
+test_scan_all_homes_flag_wiring
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

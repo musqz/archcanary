@@ -27,13 +27,21 @@ user (you) — user-level checks:
                                   --check-autostart   (scans your real ~)
      └─ notifies itself on a detection (runs in your session)
   archcanary-user.timer    weekly + on boot
+
+system (root), opt-in — same user-level checks, every real local user:
+  archcanary-scan-all-homes.service  --scan-all-homes
+     └─ enumerates real local users, runs the user-level checks above as a
+        privilege-dropped (sudo -u) subprocess per user — root orchestrating
+        N copies of the user-lane's own invocation, not a third kind of check
+     └─ writes /var/lib/archcanary/last-scan-all-homes.log   (--no-notify)
+  archcanary-scan-all-homes.timer    weekly (disabled by default)
 ```
 
-The root scan can't notify (no desktop session), so a user `.path` unit watches its result file and raises the alert. The user scan runs in your session, so it just calls `notify-send` itself.
+The root scan can't notify (no desktop session), so a user `.path` unit watches its result file and raises the alert. The user scan runs in your session, so it just calls `notify-send` itself. `archcanary-scan-all-homes` closes the gap the user-level lane leaves on a shared machine — nothing scans a second user's home unless *they* enable `archcanary-user.timer` themselves — without collapsing the root-vs-user distinction: it's root reaching into each user's home on an explicit opt-in, not a merged root+user check.
 
 ## Quick setup (recommended)
 
-`./install.sh --system` does all of this for you — it installs the system scan units, the user-level scan, and the notifier; creates `/var/lib/archcanary/`; seeds the package lists and the system-wide DKMS, systemd, and bpftool allowlists; enables the system timer + pacman-trigger, the user timer, and the notifier; and migrates away any old user-scope scan units:
+`./install.sh --system` does all of this for you — it installs the system scan units, the user-level scan, the notifier, and the opt-in scan-all-homes unit (installed but never enabled — see section 5); creates `/var/lib/archcanary/`; seeds the package lists and the system-wide DKMS, systemd, and bpftool allowlists; enables the system timer + pacman-trigger, the user timer, and the notifier; and migrates away any old user-scope scan units:
 
 ```bash
 ./install.sh --system
@@ -192,6 +200,47 @@ sudo systemctl enable --now archcanary.path
 
 > The path unit only triggers when `/var/log/pacman.log` changes; systemd coalesces rapid writes (e.g. a big `-Syu`) so the scan runs once after the transaction settles. Runs offline against the cached list; freshness comes from the weekly timer's `--refresh`.
 
+## 5. Scan all local user homes (optional, root)
+
+Section 3's user-level scan only covers whoever enables `archcanary-user.timer` for themselves — on a shared machine, another user's npm/bun/pnpm caches and autostart entries are never scanned unless they personally opt in. This unit closes that gap: root enumerates real local users (UID range from `/etc/login.defs`, valid shell, home directory exists) and runs section 3's exact check bundle as a privilege-dropped (`sudo -u`) subprocess per user, so `command -v` autostart resolution and cache paths are evaluated against each real account, not root's.
+
+Off by default even after `--system` install — it's the one unit here that touches every local user's data, so activation is a deliberate, separate step from the rest of `--system`'s setup.
+
+**`/etc/systemd/system/archcanary-scan-all-homes.service`**
+```ini
+[Unit]
+Description=archcanary scan of all local users' homes (root, opt-in)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+StateDirectory=archcanary
+ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --scan-all-homes --no-notify --log-file=/var/lib/archcanary/last-scan-all-homes.log
+```
+
+**`/etc/systemd/system/archcanary-scan-all-homes.timer`**
+```ini
+[Unit]
+Description=Run archcanary scan of all local users' homes weekly
+
+[Timer]
+OnBootSec=15min
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+A separate result file (`last-scan-all-homes.log`, not `last-scan.log`) — both this timer and `archcanary.timer` fire near-boot and weekly, and each scan truncates its own log file on start, so two units sharing one file would race. The section-2 notifier already watches both files.
+
+Enable and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now archcanary-scan-all-homes.timer
+```
+
 ## Checking results
 
 ```bash
@@ -199,14 +248,18 @@ sudo systemctl enable --now archcanary.path
 sudo cat /var/lib/archcanary/last-scan.log
 # Last user-scan output
 cat ~/.cache/archcanary/last-user-scan.log
+# Last scan-all-homes output (root-owned; if enabled)
+sudo cat /var/lib/archcanary/last-scan-all-homes.log
 
 # Or via the journal
 journalctl -u archcanary            # system scan
 journalctl --user -u archcanary-user   # user scan
+journalctl -u archcanary-scan-all-homes   # scan-all-homes (if enabled)
 
 # Timer / unit status
 systemctl status archcanary.timer
 systemctl --user status archcanary-user.timer archcanary-notify.path
+systemctl status archcanary-scan-all-homes.timer
 ```
 
 ## Why the split?
