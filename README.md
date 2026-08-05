@@ -215,6 +215,11 @@ don't apply to your setup.
 man archcanary
 ```
 
+`--system` needs `sudo`, but funnels every root-only step through a single script (`lib/archcanary-root-install.sh`) rather than calling `sudo` per-command. If your sudoers is restricted to a command allowlist instead of full access, you only need to permit that one script:
+```
+youruser ALL=(root) /usr/bin/bash /path/to/archcanary/lib/archcanary-root-install.sh *
+```
+
 `--system` (and, equivalently, installing the built package via `makepkg -si` or an AUR helper) sets up:
 - Root system timer: weekly + on boot + after each pacman transaction
 - User notifier: watches `/var/lib/archcanary/last-scan.log`, fires a desktop alert on `INFECTED`
