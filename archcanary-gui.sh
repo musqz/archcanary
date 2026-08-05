@@ -81,9 +81,11 @@ REFRESHED=false
 # on every menu redraw; scan_settings() updates this in place after Save.
 # Same file/key archcanary.sh itself reads (~/.config/archcanary/env,
 # AUR_AUDIT_ENABLE) — this is purely a display cache, not a second source
-# of truth.
-AUR_AUDIT_ENABLE_GUI=true
-grep -qiE '^AUR_AUDIT_ENABLE=false' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env" 2>/dev/null && AUR_AUDIT_ENABLE_GUI=false
+# of truth. Variable is named for its broader GUI meaning (also gates
+# whether Full scan auto-refreshes at all), but the persisted key stays
+# AUR_AUDIT_ENABLE so an existing env file keeps working unchanged.
+HAS_INTERNET=true
+grep -qiE '^AUR_AUDIT_ENABLE=false' "${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env" 2>/dev/null && HAS_INTERNET=false
 
 # Remembered scan-log save directory (show_output()'s Save button) — same
 # file, same "display cache, updated in place after Save" rule as above.
@@ -95,7 +97,7 @@ fi
 unset _remembered_dir
 
 # Rewrites ~/.config/archcanary/env from the two known in-memory settings
-# (AUR_AUDIT_ENABLE_GUI, GUI_LOG_SAVE_DIR) — shared by scan_settings() and
+# (HAS_INTERNET, GUI_LOG_SAVE_DIR) — shared by scan_settings() and
 # show_output()'s Save button so neither one clobbers the other's line.
 # grep-only file, never sourced — see the security note above scan_settings().
 _write_gui_env() {
@@ -103,7 +105,7 @@ _write_gui_env() {
     mkdir -p "$cfg_dir"
     {
         printf '# archcanary settings — managed by archcanary-gui\n'
-        $AUR_AUDIT_ENABLE_GUI || printf 'AUR_AUDIT_ENABLE=false\n'
+        $HAS_INTERNET || printf 'AUR_AUDIT_ENABLE=false\n'
         printf 'GUI_LOG_SAVE_DIR=%s\n' "$GUI_LOG_SAVE_DIR"
     } > "$cfg_dir/env"
 }
@@ -612,25 +614,25 @@ CONF
 # lib/archcanary-root-helper), and sourcing a user-writable file as root
 # would be a local privilege escalation. Top-level menu row (not nested
 # under Edit config) so the current state is visible without opening
-# anything — see build_list_args()'s "aur-audit sync: ON/OFF" suffix.
+# anything — see build_list_args()'s "internet: ON/OFF" suffix.
 scan_settings() {
     local cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
     local env_file="$cfg_dir/env"
     mkdir -p "$cfg_dir"
 
     local cur="TRUE"
-    $AUR_AUDIT_ENABLE_GUI || cur="FALSE"
+    $HAS_INTERNET || cur="FALSE"
 
     local result
     result=$(yad --form \
         --title="Scan Settings — Archcanary" \
         --window-icon=security-high --center \
         --width=480 \
-        --field="Fetch aur-audit.wtako.net black/red feed on --refresh:CHK" "$cur" \
+        --field="I have an internet connection (auto-refresh + aur-audit sync on Full scan):CHK" "$cur" \
         --button="Save:0" --button="Cancel:1" \
         2>/dev/null) || return 0
 
-    [[ "$result" == FALSE* ]] && AUR_AUDIT_ENABLE_GUI=false || AUR_AUDIT_ENABLE_GUI=true
+    [[ "$result" == FALSE* ]] && HAS_INTERNET=false || HAS_INTERNET=true
     _write_gui_env
 
     yad --image=dialog-information \
@@ -707,9 +709,10 @@ run_action() {
 
     read -ra flag_arr <<< "$flags"
 
-    # Full scan (idx 0) always refreshes the package list on the first run of
-    # the session. Subsequent runs skip the network fetch for speed.
-    if [[ "$idx" -eq 0 ]] && ! $REFRESHED; then
+    # Full scan (idx 0) refreshes the package list on the first run of the
+    # session, unless the "I have an internet connection" setting is off —
+    # subsequent runs also skip the network fetch for speed.
+    if [[ "$idx" -eq 0 ]] && ! $REFRESHED && $HAS_INTERNET; then
         flag_arr=(--refresh "${flag_arr[@]}")
         REFRESHED=true
     fi
@@ -905,8 +908,8 @@ build_list_args() {
     _row 12
     _row 13
     local aa_state="ON"
-    $AUR_AUDIT_ENABLE_GUI || aa_state="OFF"
-    _row 18 "${LABELS[18]}  (aur-audit sync: ${aa_state})"
+    $HAS_INTERNET || aa_state="OFF"
+    _row 18 "${LABELS[18]}  (internet: ${aa_state})"
     _row 17
 }
 
@@ -933,7 +936,7 @@ while true; do
     [[ "$selected" == *"───"* ]] && continue  # separator row
 
     selected="${selected#🔐  }"                # strip lock prefix from root items
-    selected="${selected%  (aur-audit sync:*}"  # strip Scan settings' state suffix
+    selected="${selected%  (internet:*}"  # strip Scan settings' state suffix
 
     for i in "${!LABELS[@]}"; do
         if [[ "${LABELS[$i]}" == "$selected" ]]; then
