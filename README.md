@@ -270,6 +270,11 @@ An automatic layer fires at AUR build time — yay's offline `init.lua` hooks,
 or paru's native `PreBuildCommand` hook, whichever AUR helper you use — plus
 a continuous root scan (`archcanary --full`, weekly + on boot + after every
 pacman transaction), a desktop notifier on detection, and the on-demand GUI.
+paru's hook fires before its own diff/edit review menus (a paru limitation —
+it has no post-review hook point) and only runs the PKGBUILD pattern check,
+not the aur-audit black/red lookup, so yay's integration is the more
+complete of the two. Other AUR helpers can still be scanned manually via
+`--check-pkgbuild`, just without an automatic pre-build hook.
 
 See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
 (at-a-glance table included).
