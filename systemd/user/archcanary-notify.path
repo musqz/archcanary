@@ -9,6 +9,7 @@ StartLimitIntervalSec=0
 # on every write. The scan streams last-scan.log line-by-line via tee, so
 # PathModified would fire dozens of times per scan and trip the start limit.
 PathChanged=/var/lib/archcanary/last-scan.log
+PathChanged=/var/lib/archcanary/last-scan-all-homes.log
 Unit=archcanary-notify.service
 
 [Install]

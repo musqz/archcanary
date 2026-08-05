@@ -118,6 +118,15 @@ command per affected file. A note, not a warning: never affects the exit
 status, never warns in the check summary, and not included in
 .BR \-\-full .
 .TP
+.B \-\-scan\-all\-homes
+Enumerate real local users
+.RI ( /etc/login.defs " UID range, valid shell, home directory exists)"
+and run the npm/bun/yarn/pnpm/pkgbuild/autostart checks against each of
+their homes, not just yours — privilege-dropped per user via
+.BR sudo \-u .
+For shared/multi-user machines. Requires root. Not included in
+.BR \-\-full .
+.TP
 .B \-\-search\-packages= PKG [, PKG ...]
 Check package name(s) against every loaded threat list, independent of
 what's installed locally. No scan is run; prints a ready-to-copy
@@ -256,6 +265,11 @@ Last system scan result.
 .TP
 .I ~/.cache/archcanary/last-user-scan.log
 Last user scan result.
+.TP
+.I /var/lib/archcanary/last-scan-all-homes.log
+Last
+.B \-\-scan\-all\-homes
+result (if enabled).
 .TP
 .I /etc/archcanary/dkms_allowlist.conf
 System-wide DKMS module allowlist for

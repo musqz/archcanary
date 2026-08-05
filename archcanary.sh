@@ -80,6 +80,7 @@ CHECK_LYNIS=false
 CHECK_PKGINTEG=false
 CHECK_LIST_OVERLAP=false
 CHECK_FULL=false
+SCAN_ALL_HOMES=false
 # True only if --check-lynis was passed directly, not just via --full.
 EXPLICIT_LYNIS=false
 REFRESH_PACKAGE_LIST=false
@@ -437,6 +438,7 @@ for arg in "$@"; do
         --check-lynis)      CHECK_LYNIS=true; EXPLICIT_LYNIS=true ;;
         --check-pkginteg)   CHECK_PKGINTEG=true ;;
         --check-list-overlap) CHECK_LIST_OVERLAP=true ;;
+        --scan-all-homes) SCAN_ALL_HOMES=true ;;
         --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_LYNIS=true; CHECK_PKGINTEG=true; CHECK_FULL=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
@@ -494,6 +496,8 @@ for arg in "$@"; do
             echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
             echo "  --check-list-overlap  Note custom-list entries already covered by an official list, safe to"
             echo "                        remove — advisory only, not included in --full"
+            echo "  --scan-all-homes   Enumerate real local users and run the npm/bun/yarn/pnpm/pkgbuild/autostart"
+            echo "                     checks against each of their homes, not just yours (needs root, not included in --full)"
             echo "  --search-packages=PKG[,PKG...]  Check package name(s) against every loaded threat list"
             echo "                                   (no scan; prints a ready-to-copy 'pacman -Rns' command"
             echo "                                   for any match) and exit"
@@ -604,6 +608,11 @@ case "$_FORMAT_ARG" in
         ;;
 esac
 
+if $SCAN_ALL_HOMES && ! $DOCTOR && [[ $EUID -ne 0 ]]; then
+    echo "Error: --scan-all-homes requires root (enumerating other users' homes needs root) — run via sudo" >&2
+    exit 1
+fi
+
 # Focused mode: a specific --check-* flag was given without --full.
 # Suppresses the campaign header and the always-on package/log checks so
 # each individual check window shows only the output it was asked for.
@@ -611,7 +620,7 @@ FOCUSED_MODE=false
 if ! $CHECK_FULL && { $CHECK_SYSTEMD || $CHECK_EBPF || $CHECK_NPM_CACHE || \
     $CHECK_BUN_CACHE || $CHECK_YARN_CACHE || $CHECK_PNPM_CACHE || $CHECK_PKGBUILD || \
     $CHECK_BPFTOOL || $CHECK_LDSO || $CHECK_AUTOSTART || $CHECK_KMOD || $CHECK_LYNIS || \
-    $CHECK_PKGINTEG; }; then
+    $CHECK_PKGINTEG || $SCAN_ALL_HOMES; }; then
     FOCUSED_MODE=true
 fi
 
@@ -633,6 +642,7 @@ run_doctor() {
     $REFRESH_PACKAGE_LIST             && _ignored+=("--refresh")
     [[ ${#EXTRA_LIST_OPTS[@]} -gt 0 ]] && _ignored+=("--extra-list")
     $CHECK_FULL                       && _ignored+=("--full")
+    $SCAN_ALL_HOMES                   && _ignored+=("--scan-all-homes")
     if [[ ${#_ignored[@]} -gt 0 ]]; then
         printf 'NOTE: the following flags are ignored with --doctor: %s\n\n' "${_ignored[*]}" >&2
     fi
@@ -1097,6 +1107,123 @@ _run_as_invoker() {
     else
         "$@"
     fi
+}
+
+# Populates OUT_ARRAY_NAME with "username:home" entries for real local users
+# — UID in [UID_MIN, UID_MAX] from /etc/login.defs (falls back to Arch's own
+# defaults, 1000-60000, if login.defs is missing/unreadable), shell not
+# ending in nologin or false, home directory exists. SCAN_ALL_HOMES_EXCLUDE
+# (colon-separated usernames) skips additional accounts. Test seam:
+# _SCAN_ALL_HOMES_TEST_PASSWD points at a passwd-format file instead of
+# querying getent, same convention as AUTOSTART_HOME/PKGBUILD_CACHE_DIRS.
+_enumerate_local_users() {
+    local -n _seu_out="$1"
+    _seu_out=()
+
+    local uid_min=1000 uid_max=60000 _v
+    if [[ -r /etc/login.defs ]]; then
+        _v="$(awk '$1=="UID_MIN"{print $2}' /etc/login.defs)"
+        [[ "$_v" =~ ^[0-9]+$ ]] && uid_min="$_v"
+        _v="$(awk '$1=="UID_MAX"{print $2}' /etc/login.defs)"
+        [[ "$_v" =~ ^[0-9]+$ ]] && uid_max="$_v"
+    fi
+
+    local -a _exclude=()
+    IFS=':' read -ra _exclude <<< "${SCAN_ALL_HOMES_EXCLUDE:-}"
+
+    local name uid home shell skip ex
+    while IFS=: read -r name _ uid _ _ home shell; do
+        [[ "$uid" =~ ^[0-9]+$ ]] || continue
+        (( uid >= uid_min && uid <= uid_max )) || continue
+        [[ "$shell" == */nologin || "$shell" == */false ]] && continue
+        [[ -d "$home" ]] || continue
+        skip=false
+        for ex in "${_exclude[@]}"; do
+            [[ -n "$ex" && "$name" == "$ex" ]] && { skip=true; break; }
+        done
+        $skip && continue
+        _seu_out+=("$name:$home")
+    done < <(if [[ -n "${_SCAN_ALL_HOMES_TEST_PASSWD:-}" ]]; then
+                 cat -- "$_SCAN_ALL_HOMES_TEST_PASSWD"
+             else
+                 getent passwd
+             fi)
+}
+
+# --scan-all-homes: enumerates real local users and runs the six
+# home-dependent checks against each of their homes as a privilege-dropped
+# subprocess (the same flag bundle archcanary-user.service already runs in
+# production, just centrally triggered) — not an in-process loop, since
+# check_autostart's `command -v` resolution needs the target user's real
+# PATH, and only check_npm_cache privilege-drops today. Folds each user's
+# worst-of-N result into the existing summary labels/indices (never a
+# per-user-suffixed label — _is_behavior_check_name matches names verbatim).
+_run_scan_all_homes() {
+    local _sah_bin _sah_users=() _sah_any_failed=false
+    _sah_bin="${_SCAN_ALL_HOMES_TEST_BIN:-$(realpath "$0")}"
+    _enumerate_local_users _sah_users
+    if [[ ${#_sah_users[@]} -eq 0 ]]; then
+        echo "  No real local users found (UID range, shell, or home-dir filters excluded everyone)."
+    fi
+
+    local -A _sah_worst=(
+        ["npm cache"]=-1 ["bun cache"]=-1 ["yarn cache"]=-1 ["pnpm cache"]=-1
+        ["PKGBUILD obfuscation scan"]=-1 ["XDG autostart + shell RCs"]=-1
+    )
+    local -A _sah_idx=(
+        ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
+        ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
+    )
+
+    local _sah_entry _sah_user _sah_home _sah_log _sah_json
+    local _sah_name _sah_status _sah_code
+    for _sah_entry in "${_sah_users[@]}"; do
+        _sah_user="${_sah_entry%%:*}"
+        _sah_home="${_sah_entry#*:}"
+        echo "  === user: $_sah_user ($_sah_home) ==="
+        _sah_log="$_sah_home/.cache/archcanary/last-user-scan.log"
+        # PATH is set via `env` *after* the user switch, not prefixed before
+        # `sudo`, since sudo's own env_reset/secure_path policy (sudoers is
+        # per-machine config, not something to assume about) can silently
+        # discard a PATH set only on the invoking side.
+        _sah_json=$(sudo -H -u "$_sah_user" -- env \
+                PATH="$_sah_home/.local/bin:$_sah_home/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin" \
+                "$_sah_bin" \
+                --check-npm-cache --check-bun-cache --check-yarn-cache \
+                --check-pnpm-cache --check-pkgbuild --check-autostart \
+                --malicious-npm-list="$MALICIOUS_NPM_LIST" \
+                --package-list="$PACKAGE_LIST_FILE" \
+                --chaos-rat-list="$CHAOS_RAT_LIST" \
+                --russian-spam-list="$RUSSIAN_SPAM_LIST" \
+                --community-list="$COMMUNITY_REPORTS_LIST" \
+                --no-notify --color=never --format=json \
+                --log-file="$_sah_log" 2>/dev/null) || true
+        if [[ -f "$_sah_log" ]]; then
+            cat -- "$_sah_log"
+        else
+            echo "  WARNING: no log produced for $_sah_user"
+        fi
+        if [[ -z "$_sah_json" ]]; then
+            echo "  WARNING: could not evaluate result for $_sah_user (no parseable output)"
+            _sah_any_failed=true
+            continue
+        fi
+        while IFS='|' read -r _sah_name _sah_status; do
+            [[ -n "${_sah_worst[$_sah_name]+x}" ]] || continue
+            _sah_code=$(_sah_status_to_code "$_sah_status")
+            (( _sah_code > _sah_worst[$_sah_name] )) && _sah_worst[$_sah_name]=$_sah_code
+        done < <(_sah_parse_checks "$_sah_json")
+    done
+
+    for _sah_name in "npm cache" "bun cache" "yarn cache" "pnpm cache" \
+                      "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"; do
+        _sah_code="${_sah_worst[$_sah_name]}"
+        if [[ $_sah_code -eq -1 ]]; then
+            $_sah_any_failed && _sah_code=1 || _sah_code=0
+        fi
+        [[ $_sah_code -gt $EXIT_CODE ]] && EXIT_CODE=$_sah_code
+        _rec "$_sah_name" "$_sah_code" "${_sah_idx[$_sah_name]}"
+    done
 }
 
 # systemd *system* services (and some cron contexts) start with no $HOME, which
@@ -3256,6 +3383,27 @@ _json_status() {
     esac
 }
 
+# --scan-all-homes: pulls "name|status" lines out of a per-user child's
+# --format=json output (see _print_summary_json's "checks" array below), and
+# the inverse of _json_status to fold each child's result back into a code.
+_sah_parse_checks() {
+    grep -oP '"checks":\[\K[^]]*' <<< "$1" | grep -oP '\{[^}]*\}' | while read -r _sah_obj; do
+        printf '%s|%s\n' \
+            "$(grep -oP '"name":"\K[^"]*' <<< "$_sah_obj")" \
+            "$(grep -oP '"status":"\K[^"]*' <<< "$_sah_obj")"
+    done
+}
+_sah_status_to_code() {
+    case "$1" in
+        clean)           echo 0 ;;
+        warning)         echo 1 ;;
+        infected)        echo 2 ;;
+        skipped_root)    echo 77 ;;
+        skipped_missing) echo 78 ;;
+        *)               echo 1 ;;
+    esac
+}
+
 # --format=json's whole output: a stable {name,status} array built from the
 # same _SUMMARY_NAMES/_SUMMARY_CODES that _print_summary renders as a table,
 # plus scan-level metadata. Written to fd 3 (the real stdout, saved before
@@ -3578,7 +3726,7 @@ if $CHECK_EBPF; then
     echo
 fi
 
-if $CHECK_NPM_CACHE; then
+if $CHECK_NPM_CACHE && ! $SCAN_ALL_HOMES; then
     echo "--- [5] npm cache check ---"
     check_npm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3586,7 +3734,7 @@ if $CHECK_NPM_CACHE; then
     echo
 fi
 
-if $CHECK_BUN_CACHE; then
+if $CHECK_BUN_CACHE && ! $SCAN_ALL_HOMES; then
     echo "--- [6] bun cache check ---"
     check_bun_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3594,7 +3742,7 @@ if $CHECK_BUN_CACHE; then
     echo
 fi
 
-if $CHECK_YARN_CACHE; then
+if $CHECK_YARN_CACHE && ! $SCAN_ALL_HOMES; then
     echo "--- [6b] yarn cache check ---"
     check_yarn_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3602,7 +3750,7 @@ if $CHECK_YARN_CACHE; then
     echo
 fi
 
-if $CHECK_PNPM_CACHE; then
+if $CHECK_PNPM_CACHE && ! $SCAN_ALL_HOMES; then
     echo "--- [6c] pnpm cache check ---"
     check_pnpm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3610,7 +3758,7 @@ if $CHECK_PNPM_CACHE; then
     echo
 fi
 
-if $CHECK_PKGBUILD; then
+if $CHECK_PKGBUILD && ! $SCAN_ALL_HOMES; then
     echo "--- [7] PKGBUILD/install file scan (obfuscation-aware) ---"
     check_pkgbuild_caches && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3634,11 +3782,17 @@ if $CHECK_LDSO; then
     echo
 fi
 
-if $CHECK_AUTOSTART; then
+if $CHECK_AUTOSTART && ! $SCAN_ALL_HOMES; then
     echo "--- [10] XDG autostart + shell RC persistence check ---"
     check_autostart && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
     _rec "XDG autostart + shell RCs" "$ret" "10"
+    echo
+fi
+
+if $SCAN_ALL_HOMES; then
+    echo "--- [10b] Scan all local user homes (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
+    _run_scan_all_homes
     echo
 fi
 

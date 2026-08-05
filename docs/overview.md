@@ -20,14 +20,22 @@ flowchart TD
         POST --> OK
     end
 
-    subgraph AFTER["2 · AFTER install / always — automatic, root"]
-        TIM["systemd timer<br/>weekly + on boot"] --> SCAN["archcanary<br/>--full"]
-        PTH[".path unit<br/>after each pacman tx"] --> SCAN
+    subgraph AFTER["2 · AFTER install / always — automatic"]
+        TIM["archcanary.timer<br/>weekly + on boot, root"] --> SCAN["archcanary<br/>systemd/eBPF/bpftool/ld.so/kmod"]
+        PTH[".path unit<br/>after each pacman tx, root"] --> SCAN
         SCAN --> LOG["last-scan.log"]
+
+        UTIM["archcanary-user.timer<br/>weekly + on boot, per user"] --> USCAN["archcanary-user<br/>npm/bun/yarn/pnpm/pkgbuild/autostart"]
+        USCAN --> ULOG["last-user-scan.log<br/>(self-notifies)"]
+
+        SAHTIM["archcanary-scan-all-homes.timer<br/>(opt-in, off by default)"] -.-> SAH["scan-all-homes<br/>sudo -u per real local user"]
+        SAH -.-> SAHLOG["last-scan-all-homes.log"]
     end
 
     subgraph ALERT["3 · ON detection / review"]
-        LOG -->|INFECTED| NOT["user .path → notify-send<br/>critical desktop alert"]
+        NOT["user .path → notify-send<br/>critical desktop alert"]
+        LOG -->|INFECTED| NOT
+        SAHLOG -.->|INFECTED| NOT
         NOT --> GUI["archcanary-gui<br/>review + root checks"]
     end
 
@@ -41,7 +49,9 @@ flowchart TD
 | 1 · At install | yay `init.lua` hooks | Every `yay` install/upgrade | ✓ | Known campaign signatures, stale-rewrite upgrades, aur-audit black/red (offline + live feed) |
 | 1 · At install | paru `PreBuildCommand` hook | Every `paru` build | ✓ | Same obfuscation patterns as yay's hook (via `archcanary --check-pkgbuild`, scoped to that package) — no aur-audit lookup yet |
 | 2 · After / always | `archcanary` | systemd timer (weekly + boot) + `.path` (after each pacman tx) | ✓ root | Known-bad packages, systemd/eBPF/npm persistence, rootkit traces |
-| 3 · On detection | notifier → GUI | `last-scan.log` flips to INFECTED | ✓ | Surfaces a result; review is manual |
+| 2 · After / always | `archcanary-user` | systemd `--user` timer (weekly + boot) | opt-in, per user | npm/bun/yarn/pnpm/pkgbuild caches, autostart — for whoever enables it |
+| 2 · After / always | `archcanary-scan-all-homes` | systemd timer, weekly | opt-in, off by default | Same as above, for every real local user — not just whoever opted in |
+| 3 · On detection | notifier → GUI | `last-scan.log`/`last-scan-all-homes.log` flips to INFECTED | ✓ | Surfaces a result; review is manual |
 
 ## Read this first
 

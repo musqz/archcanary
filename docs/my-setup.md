@@ -162,9 +162,12 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── archcanary.service     # system-level scan as root, writes last-scan.log
     ├── archcanary.timer       # weekly + on boot
     ├── archcanary-onchange.service
-    └── archcanary.path        # triggers after each pacman transaction
+    ├── archcanary.path        # triggers after each pacman transaction
+    ├── archcanary-scan-all-homes.service  # opt-in: sudo -u per real local user
+    └── archcanary-scan-all-homes.timer    # weekly, disabled by default
 /var/lib/archcanary/
-    └── last-scan.log                 # shared result the user notifier watches
+    ├── last-scan.log                 # shared result the user notifier watches
+    └── last-scan-all-homes.log       # scan-all-homes result (if enabled)
 ```
 
 ## Dependencies
