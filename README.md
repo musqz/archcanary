@@ -7,6 +7,8 @@
 > The beta label is staying on deliberately for now, to give the project a solid stretch of real-world testing rather than dropping it early — not a sign of unresolved blockers.
 >
 > If you run into anything, please open an [issue](https://github.com/musqz/archcanary/issues) or start a [discussion](https://github.com/musqz/archcanary/discussions).
+>
+> Follow active topic on [endeavouros forum](https://forum.endeavouros.com/t/archcanary-a-layered-security-scanner-for-arch-based-linux-beta-looking-for-testers/80837) about archcanary.
 
 > **Read-only by design.** The scanner detects and reports — it never deletes, quarantines, or disables anything.
 > Remediation is left to you. The only writes are its own logs and config lists. `install.sh`, `--refresh`, and the allowlist editors (DKMS, systemd, bpftool) are the exceptions — all explicit.
