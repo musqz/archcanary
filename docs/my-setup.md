@@ -190,11 +190,9 @@ Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "
 
 Using paru instead of yay? See [paru integration](paru-integration.md) for the equivalent hook.
 
-## Shell completion and the `canary` alias
+## Shell completion
 
-Both install paths (`install.sh` and the AUR package) drop a bash-completion script into `/usr/share/bash-completion/completions/archcanary` (system) or `~/.local/share/bash-completion/completions/archcanary` (user), plus a `canary` symlink alongside it — both load automatically via the `bash-completion` package, no `.bashrc` edits required. `archcanary --<TAB>` lists every flag; `--doctor=<TAB>`, `--color=<TAB>`, and the `--*-list=<TAB>`/`--log-file=<TAB>` flags complete their values (section names, `auto|always|never`, and file paths respectively).
-
-The `canary` completion works standalone, but `canary` itself is only a *name* until you actually alias it — add `alias canary=archcanary` to `.bashrc`/`.zshrc` yourself if you want the shorter command; `install.sh` deliberately doesn't inject this (same "never touch the user's shell rc" rule as everything else here).
+Both install paths (`install.sh` and the AUR package) drop a bash-completion script into `/usr/share/bash-completion/completions/archcanary` (system) or `~/.local/share/bash-completion/completions/archcanary` (user) — loads automatically via the `bash-completion` package, no `.bashrc` edits required. `archcanary --<TAB>` lists every flag; `--doctor=<TAB>`, `--color=<TAB>`, and the `--*-list=<TAB>`/`--log-file=<TAB>` flags complete their values (section names, `auto|always|never`, and file paths respectively).
 
 ## Systemd unit files
 

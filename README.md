@@ -174,7 +174,7 @@ run everything at once with `--full`.
 | `--version`, `-V` | Show version and exit | — |
 | `--help`, `-h` | Show this help and exit | — |
 
-Both `install.sh` and the AUR package install bash tab-completion for every flag above (`archcanary --<TAB>`), loaded automatically via the `bash-completion` package — no `.bashrc` edits needed. If you'd rather type `canary`, add `alias canary=archcanary` to your `.bashrc`/`.zshrc`; the completion is already registered for that name too, so it works immediately.
+Both `install.sh` and the AUR package install bash tab-completion for every flag above (`archcanary --<TAB>`), loaded automatically via the `bash-completion` package — no `.bashrc` edits needed.
 
 </details>
 
