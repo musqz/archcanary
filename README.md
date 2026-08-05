@@ -219,8 +219,9 @@ man archcanary
 
 `--system` needs `sudo`, but funnels every root-only step through a single script (`lib/archcanary-root-install.sh`) rather than calling `sudo` per-command. If your sudoers is restricted to a command allowlist instead of full access, you only need to permit that one script:
 ```
-youruser ALL=(root) /usr/bin/bash /path/to/archcanary/lib/archcanary-root-install.sh *
+youruser yourhostname=(root) /usr/bin/bash /path/to/archcanary/lib/archcanary-root-install.sh *
 ```
+`yourhostname` is this machine's hostname (`hostname` to check) — scopes the rule to this host specifically, tighter than `ALL` for a single-machine sudoers entry. Use `ALL` only if the same sudoers config is deployed across multiple hosts.
 
 `--system` (and, equivalently, installing the built package via `makepkg -si` or an AUR helper) sets up:
 - Root system timer: weekly + on boot + after each pacman transaction
