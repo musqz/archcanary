@@ -12,7 +12,6 @@ Full overview of how this tool is deployed and how the pieces connect.
 | `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
 | `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window. `--no-gui` bypasses yad and runs a full scan in the terminal with the structured summary. |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an offline layer that runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPostDownload`), and AUR install logging (`PostInstall`) |
-| `paru` `PreBuildCommand` hook | `~/.config/paru/paru.conf` | Native pre-build hook — runs `archcanary --check-pkgbuild` scoped to that package's own build directory before every build, only when paru is installed |
 | `yad` | official repos | GTK dialog toolkit used by `archcanary-gui` |
 | `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
 | `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
@@ -131,9 +130,6 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 ~/.config/yay/
     └── init.lua                      # Lua hooks (age warning, pattern block, install log) — new in yay 13.0
 
-~/.config/paru/
-    └── paru.conf              # PreBuildCommand hook appended (only if paru installed) — new in paru's [bin] PreBuildCommand
-
 ~/.config/systemd/user/                   # installed by ./install.sh --system
     ├── archcanary-user.service    # user-level scan (npm/bun/pkgbuild caches, autostart)
     ├── archcanary-user.timer      # weekly + on boot
@@ -191,15 +187,7 @@ The yay 13.0 Lua hooks (`~/.config/yay/init.lua`) — seeded by `install.sh` **o
 
 Options set in `init.lua`: `diff_menu = true`, `clean_menu = true`, `sort_by = "votes"`, and `edit_menu = true` (lets you review each PKGBUILD's diff before it builds).
 
-## paru integration
-
-paru's native `PreBuildCommand` hook (`~/.config/paru/paru.conf`, `[bin]` section) — seeded by `install.sh` **only when paru is installed and no `PreBuildCommand` is already configured** (source: [`configs/paru-hook.conf`](../configs/paru-hook.conf)). Unlike yay's `init.lua`, this edits a file paru itself may already use for other settings, so seeding is gated on paru actually being present, and `install.sh` never touches an existing `PreBuildCommand` line — if you already have one (ours or your own), re-copy `configs/paru-hook.conf`'s line by hand to pick up a newer version.
-
-Runs `archcanary --check-pkgbuild` before every AUR build, scoped to just that package's own build directory (`PKGBUILD_CACHE_DIRS=.`) — a nonzero exit (pattern match found) genuinely aborts the build, since paru propagates `PreBuildCommand`'s exit status as a real error. `--no-notify --no-summary` keep this silent-unless-flagged on every single build. Fails open if archcanary isn't on `$PATH` (build proceeds rather than hard-blocking on a missing optional dependency).
-
-**Limitation:** `PreBuildCommand` fires before paru's own diff/edit review menus (confirmed in paru's source, `src/install.rs`) — paru has no post-review hook point to move it to, unlike yay's `AURPostDownload`. It's also narrower in scope than yay's hook: only the PKGBUILD pattern check, no aur-audit black/red lookup.
-
-Uninstalling removes just the two hook lines (marker comment + `PreBuildCommand`) from `paru.conf` — the rest of the file, including the `[bin]` section header itself, is left untouched.
+Using paru instead of yay? See [paru integration](paru-integration.md) for the equivalent hook.
 
 ## Shell completion and the `canary` alias
 
@@ -221,8 +209,7 @@ git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 sudo pacman -S libnotify bpf yad polkit
 
 # 3. Run install script (installs to ~/.local/bin by default)
-#    Also seeds ~/.config/yay/init.lua if not already present, and
-#    ~/.config/paru/paru.conf's PreBuildCommand if paru is installed
+#    Also seeds ~/.config/yay/init.lua if not already present
 bash ~/Github/archcanary/install.sh
 
 # Also install root helper + polkit policy (enables eBPF/kmod checks in the GUI)
