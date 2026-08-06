@@ -147,6 +147,11 @@ local function _archcanary_pkgbuild_version(pkgbuild)
   return pkgver .. "-" .. pkgrel
 end
 
+local function _archcanary_banner(pkg, verdict)
+  local pad = string.rep("-", 10)
+  return "ARCHCANARY: " .. pkg .. " # " .. pad .. " " .. verdict .. " " .. pad .. " #"
+end
+
 -- Static pattern check + aur-audit.wtako.net black/red check, combined into
 -- one hook (rather than two separate AURPostDownload registrations) so
 -- there's a single "clean" confirmation line when nothing is found. Silence
@@ -197,17 +202,17 @@ yay.create_autocmd("AURPostDownload", {
     for _, pattern in ipairs(patterns) do
       if pkgbuild:match(pattern) then
         flagged = true
-        yay.abort("ARCHCANARY: " .. pkg .. " — BLOCKED: SUSPICIOUS PATTERN! (" .. pattern .. ")")
+        yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (" .. pattern .. ")")
       end
     end
 
     if _archcanary_has_chained_ansi_c(pkgbuild) then
       flagged = true
-      yay.abort("ARCHCANARY: " .. pkg .. " — BLOCKED: SUSPICIOUS PATTERN! (ANSI-C chained hex/octal escapes)")
+      yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (ANSI-C chained hex/octal escapes)")
     end
     if _archcanary_has_revtr_pipe_shell(pkgbuild) then
       flagged = true
-      yay.abort("ARCHCANARY: " .. pkg .. " — BLOCKED: SUSPICIOUS PATTERN! (rev/tr piped to shell)")
+      yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (rev/tr piped to shell)")
     end
 
     local dir          = _archcanary_config_dir()
@@ -218,7 +223,7 @@ yay.create_autocmd("AURPostDownload", {
 
     if black[pkg] then
       flagged = true
-      yay.abort("ARCHCANARY: " .. pkg .. " — AUR-AUDIT FLAGGED BLACK (CONFIRMED MALICIOUS)! — https://aur-audit.wtako.net")
+      yay.abort(_archcanary_banner(pkg, "AUR-AUDIT FLAGGED BLACK (CONFIRMED MALICIOUS)") .. " — https://aur-audit.wtako.net")
     elseif red[pkg] then
       flagged = true
       -- A name-only match would otherwise warn forever, even once a newer
@@ -233,16 +238,16 @@ yay.create_autocmd("AURPostDownload", {
       if flagged_ver and current_ver and current_ver ~= flagged_ver then
         local flagged_date = red_dates[pkg]
         local ver_info = flagged_ver .. (flagged_date and (", " .. flagged_date) or "")
-        yay.log.warn("ARCHCANARY: " .. pkg .. " — AUR-AUDIT FLAGGED RED FOR A DIFFERENT VERSION! (" .. ver_info
+        yay.log.warn(_archcanary_banner(pkg, "AUR-AUDIT FLAGGED RED FOR A DIFFERENT VERSION") .. " (" .. ver_info
                      .. ") — installing " .. current_ver
                      .. " — verify at aur-audit.wtako.net if this looks stale")
       else
-        yay.log.warn("ARCHCANARY: " .. pkg .. " — AUR-AUDIT FLAGGED RED (HIGH-RISK, UNCONFIRMED)! — review before continuing")
+        yay.log.warn(_archcanary_banner(pkg, "AUR-AUDIT FLAGGED RED (HIGH-RISK, UNCONFIRMED)") .. " — review before continuing")
       end
     end
 
     if not flagged then
-      yay.log.info("ARCHCANARY: " .. pkg .. " — PKGBUILD CHECKS CLEAN!")
+      yay.log.info(_archcanary_banner(pkg, "PKGBUILD CHECKS CLEAN"))
     end
   end,
 })
