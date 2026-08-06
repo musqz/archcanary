@@ -4,17 +4,8 @@ set -euo pipefail
 HAS_XDOTOOL=false
 command -v xdotool &>/dev/null && HAS_XDOTOOL=true
 
-# yad's --center maps to GTK_WIN_POS_CENTER_ALWAYS, which GTK re-applies on
-# every resize — the window snaps back to center the instant you drag an
-# edge, which reads as the whole window "jumping". Compute a one-time
-# centered position instead: --posx/--posy place the window once at open
-# without GTK fighting a manual resize afterward. $1=width, $2=height
-# (omit height for auto-sized dialogs — those only get centered
-# horizontally, since the final height isn't known up front). Sets the
-# global _POS array for the caller to splice into its yad invocation.
-# Falls back to plain --center (old jump-on-resize behavior, not a hard
-# failure) when xdotool is missing — same optional-dependency treatment as
-# the pkexec focus loop in run_action().
+# One-time centered position for a yad window, into $_POS. $1=width, $2=height (optional).
+# Falls back to --center without xdotool.
 _center_pos() {
     local width="$1" height="${2:-}"
     if ! $HAS_XDOTOOL; then
