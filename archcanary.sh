@@ -1599,9 +1599,23 @@ load_packages() {
                 printf '%s\n' "${all_dates[@]}" | sort -u > "$dates_dest"
                 _chown_to_invoker "$dates_dest"
             fi
-            if [[ -n "$versions_dest" && ${#all_versions[@]} -gt 0 ]]; then
-                printf '%s\n' "${all_versions[@]}" | sort -u > "$versions_dest"
-                _chown_to_invoker "$versions_dest"
+            if [[ -n "$versions_dest" ]]; then
+                if [[ ${#all_versions[@]} -gt 0 ]]; then
+                    printf '%s\n' "${all_versions[@]}" | sort -u > "$versions_dest"
+                    _chown_to_invoker "$versions_dest"
+                else
+                    # Unlike dest/dates_dest above, an empty capture here is
+                    # NOT left stale -- a stale flagged-version line drives an
+                    # active severity *downgrade* in the Lua hook (full
+                    # warning vs. "different version, might be stale"), not
+                    # just outdated-but-still-flagged threat data. If a
+                    # future page format ever breaks this extraction, fail
+                    # toward the conservative default (no data -> full
+                    # warning for every RED match) rather than risk a wrong
+                    # version silently softening a warning that shouldn't be.
+                    : > "$versions_dest"
+                    _chown_to_invoker "$versions_dest"
+                fi
             fi
         }
         if [[ "$AUR_AUDIT_ENABLE" == true ]]; then

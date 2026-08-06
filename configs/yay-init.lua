@@ -115,21 +115,32 @@ end
 -- Extracts "pkgver-pkgrel" from the freshly-downloaded PKGBUILD's raw text,
 -- matching wtako's "version" field format (e.g. "0.5.8-2"), entirely offline
 -- via string.match. Returns nil -- not a best-effort guess -- for anything
--- that isn't a simple static assignment: a pkgver() function (VCS/-git
--- packages compute this dynamically at build time, so a static pkgver= line,
--- if present at all, is just a stale placeholder) or a missing/unparseable
--- pkgver=/pkgrel= line. Callers must treat nil as "unknown" and fall back to
--- the unconditional warning -- never fail open.
+-- that isn't a simple static literal assignment: a pkgver() function
+-- (VCS/-git packages compute this dynamically at build time, so a static
+-- pkgver= line, if present at all, is just a stale placeholder), a
+-- pkgver=/pkgrel= line that itself uses command or variable substitution
+-- (e.g. pkgver=$(date +%Y%m%d), pkgver=${_ver} -- not a literal value, and
+-- $(...)/${...} would otherwise leak into the captured string verbatim), or
+-- a missing/unparseable line. Callers must treat nil as "unknown" and fall
+-- back to the unconditional warning -- never fail open.
 local function _archcanary_pkgbuild_version(pkgbuild)
   local pkgver, pkgrel, dynamic
   for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
     if line:match("^%s*pkgver%s*%(%s*%)") then
       dynamic = true
-    elseif not pkgver then
-      pkgver = line:match("^pkgver=['\"]([^'\"]+)['\"]") or line:match("^pkgver=(%S+)")
+    elseif not pkgver and line:match("^pkgver=") then
+      if line:find("$", 1, true) then
+        dynamic = true
+      else
+        pkgver = line:match("^pkgver=['\"]([^'\"]+)['\"]") or line:match("^pkgver=(%S+)")
+      end
     end
-    if not pkgrel then
-      pkgrel = line:match("^pkgrel=['\"]([^'\"]+)['\"]") or line:match("^pkgrel=(%S+)")
+    if not pkgrel and line:match("^pkgrel=") then
+      if line:find("$", 1, true) then
+        dynamic = true
+      else
+        pkgrel = line:match("^pkgrel=['\"]([^'\"]+)['\"]") or line:match("^pkgrel=(%S+)")
+      end
     end
   end
   if dynamic or not pkgver or not pkgrel then return nil end
