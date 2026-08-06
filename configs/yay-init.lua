@@ -197,17 +197,17 @@ yay.create_autocmd("AURPostDownload", {
     for _, pattern in ipairs(patterns) do
       if pkgbuild:match(pattern) then
         flagged = true
-        yay.abort(pkg .. ": blocked — suspicious pattern: " .. pattern)
+        yay.abort("ARCHCANARY: " .. pkg .. " — BLOCKED: SUSPICIOUS PATTERN! (" .. pattern .. ")")
       end
     end
 
     if _archcanary_has_chained_ansi_c(pkgbuild) then
       flagged = true
-      yay.abort(pkg .. ": blocked — suspicious pattern: ANSI-C chained hex/octal escapes")
+      yay.abort("ARCHCANARY: " .. pkg .. " — BLOCKED: SUSPICIOUS PATTERN! (ANSI-C chained hex/octal escapes)")
     end
     if _archcanary_has_revtr_pipe_shell(pkgbuild) then
       flagged = true
-      yay.abort(pkg .. ": blocked — suspicious pattern: rev/tr piped to shell")
+      yay.abort("ARCHCANARY: " .. pkg .. " — BLOCKED: SUSPICIOUS PATTERN! (rev/tr piped to shell)")
     end
 
     local dir          = _archcanary_config_dir()
@@ -218,7 +218,7 @@ yay.create_autocmd("AURPostDownload", {
 
     if black[pkg] then
       flagged = true
-      yay.abort(pkg .. ": aur-audit flagged BLACK (confirmed malicious) — https://aur-audit.wtako.net")
+      yay.abort("ARCHCANARY: " .. pkg .. " — AUR-AUDIT FLAGGED BLACK (CONFIRMED MALICIOUS)! — https://aur-audit.wtako.net")
     elseif red[pkg] then
       flagged = true
       -- A name-only match would otherwise warn forever, even once a newer
@@ -233,16 +233,16 @@ yay.create_autocmd("AURPostDownload", {
       if flagged_ver and current_ver and current_ver ~= flagged_ver then
         local flagged_date = red_dates[pkg]
         local ver_info = flagged_ver .. (flagged_date and (", " .. flagged_date) or "")
-        yay.log.warn(pkg .. ": aur-audit flagged RED for a different version (" .. ver_info
+        yay.log.warn("ARCHCANARY: " .. pkg .. " — AUR-AUDIT FLAGGED RED FOR A DIFFERENT VERSION! (" .. ver_info
                      .. ") — installing " .. current_ver
                      .. " — verify at aur-audit.wtako.net if this looks stale")
       else
-        yay.log.warn(pkg .. ": aur-audit flagged RED (high-risk, unconfirmed) — review before continuing")
+        yay.log.warn("ARCHCANARY: " .. pkg .. " — AUR-AUDIT FLAGGED RED (HIGH-RISK, UNCONFIRMED)! — review before continuing")
       end
     end
 
     if not flagged then
-      yay.log.info("archcanary: " .. pkg .. " PKGBUILD checks clean")
+      yay.log.info("ARCHCANARY: " .. pkg .. " — PKGBUILD CHECKS CLEAN!")
     end
   end,
 })
