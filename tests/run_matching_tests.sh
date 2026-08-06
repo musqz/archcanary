@@ -2089,9 +2089,10 @@ test_allowlist_cli() {
 # mechanism available today.
 # ---------------------------------------------------------------------------
 test_check_logs() {
-    local tmpdir log_file pkglist chaoslist out rc
+    local tmpdir log_file pkglist chaoslist cache_home out rc
 
     tmpdir=$(mktemp -d)
+    cache_home="$tmpdir/xdg-cache"
     log_file="$tmpdir/pacman.log"
     pkglist="$tmpdir/package_list.txt"
     chaoslist="$tmpdir/chaos_rat.txt"
@@ -2114,7 +2115,7 @@ EOF
     )
 
     rc=0
-    out=$(PACMAN_LOG_GLOB="$log_file" \
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$log_file" \
         COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
 
@@ -2154,7 +2155,7 @@ EOF
     # downgraded to LOG_OLD, no matter how old the date is
     rc=0
     printf 'zzz-test-community-ancient\n' > "$tmpdir/community_reports.txt"
-    out=$(PACMAN_LOG_GLOB="$log_file" \
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$log_file" \
         COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ "$out" == *"LOG_HIST: zzz-test-community-ancient"*"[community report]"* && \
@@ -2169,7 +2170,7 @@ EOF
     local only_old_log="$tmpdir/pacman-old-only.log"
     printf '[2026-06-01T10:00:00-0600] [ALPM] installed zzz-test-old-pkg (1.0-1)\n' > "$only_old_log"
     rc=0
-    out=$(PACMAN_LOG_GLOB="$only_old_log" \
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$only_old_log" \
         COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" >/dev/null 2>&1) || rc=$?
     if [[ $rc -eq 0 ]]; then
@@ -2204,7 +2205,7 @@ EOF
 EOF
 
     rc=0
-    out=$(PACMAN_LOG_GLOB="$audit_log" \
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$audit_log" \
         COMMUNITY_REPORTS_LIST="$tmpdir/community_reports_empty.txt" \
         AUR_AUDIT_RED_LIST="$audit_redlist" AUR_AUDIT_RED_DATES_LIST="$audit_reddates" \
         AUR_AUDIT_BLACK_LIST="$audit_blacklist" AUR_AUDIT_BLACK_DATES_LIST="$audit_blackdates" \
