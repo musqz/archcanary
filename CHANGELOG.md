@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.27 (2026-08-06)
+
+- Fix: `configs/yay-init.lua`'s aur-audit RED warning matched by package name only, so a once-flagged package kept warning on every future install even after a newer version was rescanned clean — reported live on `firefox-pure`. `--refresh` now also captures the flagged version into `aur_audit_red_versions.txt` (RED only; BLACK's block stays unconditional); the hook compares it against the installing PKGBUILD's own `pkgver`/`pkgrel` and only keeps full severity on an exact match. Marker bumped to `(v6)`.
+
 ## v0.1.26 (2026-08-05)
 
 - Added: `--scan-all-homes` — enumerates real local users and runs the npm/bun/yarn/pnpm/pkgbuild/autostart checks against each of their homes, not just yours (privilege-dropped per user via `sudo -u`). Closes the gap where `archcanary-user.timer` only covers whoever enables it themselves. New `archcanary-scan-all-homes.service`/`.timer`, opt-in and off by default.

@@ -1425,7 +1425,7 @@ test_doctor_stale_yay_init() {
     # with the exact re-copy fix command.
     fake_home=$(mktemp -d)
     mkdir -p "$fake_home/.config/yay"
-    sed 's/ (v5)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
+    sed 's/ (v6)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
     out=$(XDG_CONFIG_HOME="$fake_home/.config" "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
     if [[ "$out" == *"yay init.lua"*"(outdated)"* && "$out" == *"cp "*"configs/yay-init.lua"* ]]; then
         pass "doctor: outdated yay init.lua marker -> WARN with fix hint"
@@ -1861,6 +1861,156 @@ test_scan_all_homes_flag_wiring() {
 }
 
 # ---------------------------------------------------------------------------
+# _refresh_aur_audit — RED-only versions companion file. Regression coverage
+# for the name-only-forever bug: a package's aur-audit RED verdict belongs to
+# a specific version, but configs/yay-init.lua's Lua hook only ever matched
+# by name, so it kept warning on every future install of that name even
+# after a newer version was rescanned clean (reported live on firefox-pure).
+# --refresh now also captures wtako's "version" field into
+# aur_audit_red_versions.txt (RED only -- BLACK stays unconditional, no
+# versions file). No CURL_CMD-style override exists for this script, so this
+# stubs curl itself via a fake binary on $PATH, same technique as the fake
+# pacman/dkms scripts above.
+# ---------------------------------------------------------------------------
+test_refresh_aur_audit_versions() {
+    local tmpdir fake_bin
+    tmpdir=$(mktemp -d)
+    fake_bin=$(mktemp -d)
+
+    cat > "$fake_bin/curl" << 'FAKECURL'
+#!/bin/sh
+case "$*" in
+    *aur-audit.wtako.net*filter=red*)
+        # Second entry has no "version" field -- regression coverage for a
+        # real bug: the live feed has some entries missing this field, and
+        # an earlier version of this extraction silently dropped the WHOLE
+        # page (not just the sparse entry) whenever any count mismatched,
+        # then a fix attempt crashed the whole --refresh outright under
+        # set -e/pipefail when grep found no match on a sparse object.
+        printf '%s' '{"packages":[{"guid":"zzz-test-refresh-red-1785585570","packageName":"zzz-test-refresh-red","pubDateTs":1785585570000,"version":"9.9.9-1"},{"guid":"zzz-test-refresh-red-sparse-1785585571","packageName":"zzz-test-refresh-red-sparse","pubDateTs":1785585571000}]}'
+        ;;
+    *aur-audit.wtako.net*filter=black*)
+        printf '%s' '{"packages":[{"guid":"zzz-test-refresh-black-1785585570","packageName":"zzz-test-refresh-black","pubDateTs":1785585570000,"version":"1.1.1-1"}]}'
+        ;;
+    *)
+        printf '%s\n' zzz-test-refresh-dummy
+        ;;
+esac
+FAKECURL
+    chmod +x "$fake_bin/curl"
+
+    local redlist reddates redversions blacklist blackdates
+    redlist="$tmpdir/aur_audit_red.txt"
+    reddates="$tmpdir/aur_audit_red_dates.txt"
+    redversions="$tmpdir/aur_audit_red_versions.txt"
+    blacklist="$tmpdir/aur_audit_black.txt"
+    blackdates="$tmpdir/aur_audit_black_dates.txt"
+
+    local out rc=0
+    out=$(PATH="$fake_bin:$PATH" \
+        AUR_AUDIT_RED_LIST="$redlist" AUR_AUDIT_RED_DATES_LIST="$reddates" \
+        AUR_AUDIT_RED_VERSIONS_LIST="$redversions" \
+        AUR_AUDIT_BLACK_LIST="$blacklist" AUR_AUDIT_BLACK_DATES_LIST="$blackdates" \
+        PACKAGE_LIST_FILE="$tmpdir/package_list.txt" \
+        MALICIOUS_NPM_LIST="$tmpdir/malicious_npm.txt" \
+        CHAOS_RAT_LIST="$tmpdir/chaos_rat.txt" \
+        RUSSIAN_SPAM_LIST="$tmpdir/russian_spam.txt" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
+        EXTRA_LISTS_CONF="$tmpdir/extra_lists.conf" \
+        "$REPO_DIR/archcanary.sh" --refresh --no-notify --no-summary 2>&1) || rc=$?
+
+    # A sparse entry (no version field) must not abort the whole --refresh
+    # under set -e/pipefail (the actual bug this fixture caught live) --
+    # verified by the next two checks actually finding file content at all,
+    # since a mid-loop abort would leave $redversions unwritten entirely.
+    if grep -qxF "zzz-test-refresh-red 9.9.9-1" "$redversions" 2>/dev/null; then
+        pass "_refresh_aur_audit: RED versions companion file captures wtako's version field"
+    else
+        fail "_refresh_aur_audit: RED versions file missing/wrong content, rc=$rc, out: $out"
+    fi
+
+    if ! grep -q "^zzz-test-refresh-red-sparse " "$redversions" 2>/dev/null; then
+        pass "_refresh_aur_audit: sparse entry (no version field) is skipped, not misattributed"
+    else
+        fail "_refresh_aur_audit: sparse entry got a version line it shouldn't have, out: $(cat "$redversions")"
+    fi
+
+    if ! compgen -G "$tmpdir"'/*black*version*' > /dev/null; then
+        pass "_refresh_aur_audit: BLACK gets no versions companion file (untouched)"
+    else
+        fail "_refresh_aur_audit: unexpected BLACK versions file written"
+    fi
+
+    rm -rf "$tmpdir" "$fake_bin"
+}
+
+# ---------------------------------------------------------------------------
+# _refresh_aur_audit — a versions capture that comes back empty must CLEAR
+# aur_audit_red_versions.txt, not leave a prior refresh's data in place.
+# Unlike the plain names/dates lists (which intentionally keep stale data on
+# a failed/empty fetch -- still-useful threat data, same severity either
+# way), a stale flagged-version line drives an active severity *downgrade* in
+# configs/yay-init.lua (full warning vs. "different version, might be
+# stale"). Found by /code-review: trusting old version data here could
+# understate severity for a package now flagged at the very version being
+# installed. On doubt, must fail toward the conservative default (no data ->
+# full warning), never toward stale-and-silently-softened.
+# ---------------------------------------------------------------------------
+test_refresh_aur_audit_versions_stale_clear() {
+    local tmpdir fake_bin
+    tmpdir=$(mktemp -d)
+    fake_bin=$(mktemp -d)
+
+    cat > "$fake_bin/curl" << 'FAKECURL'
+#!/bin/sh
+case "$*" in
+    *aur-audit.wtako.net*filter=red*)
+        # No "version" field on this round -- simulates the upstream field
+        # disappearing/reformatting between refreshes.
+        printf '%s' '{"packages":[{"guid":"zzz-test-refresh-stale-1785585570","packageName":"zzz-test-refresh-stale","pubDateTs":1785585570000}]}'
+        ;;
+    *aur-audit.wtako.net*filter=black*)
+        printf '%s' '{"packages":[]}'
+        ;;
+    *)
+        printf '%s\n' zzz-test-refresh-dummy
+        ;;
+esac
+FAKECURL
+    chmod +x "$fake_bin/curl"
+
+    local redlist reddates redversions blacklist blackdates
+    redlist="$tmpdir/aur_audit_red.txt"
+    reddates="$tmpdir/aur_audit_red_dates.txt"
+    redversions="$tmpdir/aur_audit_red_versions.txt"
+    blacklist="$tmpdir/aur_audit_black.txt"
+    blackdates="$tmpdir/aur_audit_black_dates.txt"
+
+    # Pre-seed a stale entry from an earlier, successful refresh.
+    printf 'zzz-test-refresh-stale 1.0.0-1\n' > "$redversions"
+
+    out=$(PATH="$fake_bin:$PATH" \
+        AUR_AUDIT_RED_LIST="$redlist" AUR_AUDIT_RED_DATES_LIST="$reddates" \
+        AUR_AUDIT_RED_VERSIONS_LIST="$redversions" \
+        AUR_AUDIT_BLACK_LIST="$blacklist" AUR_AUDIT_BLACK_DATES_LIST="$blackdates" \
+        PACKAGE_LIST_FILE="$tmpdir/package_list.txt" \
+        MALICIOUS_NPM_LIST="$tmpdir/malicious_npm.txt" \
+        CHAOS_RAT_LIST="$tmpdir/chaos_rat.txt" \
+        RUSSIAN_SPAM_LIST="$tmpdir/russian_spam.txt" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports.txt" \
+        EXTRA_LISTS_CONF="$tmpdir/extra_lists.conf" \
+        "$REPO_DIR/archcanary.sh" --refresh --no-notify --no-summary 2>&1) || true
+
+    if [[ -f "$redversions" && ! -s "$redversions" ]]; then
+        pass "_refresh_aur_audit: an empty versions capture clears stale prior data"
+    else
+        fail "_refresh_aur_audit: stale versions data survived an empty capture, content: $(cat "$redversions" 2>&1), out: $out"
+    fi
+
+    rm -rf "$tmpdir" "$fake_bin"
+}
+
+# ---------------------------------------------------------------------------
 # _allowlist_cli value validation — regression coverage for the bug found
 # 2026-08-02: the value regex required the first char to be alphanumeric
 # and never allowed '/', so a real full-path autostart value (as required by
@@ -2185,6 +2335,12 @@ test_scan_all_homes_root_guard
 
 $VERBOSE && msg "--- Test 27: scan-all-homes flag wiring (--full exclusion) ---"
 test_scan_all_homes_flag_wiring
+
+$VERBOSE && msg "--- Test 28: _refresh_aur_audit RED versions companion file ---"
+test_refresh_aur_audit_versions
+
+$VERBOSE && msg "--- Test 29: _refresh_aur_audit clears stale versions data on empty capture ---"
+test_refresh_aur_audit_versions_stale_clear
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
