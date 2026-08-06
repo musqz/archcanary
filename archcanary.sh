@@ -945,7 +945,7 @@ run_doctor() {
         # out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
         local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v6)"
-        local _lua_label="yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
+        local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         if [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_CURRENT" "$yay_init_lua")" -eq 0 ]]; then
             _ok "$_lua_label" "path: $yay_init_lua"
@@ -960,7 +960,7 @@ run_doctor() {
             local paru_conf="${XDG_CONFIG_HOME:-$real_home/.config}/paru/paru.conf"
             local _ARCHCANARY_PARU_MARKER_STABLE='archcanary PreBuildCommand hook'
             local _ARCHCANARY_PARU_MARKER_CURRENT="$_ARCHCANARY_PARU_MARKER_STABLE (v1)"
-            local _paru_label="paru PreBuildCommand hook (archcanary's pre-build PKGBUILD scan)"
+            local _paru_label="paru PreBuildCommand hook (archcanary pre-build PKGBUILD scan)"
             if [[ "$(_marker "$_ARCHCANARY_PARU_MARKER_CURRENT" "$paru_conf")" -eq 0 ]]; then
                 _ok "$_paru_label" "path: $paru_conf"
             elif [[ "$(_marker "$_ARCHCANARY_PARU_MARKER_STABLE" "$paru_conf")" -eq 0 ]]; then
