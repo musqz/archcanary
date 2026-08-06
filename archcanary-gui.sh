@@ -1,6 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+HAS_XDOTOOL=false
+command -v xdotool &>/dev/null && HAS_XDOTOOL=true
+
+# yad's --center maps to GTK_WIN_POS_CENTER_ALWAYS, which GTK re-applies on
+# every resize — the window snaps back to center the instant you drag an
+# edge, which reads as the whole window "jumping". Compute a one-time
+# centered position instead: --posx/--posy place the window once at open
+# without GTK fighting a manual resize afterward. $1=width, $2=height
+# (omit height for auto-sized dialogs — those only get centered
+# horizontally, since the final height isn't known up front). Sets the
+# global _POS array for the caller to splice into its yad invocation.
+# Falls back to plain --center (old jump-on-resize behavior, not a hard
+# failure) when xdotool is missing — same optional-dependency treatment as
+# the pkexec focus loop in run_action().
+_center_pos() {
+    local width="$1" height="${2:-}"
+    if ! $HAS_XDOTOOL; then
+        _POS=(--center)
+        return
+    fi
+    local screen sw sh
+    screen="$(xdotool getdisplaygeometry 2>/dev/null)" || true
+    if [[ -z "$screen" ]]; then
+        _POS=(--center)
+        return
+    fi
+    sw="${screen%% *}"
+    sh="${screen##* }"
+    if [[ -n "$height" ]]; then
+        _POS=(--posx="$(( (sw - width) / 2 ))" --posy="$(( (sh - height) / 2 ))")
+    else
+        _POS=(--posx="$(( (sw - width) / 2 ))")
+    fi
+}
+
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 MAIN_SCRIPT=""
 
@@ -12,9 +47,10 @@ for candidate in \
 done
 
 if [[ -z "$MAIN_SCRIPT" ]]; then
+    _center_pos 400
     yad --image=dialog-error \
         --title="Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --text="<b>archcanary not found.</b>\n\nRun <tt>./install.sh</tt> first." \
         --width=400
     exit 1
@@ -245,9 +281,10 @@ _show_infected_dialog() {
     else
         step1="Review and remove/disable the flagged artifact(s) shown in the\n      scan output (systemd unit, eBPF program, autostart entry, etc.)."
     fi
+    _center_pos 520 380
     yad --image=dialog-error \
         --title="Infected — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=520 --height=380 \
         --text-info --fontname="sans 10" \
         --text="<b>Infected or compromised indicators detected.</b>\n\n<b>1.</b>  ${step1}\n\n<b>2.</b>  Check persistence — run <i>Systemd persistence</i> and\n      <i>XDG autostart + shell RCs</i> from this menu.\n\n<b>3.</b>  Rotate credentials: SSH keys, GitHub PATs, Discord\n      tokens, npm tokens, browser sessions.\n\nSee README → <i>What to Do If Infected</i>" \
@@ -302,18 +339,20 @@ _allowlistable_finding_present() {
 _edit_conf_file() {
     local title="$1" cfg="$2"
     if [[ ! -f "$cfg" ]]; then
+        _center_pos 440
         yad --image=dialog-warning \
             --title="$title — Archcanary" \
-            --window-icon=security-high --center \
+            --window-icon=security-high "${_POS[@]}" \
             --text="<b>$cfg</b> does not exist.\n\nRun <tt>./install.sh --system</tt> first to create it." \
             --width=440 2>/dev/null || true
         return
     fi
     local tmpout
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
+    _center_pos 640 380
     if yad --text-info \
         --title="$title (system) — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --filename="$cfg" \
         --width=640 --height=380 \
         --fontname="Monospace 10" \
@@ -323,7 +362,8 @@ _edit_conf_file() {
         > "$tmpout" 2>/dev/null; then
         # Write back to /etc as root — pkexec prompts via the polkit agent.
         if [[ -z "$PKEXEC" ]] || ! "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
-            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            _center_pos 420
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high "${_POS[@]}" \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -336,9 +376,10 @@ _edit_conf_file() {
 # not as another top-level LABELS/FLAGS row.
 manage_allowlists() {
     local choice
+    _center_pos 460 250
     choice=$(yad --list \
         --title="Manage Allowlists — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=460 --height=250 \
         --no-headers \
         --column="Allowlist" \
@@ -372,9 +413,10 @@ edit_config() {
     choices+=("List overlap check")
 
     local choice
+    _center_pos 460 220
     choice=$(yad --list \
         --title="Edit Config — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=460 --height=220 \
         --no-headers \
         --column="Config" \
@@ -406,9 +448,10 @@ edit_audit_rules() {
     else
         printf '# No rules found. Run ./install.sh --system to seed the template.\n' > "$tmpin"
     fi
+    _center_pos 700 520
     if yad --text-info \
         --title="Audit Rules — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --filename="$tmpin" \
         --width=700 --height=520 \
         --fontname="Monospace 10" \
@@ -417,14 +460,16 @@ edit_audit_rules() {
         --button="Cancel:1" \
         > "$tmpout" 2>/dev/null; then
         if [[ ! -s "$tmpout" ]]; then
-            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            _center_pos 420
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high "${_POS[@]}" \
                 --text="Not saved: rules file is empty." \
                 --width=420 2>/dev/null || true
         elif [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout" >/dev/null 2>&1; then
             [[ -f "$legacy_cfg" ]] && "$PKEXEC" rm -f "$legacy_cfg" 2>/dev/null || true
             "$PKEXEC" systemctl restart auditd 2>/dev/null || true
         else
-            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            _center_pos 420
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high "${_POS[@]}" \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -444,9 +489,10 @@ edit_lynis_config() {
     else
         printf '# Lynis custom profile\n# skip-test=<TEST-ID>\n' > "$tmpout"
     fi
+    _center_pos 700 520
     if yad --text-info \
         --title="Lynis Config — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --filename="$tmpout" \
         --width=700 --height=520 \
         --fontname="Monospace 10" \
@@ -457,7 +503,8 @@ edit_lynis_config() {
         if [[ -n "$PKEXEC" ]] && "$PKEXEC" tee "$cfg" < "$tmpout.new" >/dev/null 2>&1; then
             true
         else
-            yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+            _center_pos 420
+            yad --image=dialog-error --title="Archcanary" --window-icon=security-high "${_POS[@]}" \
                 --text="Could not save <tt>$cfg</tt>\n(root authorization failed or cancelled)." \
                 --width=420 2>/dev/null || true
         fi
@@ -468,9 +515,10 @@ edit_lynis_config() {
 show_about() {
     local version repo="https://github.com/musqz/archcanary"
     version=$("$MAIN_SCRIPT" --version 2>/dev/null | grep -oP '(?<=Archcanary v).+' || echo "unknown")
+    _center_pos 440 240
     yad --image=dialog-information \
         --title="About Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=440 --height=240 \
         --button="Close":0 \
         --text="<b>Archcanary</b>  v${version}
@@ -492,7 +540,8 @@ Source: <a href=\"${repo}\">${repo}</a>" \
 _save_scan_log() {
     local tmpout="$1"
     if ! mkdir -p "$GUI_LOG_SAVE_DIR" 2>/dev/null; then
-        yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+        _center_pos 420
+        yad --image=dialog-error --title="Archcanary" --window-icon=security-high "${_POS[@]}" \
             --text="Could not create save directory:\n<tt>${GUI_LOG_SAVE_DIR}</tt>" \
             --width=420 --button="OK:0" 2>/dev/null || true
         return
@@ -505,7 +554,8 @@ _save_scan_log() {
         --filename="$suggested" 2>/dev/null) || chosen=""
     [[ -z "$chosen" ]] && return
     if ! cp "$tmpout" "$chosen" 2>/dev/null; then
-        yad --image=dialog-error --title="Archcanary" --window-icon=security-high --center \
+        _center_pos 420
+        yad --image=dialog-error --title="Archcanary" --window-icon=security-high "${_POS[@]}" \
             --text="Could not save to:\n<tt>${chosen}</tt>" \
             --width=420 --button="OK:0" 2>/dev/null || true
         return
@@ -526,9 +576,10 @@ show_output() {
     fifo="$(mktemp -u /tmp/archcanary-fifo-XXXXXX)"
     mkfifo "$fifo"
 
+    _center_pos 1000 660
     yad --text-info \
         --title="$title — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=1000 --height=660 \
         --fontname="Monospace 10" \
         --wrap --tail --editable \
@@ -584,9 +635,10 @@ CONF
 
     local tmpout
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
+    _center_pos 600 360
     if yad --text-info \
         --title="Extra Malware Lists — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=600 --height=360 \
         --fontname="Monospace 10" \
         --editable \
@@ -597,9 +649,10 @@ CONF
         cp "$tmpout" "$conf"
         local n
         n=$(grep -c '^[^#[:space:]]' "$conf" 2>/dev/null || true)
+        _center_pos 420
         yad --image=dialog-information \
             --title="Extra Malware Lists — Archcanary" \
-            --window-icon=security-high --center \
+            --window-icon=security-high "${_POS[@]}" \
             --text="Saved to <tt>$conf</tt>\n$n active entries.\n\nRun <b>Full scan</b> to fetch any new URLs." \
             --width=420 \
             --button="OK:0" 2>/dev/null || true
@@ -624,9 +677,10 @@ scan_settings() {
     $HAS_INTERNET || cur="FALSE"
 
     local result
+    _center_pos 480
     result=$(yad --form \
         --title="Scan Settings — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=480 \
         --field="I have an internet connection (auto-refresh + aur-audit sync on Full scan):CHK" "$cur" \
         --button="Save:0" --button="Cancel:1" \
@@ -635,9 +689,10 @@ scan_settings() {
     [[ "$result" == FALSE* ]] && HAS_INTERNET=false || HAS_INTERNET=true
     _write_gui_env
 
+    _center_pos 380
     yad --image=dialog-information \
         --title="Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --text="Saved to\n<tt>$env_file</tt>" \
         --width=380 \
         --button="OK:0" 2>/dev/null || true
@@ -660,9 +715,10 @@ list_overlap_check() {
     tmpout="$(mktemp /tmp/archcanary-XXXXXX.txt)"
     printf '%s\n' "$body" > "$tmpout"
 
+    _center_pos 760 460
     yad --text-info \
         --title="List Overlap Check (${count} found) — Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=760 --height=460 \
         --fontname="Monospace 10" \
         --wrap \
@@ -678,9 +734,10 @@ run_action() {
     local needs_root="${NEEDS_ROOT[$idx]}"
 
     if [[ "$idx" -eq 15 || "$idx" -eq 16 ]] && ! $HAS_LYNIS; then
+        _center_pos 420
         yad --image=dialog-information \
             --title="Lynis — Archcanary" \
-            --window-icon=security-high --center \
+            --window-icon=security-high "${_POS[@]}" \
             --text="<b>Lynis</b> is not installed.\n\nInstall from official repos:\n  <tt>sudo pacman -S lynis</tt>" \
             --width=420 \
             --button="OK:0" 2>/dev/null || true
@@ -730,15 +787,17 @@ run_action() {
         # isn't installed (polkit is optional), re-running install.sh --system
         # does nothing, and the same dialog kept reappearing (reported live).
         if [[ -z "$PKEXEC" ]]; then
+            _center_pos 440
             yad --image=dialog-warning \
                 --title="polkit not installed" \
-                --window-icon=security-high --center \
+                --window-icon=security-high "${_POS[@]}" \
                 --text="This check needs <b>pkexec</b>, which comes from the <b>polkit</b> package (not installed).\n\nRun:\n  <b>sudo pacman -S polkit</b>\n\nthen try again." \
                 --width=440 2>/dev/null || true
         else
+            _center_pos 440
             yad --image=dialog-warning \
                 --title="Root helper not installed" \
-                --window-icon=security-high --center \
+                --window-icon=security-high "${_POS[@]}" \
                 --text="The system root helper is not installed.\n\nRun:\n  <b>./install.sh --system</b>\n\nto enable root-requiring checks." \
                 --width=440 2>/dev/null || true
         fi
@@ -827,9 +886,10 @@ run_action() {
             kill "$yad_pid" 2>/dev/null || true
             wait "$yad_pid" 2>/dev/null || true
             rm -f "$tmpout"
+            _center_pos 360
             [[ $pkexec_exit -ne 0 && $pkexec_exit -ne 126 ]] && \
                 yad --image=dialog-error --title="Archcanary" \
-                    --window-icon=security-high --center \
+                    --window-icon=security-high "${_POS[@]}" \
                     --text="pkexec failed (exit $pkexec_exit)" \
                     --width=360 2>/dev/null || true
             if [[ "$idx" -eq 0 ]]; then _infer_full_status; fi
@@ -918,10 +978,11 @@ while true; do
     list_args=()
     build_list_args list_args
 
+    _center_pos 440 550
     selected=$(yad \
         --list \
         --title="Archcanary" \
-        --window-icon=security-high --center \
+        --window-icon=security-high "${_POS[@]}" \
         --width=440 --height=550 \
         --column="" \
         --column="Action" \
