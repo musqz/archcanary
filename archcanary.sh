@@ -1851,6 +1851,15 @@ check_logs() {
     local campaign_cutoff="2026-06-09"  # earliest documented malicious commit
     local chaos_cutoff="2025-07-22"     # CHAOS RAT campaign discovery date
 
+    local seen_file="${XDG_CACHE_HOME:-$HOME/.cache}/archcanary/log_hist_seen.txt"
+    declare -A seen_map
+    if [[ -r "$seen_file" ]]; then
+        while IFS=$'\t' read -r _sp _sd; do
+            seen_map["$_sp"$'\t'"$_sd"]=1
+        done < "$seen_file"
+    fi
+    local -a new_seen=()
+
     # shellcheck disable=SC2086
     for file in $PACMAN_LOG_GLOB; do
         [[ -e "$file" ]] && log_files+=("$file")
@@ -1935,8 +1944,11 @@ check_logs() {
                 tag="LOG_OLD"
             elif [[ -v CURRENTLY_INSTALLED_MAP[$pkg] ]]; then
                 tag="LOG_HIT"
+            elif [[ -v seen_map["$pkg"$'\t'"$datetime_str"] ]]; then
+                tag="LOG_HIST_SEEN"
             else
                 tag="LOG_HIST"
+                new_seen+=("$pkg"$'\t'"$datetime_str")
             fi
 
             echo "$tag: $pkg ($action on $datetime_str)$annotation"
@@ -1944,6 +1956,12 @@ check_logs() {
 
         log_info "[$idx/$total] Done with $(basename "$file")"
     done
+
+    if [[ ${#new_seen[@]} -gt 0 ]]; then
+        mkdir -p "$(dirname "$seen_file")"
+        printf '%s\n' "${new_seen[@]}" >> "$seen_file"
+        _chown_to_invoker "$seen_file"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -3724,9 +3742,11 @@ if ! $FOCUSED_MODE; then
         _has_current_hit=false
         _has_hist_hit=false
         _has_old_hit=false
+        _has_seen_hit=false
         grep -q '^LOG_HIT:' "$LOGS_TMP" 2>/dev/null && _has_current_hit=true
         grep -q '^LOG_HIST:' "$LOGS_TMP" 2>/dev/null && _has_hist_hit=true
         grep -q '^LOG_OLD:' "$LOGS_TMP" 2>/dev/null && _has_old_hit=true
+        grep -q '^LOG_HIST_SEEN:' "$LOGS_TMP" 2>/dev/null && _has_seen_hit=true
 
         if $_has_current_hit; then
             echo "  WARNING: currently-installed package(s) with a matching log entry"
@@ -3753,10 +3773,15 @@ if ! $FOCUSED_MODE; then
             echo "  install/upgrade happened before that) — almost certainly unrelated:"
             grep '^LOG_OLD:' "$LOGS_TMP" | sed 's/^LOG_OLD: /  - /'
         fi
-        if ! $_has_current_hit && ! $_has_hist_hit && ! $_has_old_hit; then
+        if $_has_seen_hit; then
+            echo "  NOTE: log match(es) already flagged in a previous scan (package no"
+            echo "  longer installed) — shown for the record, not re-counted as a warning:"
+            grep '^LOG_HIST_SEEN:' "$LOGS_TMP" | sed 's/^LOG_HIST_SEEN: /  - /'
+        fi
+        if ! $_has_current_hit && ! $_has_hist_hit && ! $_has_old_hit && ! $_has_seen_hit; then
             echo "  Clean: no historical log matches found."
         fi
-        unset _has_current_hit _has_hist_hit _has_old_hit
+        unset _has_current_hit _has_hist_hit _has_old_hit _has_seen_hit
         rm -f "$LOGS_TMP"
     else
         echo "  Skipped: /var/log/pacman.log not found."

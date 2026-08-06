@@ -2246,6 +2246,86 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# check_logs — LOG_HIST "seen once" downgrade. A historical (no-longer-
+# installed) match only counts as a warning the first time; a repeat scan of
+# the exact same install event prints LOG_HIST_SEEN instead and stays
+# exit-code-neutral, while a genuinely new install of the same package name
+# is still flagged fresh.
+# ---------------------------------------------------------------------------
+test_check_logs_seen_once() {
+    local tmpdir log_file pkglist cache_home out rc
+
+    tmpdir=$(mktemp -d)
+    log_file="$tmpdir/pacman.log"
+    pkglist="$tmpdir/package_list.txt"
+    cache_home="$tmpdir/xdg-cache"
+    printf 'zzz-test-seen-pkg\n' > "$pkglist"
+
+    cat > "$log_file" <<'EOF'
+[2026-07-01T10:00:00-0600] [ALPM] installed zzz-test-seen-pkg (1.0-1)
+EOF
+
+    local base_args=(
+        --package-list="$pkglist"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --chaos-rat-list="$tmpdir/chaos_rat_empty.txt"
+        --no-notify
+    )
+
+    # First run: fresh finding -> LOG_HIST, exit code reflects a warning.
+    rc=0
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$log_file" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports_empty.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"LOG_HIST: zzz-test-seen-pkg"* && $rc -ge 1 ]]; then
+        pass "check_logs: first-time historical match tagged LOG_HIST and flagged"
+    else
+        fail "check_logs: expected first-run LOG_HIST + nonzero exit, out: $out rc=$rc"
+    fi
+    if [[ -s "$cache_home/archcanary/log_hist_seen.txt" ]]; then
+        pass "check_logs: first run recorded the match in log_hist_seen.txt"
+    else
+        fail "check_logs: log_hist_seen.txt missing/empty after first run"
+    fi
+
+    # Second run, same log + same seen-file: downgraded to LOG_HIST_SEEN,
+    # exit-code-neutral like LOG_OLD.
+    rc=0
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$log_file" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports_empty.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"LOG_HIST_SEEN: zzz-test-seen-pkg"* && "$out" != *"LOG_HIST: zzz-test-seen-pkg"* ]]; then
+        pass "check_logs: repeat scan of the same event downgraded to LOG_HIST_SEEN"
+    else
+        fail "check_logs: expected LOG_HIST_SEEN on repeat scan, out: $out"
+    fi
+    if [[ $rc -eq 0 ]]; then
+        pass "check_logs: LOG_HIST_SEEN-only scan is exit-code-neutral (exit 0)"
+    else
+        fail "check_logs: LOG_HIST_SEEN-only scan should exit 0, got rc=$rc"
+    fi
+
+    # A genuinely new install (different timestamp) of the same package name
+    # is a distinct event -> fresh LOG_HIST, not silenced by the earlier one.
+    cat > "$log_file" <<'EOF'
+[2026-07-01T10:00:00-0600] [ALPM] installed zzz-test-seen-pkg (1.0-1)
+[2026-08-01T10:00:00-0600] [ALPM] installed zzz-test-seen-pkg (2.0-1)
+EOF
+    rc=0
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$log_file" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports_empty.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"LOG_HIST: zzz-test-seen-pkg (installed on 2026-08-01"* && \
+          "$out" == *"LOG_HIST_SEEN: zzz-test-seen-pkg (installed on 2026-07-01"* ]]; then
+        pass "check_logs: a new install event for the same name is flagged fresh"
+    else
+        fail "check_logs: new install event wrongly silenced by earlier seen entry, out: $out"
+    fi
+
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -2341,6 +2421,9 @@ test_refresh_aur_audit_versions
 
 $VERBOSE && msg "--- Test 29: _refresh_aur_audit clears stale versions data on empty capture ---"
 test_refresh_aur_audit_versions_stale_clear
+
+$VERBOSE && msg "--- Test 30: check_logs LOG_HIST seen-once downgrade ---"
+test_check_logs_seen_once
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

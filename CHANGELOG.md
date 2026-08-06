@@ -4,6 +4,7 @@
 
 - Fix: `configs/yay-init.lua`'s aur-audit RED warning matched by package name only, so a once-flagged package kept warning on every future install even after a newer version was rescanned clean — reported live on `firefox-pure`. `--refresh` now also captures the flagged version into `aur_audit_red_versions.txt` (RED only; BLACK's block stays unconditional); the hook compares it against the installing PKGBUILD's own `pkgver`/`pkgrel` and only keeps full severity on an exact match. Marker bumped to `(v6)`.
 - Fix: `archcanary-gui`'s yad dialogs jumped every time you resized one, since `--center` maps to GTK's `GTK_WIN_POS_CENTER_ALWAYS`, which GTK re-applies on every resize instead of just once at open. Replaced with a one-time computed `--posx`/`--posy` (via `xdotool`, falling back to `--center` if it's not installed) across every sizable dialog in `archcanary-gui.sh`.
+- Added: a `LOG_HIST` match (historical — package no longer installed) now only counts as a WARNING the first time. A repeat scan of the exact same install event prints `LOG_HIST_SEEN` instead — informational only, like `LOG_OLD` — so a name you've already reviewed doesn't keep raising the exit code on every future scan. A genuinely new install of the same package name is still flagged fresh. State tracked in `~/.cache/archcanary/log_hist_seen.txt`. Prompted by a live report where a since-removed `discord-qt` install kept re-triggering a WARNING on every scan.
 
 ## v0.1.26 (2026-08-05)
 
