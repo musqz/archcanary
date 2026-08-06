@@ -116,6 +116,7 @@ Every optional check is off by default — bare `archcanary` just matches your
 installed packages against the known-bad lists. Enable more with flags, or
 run everything at once with `--full`.
 
+## The --flags
 <details>
 <summary><strong>Full flag reference</strong> (click to expand)</summary>
 
