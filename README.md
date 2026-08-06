@@ -140,7 +140,7 @@ run everything at once with `--full`.
 | `--scan-all-homes` | Enumerate real local users (UID range from `/etc/login.defs`, valid shell, home dir exists) and run the npm/bun/yarn/pnpm/pkgbuild/autostart checks against each of their homes, not just yours — privilege-dropped per user via `sudo -u`. For shared/multi-user machines; not included in `--full`. | Yes |
 | `--search-packages=PKG[,PKG...]` | Check package name(s) against every loaded threat list, independent of what's installed — no scan, prints a ready-to-copy `pacman -Rns` command for any match, and exits. | No |
 | `--full` | All of the above except `--check-list-overlap` and `--scan-all-homes` | Partial |
-| `--refresh` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam/Community Reports lists and the aur-audit black/red feed | — |
+| `--refresh (internet connection)` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam/Community Reports lists and the aur-audit black/red feed | — |
 | `--no-aur-audit` | Skip the aur-audit.wtako.net feed on `--refresh`. Persists via `AUR_AUDIT_ENABLE=false` in `~/.config/archcanary/env`, also toggleable from the GUI's Scan settings menu row | — |
 | `--verbose`, `-v`, `--debug` | Verbose output (`--debug` also enables `set -x`) | — |
 | `--log-file=PATH` | Write the full detail log to `PATH` (default: `~/.cache/archcanary/aur-check-<date>.log`) | — |
