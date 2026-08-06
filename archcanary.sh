@@ -944,7 +944,7 @@ run_doctor() {
         # silently (reports a working hook as missing) rather than erroring
         # out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v5)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v6)"
         local _lua_label="yay init.lua (archcanary's hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         if [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_CURRENT" "$yay_init_lua")" -eq 0 ]]; then
@@ -1307,6 +1307,14 @@ AUR_AUDIT_RED_LIST="${AUR_AUDIT_RED_LIST:-$AUR_CONFIG_DIR/aur_audit_red.txt}"
 AUR_AUDIT_RED_PKGS=()
 AUR_AUDIT_RED_DATES_LIST="${AUR_AUDIT_RED_DATES_LIST:-$AUR_CONFIG_DIR/aur_audit_red_dates.txt}"
 AUR_AUDIT_RED_DATE_LINES=()
+# Companion file: "pkgname pkgver-pkgrel" per line, the flagged version's own
+# Arch version string (wtako's "version" field). Read directly by
+# configs/yay-init.lua's Lua hook, which compares it against the PKGBUILD
+# currently being installed so a name-only match doesn't warn forever once a
+# newer version has been rescanned clean. RED only -- BLACK's yay.abort()
+# stays unconditional regardless of version. No bash-side consumer, so unlike
+# the dates file above this gets no *_LINES array or associative lookup.
+AUR_AUDIT_RED_VERSIONS_LIST="${AUR_AUDIT_RED_VERSIONS_LIST:-$AUR_CONFIG_DIR/aur_audit_red_versions.txt}"
 
 # Fetch the aur-audit.wtako.net black/red feed on --refresh. Disable via
 # AUR_AUDIT_ENABLE=false (env), --no-aur-audit (one-off), or the GUI checkbox.
@@ -1530,12 +1538,18 @@ load_packages() {
         # name/date counts are verified equal before pairing — if a future
         # API response ever drops the field for some entries, dates are
         # skipped for that page (names still update) rather than risk
-        # silently misaligning name[i] with date[j].
+        # silently misaligning name[i] with date[j]. RED's call also passes a
+        # versions_dest, capturing the flagged version's own "pkgver-pkgrel"
+        # string into a companion versions file — configs/yay-init.lua's Lua
+        # hook compares it against the PKGBUILD being installed so a
+        # name-only match doesn't warn forever once a newer version is
+        # rescanned clean. BLACK gets no versions_dest: a confirmed-malicious
+        # verdict stays an unconditional block regardless of version.
         _refresh_aur_audit() {
-            local filter="$1" dest="$2" label="$3" dates_dest="$4"
+            local filter="$1" dest="$2" label="$3" dates_dest="$4" versions_dest="${5:-}"
             local base="https://aur-audit.wtako.net/packages"
             local cursor="" page pages=0
-            local -a page_names page_dates_ms all=() all_dates=()
+            local -a page_names page_dates_ms all=() all_dates=() all_versions=()
             echo "Fetching aur-audit $label list..."
             while :; do
                 page=$(curl -fsSL "${base}?filter=${filter}&limit=500${cursor:+&before=$cursor}" 2>/dev/null) || {
@@ -1550,6 +1564,24 @@ load_packages() {
                     for i in "${!page_names[@]}"; do
                         ds=$(date -d "@$(( page_dates_ms[i] / 1000 ))" +%F 2>/dev/null) || continue
                         all_dates+=("${page_names[i]} $ds")
+                    done
+                fi
+                if [[ -n "$versions_dest" ]]; then
+                    # Not every entry carries a "version" field (live feed:
+                    # ~3% don't) -- the flat index-pairing used for dates
+                    # above would silently drop the whole page on any count
+                    # mismatch, and a lazy cross-field regex risks pairing a
+                    # name with the WRONG object's version. Split into one
+                    # record per package object first (each starts with the
+                    # fixed "guid" field) so packageName/version are pulled
+                    # from the same object and never misattributed.
+                    local -a page_objs
+                    mapfile -t page_objs < <(awk -v RS='{"guid":"' 'NR>1{print RS $0}' <<<"$page")
+                    local obj oname over
+                    for obj in "${page_objs[@]}"; do
+                        oname=$(grep -oP '"packageName":"\K[^"]*' <<<"$obj" | head -1) || true
+                        over=$(grep -oP '"version":"\K[^"]*' <<<"$obj" | head -1) || true
+                        [[ -n "$oname" && -n "$over" ]] && all_versions+=("$oname $over")
                     done
                 fi
                 cursor=$(grep -oP '"nextCursor":\K[0-9]+' <<<"$page" || true)
@@ -1567,10 +1599,14 @@ load_packages() {
                 printf '%s\n' "${all_dates[@]}" | sort -u > "$dates_dest"
                 _chown_to_invoker "$dates_dest"
             fi
+            if [[ -n "$versions_dest" && ${#all_versions[@]} -gt 0 ]]; then
+                printf '%s\n' "${all_versions[@]}" | sort -u > "$versions_dest"
+                _chown_to_invoker "$versions_dest"
+            fi
         }
         if [[ "$AUR_AUDIT_ENABLE" == true ]]; then
             _refresh_aur_audit black "$AUR_AUDIT_BLACK_LIST" "black" "$AUR_AUDIT_BLACK_DATES_LIST"
-            _refresh_aur_audit red   "$AUR_AUDIT_RED_LIST"   "red"   "$AUR_AUDIT_RED_DATES_LIST"
+            _refresh_aur_audit red   "$AUR_AUDIT_RED_LIST"   "red"   "$AUR_AUDIT_RED_DATES_LIST" "$AUR_AUDIT_RED_VERSIONS_LIST"
         else
             echo "Skipping aur-audit.wtako.net fetch (disabled)."
         fi

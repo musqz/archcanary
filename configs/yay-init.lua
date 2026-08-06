@@ -1,6 +1,6 @@
 -- ~/.config/yay/init.lua
 --
--- yay 13.0 Lua hooks for the AUR security stack (v5).
+-- yay 13.0 Lua hooks for the AUR security stack (v6).
 -- Seeded to ~/.config/yay/init.lua by install.sh if not already present.
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
@@ -95,6 +95,47 @@ local function _archcanary_load_pkg_set(path)
   return set
 end
 
+-- Same "pkgname value" companion-file shape as aur_audit_red_dates.txt and
+-- aur_audit_red_versions.txt -> name-to-value map. One loader for both, since
+-- the format is identical.
+local function _archcanary_load_pkg_map(path)
+  local map = {}
+  local f = io.open(path, "r")
+  if not f then return map end
+  for line in f:lines() do
+    if not line:match("^#") and line:match("%S") then
+      local name, value = line:match("^(%S+)%s+(%S+)")
+      if name and value then map[name] = value end
+    end
+  end
+  f:close()
+  return map
+end
+
+-- Extracts "pkgver-pkgrel" from the freshly-downloaded PKGBUILD's raw text,
+-- matching wtako's "version" field format (e.g. "0.5.8-2"), entirely offline
+-- via string.match. Returns nil -- not a best-effort guess -- for anything
+-- that isn't a simple static assignment: a pkgver() function (VCS/-git
+-- packages compute this dynamically at build time, so a static pkgver= line,
+-- if present at all, is just a stale placeholder) or a missing/unparseable
+-- pkgver=/pkgrel= line. Callers must treat nil as "unknown" and fall back to
+-- the unconditional warning -- never fail open.
+local function _archcanary_pkgbuild_version(pkgbuild)
+  local pkgver, pkgrel, dynamic
+  for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
+    if line:match("^%s*pkgver%s*%(%s*%)") then
+      dynamic = true
+    elseif not pkgver then
+      pkgver = line:match("^pkgver=['\"]([^'\"]+)['\"]") or line:match("^pkgver=(%S+)")
+    end
+    if not pkgrel then
+      pkgrel = line:match("^pkgrel=['\"]([^'\"]+)['\"]") or line:match("^pkgrel=(%S+)")
+    end
+  end
+  if dynamic or not pkgver or not pkgrel then return nil end
+  return pkgver .. "-" .. pkgrel
+end
+
 -- Static pattern check + aur-audit.wtako.net black/red check, combined into
 -- one hook (rather than two separate AURPostDownload registrations) so
 -- there's a single "clean" confirmation line when nothing is found. Silence
@@ -158,16 +199,35 @@ yay.create_autocmd("AURPostDownload", {
       yay.abort(pkg .. ": blocked — suspicious pattern: rev/tr piped to shell")
     end
 
-    local dir   = _archcanary_config_dir()
-    local black = _archcanary_load_pkg_set(dir .. "/aur_audit_black.txt")
-    local red   = _archcanary_load_pkg_set(dir .. "/aur_audit_red.txt")
+    local dir          = _archcanary_config_dir()
+    local black        = _archcanary_load_pkg_set(dir .. "/aur_audit_black.txt")
+    local red          = _archcanary_load_pkg_set(dir .. "/aur_audit_red.txt")
+    local red_versions = _archcanary_load_pkg_map(dir .. "/aur_audit_red_versions.txt")
+    local red_dates    = _archcanary_load_pkg_map(dir .. "/aur_audit_red_dates.txt")
 
     if black[pkg] then
       flagged = true
       yay.abort(pkg .. ": aur-audit flagged BLACK (confirmed malicious) — https://aur-audit.wtako.net")
     elseif red[pkg] then
       flagged = true
-      yay.log.warn(pkg .. ": aur-audit flagged RED (high-risk, unconfirmed) — review before continuing")
+      -- A name-only match would otherwise warn forever, even once a newer
+      -- version is rescanned clean (e.g. firefox-pure: flagged red on an old
+      -- version, current version already clean on wtako's own site). Exact
+      -- version-string match, not vercmp ordering -- deliberately simple.
+      -- Any missing piece (versions file not yet refreshed, dynamic
+      -- pkgver(), unparseable PKGBUILD) falls through to the original
+      -- unconditional wording below.
+      local flagged_ver = red_versions[pkg]
+      local current_ver = _archcanary_pkgbuild_version(pkgbuild)
+      if flagged_ver and current_ver and current_ver ~= flagged_ver then
+        local flagged_date = red_dates[pkg]
+        local ver_info = flagged_ver .. (flagged_date and (", " .. flagged_date) or "")
+        yay.log.warn(pkg .. ": aur-audit flagged RED for a different version (" .. ver_info
+                     .. ") — installing " .. current_ver
+                     .. " — verify at aur-audit.wtako.net if this looks stale")
+      else
+        yay.log.warn(pkg .. ": aur-audit flagged RED (high-risk, unconfirmed) — review before continuing")
+      end
     end
 
     if not flagged then
