@@ -1721,9 +1721,21 @@ test_color_flag_validation() {
 # ---------------------------------------------------------------------------
 _sah_extract_fns() {
     sed -n '/^_enumerate_local_users()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_resolve_scan_user_opts()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_SAH_PER_USER_CHECK_NAMES=(/,/^_run_scan_all_homes()/{ /^_run_scan_all_homes()/!p }' "$REPO_DIR/archcanary.sh"
     sed -n '/^_run_scan_all_homes()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_resolve_and_store_scan_users()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_parse_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_status_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_is_behavior_check_name()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_summary_row()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_summary()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_is_sah_per_user_check()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_summary_general_only()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_sah_per_user_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_sah_section_header()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_scan_summary_section()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_warn_scan_homes_flag_interactions()/,/^}/p' "$REPO_DIR/archcanary.sh"
 }
 
 test_enumerate_local_users() {
@@ -1776,6 +1788,208 @@ EOF
 
     rm -f "$fns"
     rm -rf "$scratch"
+}
+
+test_resolve_scan_user_opts() {
+    local fns scratch fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    mkdir -p "$scratch/alice" "$scratch/bob"
+    # nohome deliberately not created -- a named user with no home dir must
+    # be a hard error here (unlike enumeration, which just silently drops it).
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/zsh
+nohome:x:1002:1002::$scratch/nohome:/bin/bash
+EOF
+
+    local out rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(bob alice bob)
+        _resolve_scan_user_opts users
+        printf '%s\n' \"\${users[@]}\"
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == "bob:$scratch/bob"$'\n'"alice:$scratch/alice" ]]; then
+        pass "resolve_scan_user_opts: repeatable, order-preserving, de-duped"
+    else
+        fail "resolve_scan_user_opts: expected bob then alice, deduped, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(ghost)
+        _resolve_scan_user_opts users
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'ghost' is not a known local user"* ]]; then
+        pass "resolve_scan_user_opts: unknown username is a hard error"
+    else
+        fail "resolve_scan_user_opts: expected unknown-user error, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(nohome)
+        _resolve_scan_user_opts users
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'nohome' has no home directory"* ]]; then
+        pass "resolve_scan_user_opts: known user with no home dir is a hard error"
+    else
+        fail "resolve_scan_user_opts: expected no-home-dir error, rc=$rc, out: $out"
+    fi
+
+    # Regression: a failing `getent passwd NAME` (not just an ordinary "not
+    # found") must not silently kill the whole script under set -e --
+    # /code-review found the original bulk `getent passwd | awk ...` did
+    # exactly that whenever getent itself failed (e.g. sssd's
+    # `enumerate = false`, common on LDAP/AD-joined systems, refuses bulk
+    # listing while still answering targeted lookups -- which is also why
+    # the fix switched to a targeted `getent passwd NAME` call). Reproduced
+    # directly: a fake `getent` that exits nonzero with no output, WITHOUT
+    # the test-seam env var (so the real getent-calling branch runs), under
+    # explicit `set -e` in the test shell itself -- the extracted function
+    # snippet doesn't carry the real script's own `set -euo pipefail`.
+    local fake_bin
+    fake_bin=$(mktemp -d)
+    cat > "$fake_bin/getent" <<'EOF'
+#!/usr/bin/env bash
+exit 2
+EOF
+    chmod +x "$fake_bin/getent"
+    rc=0
+    out=$(PATH="$fake_bin:$PATH" bash -c "
+        set -euo pipefail
+        source '$fns'
+        SCAN_USER_OPTS=(alice)
+        _resolve_scan_user_opts users
+        echo 'UNREACHABLE ON FAILURE'
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'alice' is not a known local user"* && \
+          "$out" != *UNREACHABLE* ]]; then
+        pass "resolve_scan_user_opts: a failing getent reports the normal error instead of silently killing the script"
+    else
+        fail "resolve_scan_user_opts: expected clean error on getent failure (not a silent set -e death), rc=$rc, out: $out"
+    fi
+    rm -rf "$fake_bin"
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# _resolve_and_store_scan_users (the early, pre-log-redirect validation step
+# /code-review found missing -- previously a --scan-user typo wasn't caught
+# until deep inside _run_scan_all_homes, after other requested checks had
+# already run and, in --format=json mode, after the log-only redirect, so a
+# JSON caller's actual stdout was completely empty on error). Must populate
+# _SAH_RESOLVED_USERS for valid names, leave it empty (no error) when
+# SCAN_USER_OPTS is empty (the --scan-all-homes / normal-scan case), and
+# propagate _resolve_scan_user_opts's hard error for an invalid name.
+# ---------------------------------------------------------------------------
+test_resolve_and_store_scan_users() {
+    local fns scratch fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    mkdir -p "$scratch/alice" "$scratch/bob"
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/zsh
+EOF
+
+    local out rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(alice bob)
+        _resolve_and_store_scan_users
+        printf '%s\n' \"\${_SAH_RESOLVED_USERS[@]}\"
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == "alice:$scratch/alice"$'\n'"bob:$scratch/bob" ]]; then
+        pass "resolve_and_store_scan_users: populates _SAH_RESOLVED_USERS for valid names"
+    else
+        fail "resolve_and_store_scan_users: expected alice+bob resolved, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=()
+        _resolve_and_store_scan_users
+        echo \"count=\${#_SAH_RESOLVED_USERS[@]}\"
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == "count=0" ]]; then
+        pass "resolve_and_store_scan_users: no-op (empty, no error) when SCAN_USER_OPTS is empty"
+    else
+        fail "resolve_and_store_scan_users: expected a clean no-op with empty SCAN_USER_OPTS, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(ghost)
+        _resolve_and_store_scan_users
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'ghost' is not a known local user"* ]]; then
+        pass "resolve_and_store_scan_users: propagates the hard error for an unknown username"
+    else
+        fail "resolve_and_store_scan_users: expected unknown-user error, rc=$rc, out: $out"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# The "--- [10b] ... ---" section header must list the deduped names
+# actually scanned (from _SAH_RESOLVED_USERS), not the raw, possibly
+# repeated SCAN_USER_OPTS CLI array -- /code-review found
+# --scan-user=bob --scan-user=alice --scan-user=bob printed "bob alice bob"
+# even though only one child scan and one "Check summary: USER bob" table
+# ever happen.
+# ---------------------------------------------------------------------------
+test_sah_section_header_deduped_names() {
+    local fns
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+
+    local out
+    out=$(bash -c "
+        source '$fns'
+        SCAN_ALL_HOMES=false
+        _SAH_RESOLVED_USERS=(bob:/home/bob alice:/home/alice)
+        _print_sah_section_header
+    ")
+    if [[ "$out" == "--- [10b] Scan user home(s): bob alice (npm/bun/yarn/pnpm/pkgbuild/autostart) ---" ]]; then
+        pass "sah_section_header: lists deduped names from _SAH_RESOLVED_USERS, not raw SCAN_USER_OPTS"
+    else
+        fail "sah_section_header: expected 'bob alice' (deduped), out: $out"
+    fi
+
+    out=$(bash -c "
+        source '$fns'
+        SCAN_ALL_HOMES=true
+        _SAH_RESOLVED_USERS=()
+        _print_sah_section_header
+    ")
+    if [[ "$out" == "--- [10b] Scan all local user homes (npm/bun/yarn/pnpm/pkgbuild/autostart) ---" ]]; then
+        pass "sah_section_header: --scan-all-homes wording unaffected"
+    else
+        fail "sah_section_header: expected the scan-all-homes header, out: $out"
+    fi
+
+    rm -f "$fns"
 }
 
 test_scan_all_homes_worst_of_n() {
@@ -1873,7 +2087,7 @@ EOF
 test_scan_all_homes_root_guard() {
     local out rc=0
     out=$("$REPO_DIR/archcanary.sh" --scan-all-homes 2>&1) || rc=$?
-    if [[ $rc -eq 1 && "$out" == *"--scan-all-homes requires root"* ]]; then
+    if [[ $rc -eq 1 && "$out" == *"--scan-all-homes/--scan-user requires root"* ]]; then
         pass "scan_all_homes: non-root invocation rejected with a clear error"
     else
         fail "scan_all_homes: expected root-required rejection, rc=$rc, out: $out"
@@ -1901,6 +2115,37 @@ test_scan_all_homes_flag_wiring() {
         pass "scan_all_homes: --full does not implicitly enable --scan-all-homes"
     else
         fail "scan_all_homes: --full incorrectly triggered the --scan-all-homes root guard, out: $out"
+    fi
+}
+
+test_scan_user_cli_flags() {
+    local out rc=0
+
+    # Same root guard as --scan-all-homes, worded to cover both flags.
+    out=$("$REPO_DIR/archcanary.sh" --scan-user=alice 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"--scan-all-homes/--scan-user requires root"* ]]; then
+        pass "scan_user: non-root invocation rejected with a clear error"
+    else
+        fail "scan_user: expected root-required rejection, rc=$rc, out: $out"
+    fi
+
+    # --doctor bypasses the guard, same convention as --scan-all-homes.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" --doctor --scan-user=alice 2>&1) || rc=$?
+    if [[ "$out" == *"following flags are ignored with --doctor"*"--scan-user"* ]]; then
+        pass "scan_user: --doctor --scan-user bypasses the root guard, reports as ignored"
+    else
+        fail "scan_user: expected --doctor to bypass the guard and report ignored flag, rc=$rc, out: $out"
+    fi
+
+    # Combining both is ambiguous (scan everyone vs. scan just these) --
+    # rejected before the root guard even runs, so this is testable non-root.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" --scan-all-homes --scan-user=alice 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"mutually exclusive"* ]]; then
+        pass "scan_user: --scan-all-homes + --scan-user together rejected as mutually exclusive"
+    else
+        fail "scan_user: expected mutual-exclusion rejection, rc=$rc, out: $out"
     fi
 }
 
@@ -1977,6 +2222,298 @@ EOF
 
     rm -f "$fns"
     rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# _run_scan_all_homes must scan exactly the users named via SCAN_USER_OPTS,
+# not fall back to enumerating everyone -- the whole point of --scan-user
+# over --scan-all-homes is scoping down to specific accounts.
+# ---------------------------------------------------------------------------
+test_scan_user_targets_named_users_only() {
+    local fns scratch fake_bin fake_passwd argv_log
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$scratch/bob" "$scratch/carol" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/bash
+carol:x:1002:1002::$scratch/carol:/bin/bash
+EOF
+
+    argv_log="$scratch/argv.log"
+    cat > "$fake_bin/sudo" <<EOF
+#!/usr/bin/env bash
+shift; shift
+user="\$1"; shift
+shift
+printf 'user=%s\n' "\$user" >> "$argv_log"
+echo '{}'
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
+        EXIT_CODE=0
+        _rec() { :; }
+        SCAN_USER_OPTS=(carol alice carol)
+        _resolve_and_store_scan_users
+        _run_scan_all_homes
+    " >/dev/null 2>&1
+
+    local argv
+    argv=$(cat "$argv_log" 2>/dev/null)
+    local carol_count
+    carol_count=$(grep -c '^user=carol$' "$argv_log" 2>/dev/null || true)
+    if [[ "$argv" == *"user=carol"* && "$argv" == *"user=alice"* && \
+          "$argv" != *"user=bob"* && "$carol_count" -eq 1 ]]; then
+        pass "scan_user: only the named users are scanned, repeats collapsed to one invocation each"
+    else
+        fail "scan_user: expected exactly carol+alice (deduped, no bob), argv: $argv"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# _run_scan_all_homes must capture each user's own PER-CHECK results (not
+# just a coarse overall verdict) into _SAH_USER_NAMES/_SAH_USER_CHECKS, and
+# _print_sah_per_user_checks must render one full check-by-check table per
+# user -- clean/warning render plainly, a code-2 behavior-based check
+# (PKGBUILD obfuscation scan) renders as REVIEW while a code-2 non-behavior
+# one (npm cache) renders as INFECTED (same _is_behavior_check_name
+# distinction _print_summary uses), and a child that produced no parseable
+# output at all (the existing "could not evaluate" narrative path) gets a
+# one-line fallback instead of a table of blanks.
+# ---------------------------------------------------------------------------
+test_scan_user_per_user_checks() {
+    local fns scratch fake_bin fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$scratch/bob" "$scratch/carol" "$scratch/dave" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/bash
+carol:x:1002:1002::$scratch/carol:/bin/bash
+dave:x:1003:1003::$scratch/dave:/bin/bash
+EOF
+
+    # Fake sudo hands back canned per-check JSON instead of running a real
+    # scan. carol's invocation fails outright (exit 1, no output) to
+    # exercise the "could not evaluate" fallback.
+    cat > "$fake_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+shift; shift
+user="$1"; shift
+shift
+clean6='[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]'
+case "$user" in
+    alice) echo "{\"result\":\"clean\",\"checks\":$clean6}" ;;
+    bob)   echo '{"result":"warnings","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"warning"}]}' ;;
+    carol) exit 1 ;;
+    dave)  echo '{"result":"infected","checks":[{"name":"npm cache","status":"infected"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"infected"},{"name":"XDG autostart + shell RCs","status":"clean"}]}' ;;
+esac
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    local out
+    out=$(PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
+        EXIT_CODE=0
+        _rec() { :; }
+        SCAN_USER_OPTS=(alice bob carol dave)
+        _resolve_and_store_scan_users
+        _run_scan_all_homes >/dev/null
+        _SEP55='-----'
+        _SYM_CLEAN='CLEAN_ICON'
+        _SYM_WARNINGS='WARN_ICON'
+        _SYM_REVIEW_TXT='REVIEW_ICON'
+        _SYM_INFECTED_TXT='INFECTED_ICON'
+        _print_sah_per_user_checks
+    " 2>&1)
+
+    if [[ "$out" == *"Check summary: USER alice"* && "$out" == *"Check summary: USER bob"* && \
+          "$out" == *"Check summary: USER carol"* && "$out" == *"Check summary: USER dave"* && \
+          "$out" =~ 'XDG autostart + shell RCs'[[:space:]]+WARN_ICON && \
+          "$out" == *"carol"*"(could not evaluate"* && \
+          "$out" =~ 'npm cache'[[:space:]]+INFECTED_ICON && \
+          "$out" =~ 'PKGBUILD obfuscation scan'[[:space:]]+REVIEW_ICON ]]; then
+        pass "scan_user: per-user check tables render per-check detail, correct REVIEW/INFECTED split, and could-not-evaluate fallback"
+    else
+        fail "scan_user: expected 4 per-user tables with correct icons/fallback, out: $out"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# Regression coverage for a real report: `--scan-user=a --check-ldso
+# --scan-user=b --check-ldso` made check_ldso's own result vanish from the
+# final output entirely -- _print_sah_per_user_checks only ever covers the
+# six per-user checks, so a general/machine-wide check (ld.so.preload,
+# systemd, kmod, ...) recorded via the normal _rec path had nowhere left to
+# render once _print_summary itself stopped being called for --scan-user.
+# _print_summary_general_only must still show it, in its own "Check summary"
+# table above the per-user ones -- and must print nothing at all when there
+# is no such general check (bare --scan-user, the common case).
+# ---------------------------------------------------------------------------
+test_scan_user_general_check_still_shown() {
+    local fns scratch fake_bin fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+EOF
+
+    cat > "$fake_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+shift; shift; shift; shift
+echo '{"result":"clean","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]}'
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    local out
+    out=$(PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
+        EXIT_CODE=0
+        _SUMMARY_NAMES=(); _SUMMARY_CODES=(); _SUMMARY_IDX=()
+        _rec() { _SUMMARY_NAMES+=(\"\$1\"); _SUMMARY_CODES+=(\"\$2\"); _SUMMARY_IDX+=(\"\${3:-}\"); }
+        _SEP55='-----'
+        _SYM_CLEAN='CLEAN_ICON'
+        SCAN_USER_OPTS=(alice)
+        _resolve_and_store_scan_users
+        _run_scan_all_homes >/dev/null
+        echo '===bare==='
+        _print_summary_general_only
+        _rec 'ld.so.preload injection' 0 '9'
+        echo '===with-general==='
+        _print_scan_summary_section
+    " 2>&1)
+
+    local bare with_general
+    bare=$(sed -n '/===bare===/,/===with-general===/p' <<< "$out")
+    with_general=$(sed -n '/===with-general===/,$p' <<< "$out")
+
+    if [[ "$bare" != *"Check summary"* && \
+          "$with_general" == *"Check summary (system-wide, not per-user)"* && \
+          "$with_general" =~ 'ld.so.preload injection'[[:space:]]+CLEAN_ICON && \
+          "$with_general" == *"Check summary: USER alice"* ]]; then
+        pass "scan_user: a general (non-per-user) check alongside --scan-user still gets its own labeled summary table, and none prints when there isn't one"
+    else
+        fail "scan_user: expected no table for bare --scan-user and a general table + per-user table when combined, out: $out"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# The per-user tables must be wired to --scan-user only, never
+# --scan-all-homes -- _print_scan_summary_section is the sole dispatcher
+# (named, not inlined, specifically so this is unit-testable without root).
+# ---------------------------------------------------------------------------
+test_scan_user_summary_scope() {
+    local fns
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+
+    local out
+    out=$(bash -c "
+        source '$fns'
+        _print_sah_per_user_checks() { echo PER_USER; }
+        _print_summary() { echo SHARED; }
+        SCAN_USER_OPTS=()
+        echo \"empty=[\$(_print_scan_summary_section)]\"
+        SCAN_USER_OPTS=(alice)
+        echo \"set=[\$(_print_scan_summary_section)]\"
+    ")
+
+    if [[ "$out" == *"empty=[SHARED]"* && "$out" == *"set=[PER_USER]"* ]]; then
+        pass "scan_user: per-user tables shown only when SCAN_USER_OPTS is non-empty; shared table otherwise (--scan-all-homes unaffected)"
+    else
+        fail "scan_user: expected shared table with empty SCAN_USER_OPTS and per-user table once set, out: $out"
+    fi
+
+    rm -f "$fns"
+}
+
+# ---------------------------------------------------------------------------
+# --scan-user/--scan-all-homes interact silently with several other flags --
+# _warn_scan_homes_flag_interactions must fire the right NOTE for each,
+# fire nothing at all when none apply (the common case), and each NOTE must
+# be independent of the others (only the conditions actually true fire).
+# ---------------------------------------------------------------------------
+test_warn_scan_homes_flag_interactions() {
+    local fns
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+
+    local out
+    out=$(bash -c "
+        source '$fns'
+        CHECK_NPM_CACHE=true CHECK_BUN_CACHE=false CHECK_YARN_CACHE=false
+        CHECK_PNPM_CACHE=false CHECK_PKGBUILD=false CHECK_AUTOSTART=true
+        PACKAGE_LIST_FILE_OPT='' MALICIOUS_NPM_LIST_OPT='/tmp/custom-npm.txt'
+        CHAOS_RAT_LIST_OPT='' RUSSIAN_SPAM_LIST_OPT='' COMMUNITY_LIST_OPT=''
+        REFRESH_PACKAGE_LIST=true
+        VERBOSE=true
+        LOG_FILE='/tmp/custom.log'
+        FORMAT_JSON=true
+        _warn_scan_homes_flag_interactions
+    " 2>&1)
+
+    if [[ "$out" == *"--check-npm-cache"*"--check-autostart"*"add nothing extra"* && \
+          "$out" == *"--malicious-npm-list="*"only applies to your own checks"* && \
+          "$out" == *"--refresh only refreshes your own lists"* && \
+          "$out" == *"--verbose/--debug only affects your own output"* && \
+          "$out" == *"--log-file only applies to this summary"* && \
+          "$out" == *"--format=json has no per-user breakdown"* ]]; then
+        pass "warn_scan_homes: all six flag-interaction NOTEs fire when their condition is true"
+    else
+        fail "warn_scan_homes: expected all six NOTEs, out: $out"
+    fi
+
+    local quiet
+    quiet=$(bash -c "
+        source '$fns'
+        CHECK_NPM_CACHE=false CHECK_BUN_CACHE=false CHECK_YARN_CACHE=false
+        CHECK_PNPM_CACHE=false CHECK_PKGBUILD=false CHECK_AUTOSTART=false
+        PACKAGE_LIST_FILE_OPT='' MALICIOUS_NPM_LIST_OPT='' CHAOS_RAT_LIST_OPT=''
+        RUSSIAN_SPAM_LIST_OPT='' COMMUNITY_LIST_OPT=''
+        REFRESH_PACKAGE_LIST=false
+        VERBOSE=false
+        LOG_FILE=''
+        FORMAT_JSON=false
+        _warn_scan_homes_flag_interactions
+    " 2>&1)
+
+    if [[ -z "$quiet" ]]; then
+        pass "warn_scan_homes: bare --scan-user (nothing else set) prints no NOTEs"
+    else
+        fail "warn_scan_homes: expected no output with nothing set, out: $quiet"
+    fi
+
+    rm -f "$fns"
 }
 
 # ---------------------------------------------------------------------------
@@ -2550,6 +3087,33 @@ test_scan_all_homes_no_cross_user_list_paths
 
 $VERBOSE && msg "--- Test 32: root-install bundled lists are world-readable regardless of umask ---"
 test_root_install_bundled_lists_world_readable
+
+$VERBOSE && msg "--- Test 33: resolve_scan_user_opts (--scan-user resolution) ---"
+test_resolve_scan_user_opts
+
+$VERBOSE && msg "--- Test 34: --scan-user CLI flags (root guard, doctor, mutual exclusion) ---"
+test_scan_user_cli_flags
+
+$VERBOSE && msg "--- Test 35: --scan-user targets only the named users ---"
+test_scan_user_targets_named_users_only
+
+$VERBOSE && msg "--- Test 36: --scan-user per-user check-table rendering ---"
+test_scan_user_per_user_checks
+
+$VERBOSE && msg "--- Test 37: per-user summary scoped to --scan-user only ---"
+test_scan_user_summary_scope
+
+$VERBOSE && msg "--- Test 38: general checks still shown alongside --scan-user ---"
+test_scan_user_general_check_still_shown
+
+$VERBOSE && msg "--- Test 39: --scan-user flag-interaction NOTEs ---"
+test_warn_scan_homes_flag_interactions
+
+$VERBOSE && msg "--- Test 40: resolve_and_store_scan_users (early --scan-user validation) ---"
+test_resolve_and_store_scan_users
+
+$VERBOSE && msg "--- Test 41: --scan-user section header lists deduped names ---"
+test_sah_section_header_deduped_names
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
