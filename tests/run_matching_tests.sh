@@ -1725,9 +1725,9 @@ _sah_extract_fns() {
     sed -n '/^_run_scan_all_homes()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_parse_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_status_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
-    sed -n '/^_sah_result_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
-    sed -n '/^_print_sah_user_summary()/,/^}/p' "$REPO_DIR/archcanary.sh"
-    sed -n '/^_maybe_print_sah_user_summary()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_is_behavior_check_name()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_sah_per_user_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_scan_summary_section()/,/^}/p' "$REPO_DIR/archcanary.sh"
 }
 
 test_enumerate_local_users() {
@@ -2131,41 +2131,46 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# _run_scan_all_homes must also capture each user's own overall verdict
-# (from the child's top-level JSON "result" field, not just its per-check
-# breakdown) into _SAH_USER_NAMES/_SAH_USER_CODES, and _print_sah_user_summary
-# must render that as a per-user table -- clean/warnings/infected mapped via
-# _sah_result_to_code, and a child that produced no parseable output at all
-# (the existing "could not evaluate" path) still shows up, as code 99.
+# _run_scan_all_homes must capture each user's own PER-CHECK results (not
+# just a coarse overall verdict) into _SAH_USER_NAMES/_SAH_USER_CHECKS, and
+# _print_sah_per_user_checks must render one full check-by-check table per
+# user -- clean/warning render plainly, a code-2 behavior-based check
+# (PKGBUILD obfuscation scan) renders as REVIEW while a code-2 non-behavior
+# one (npm cache) renders as INFECTED (same _is_behavior_check_name
+# distinction _print_summary uses), and a child that produced no parseable
+# output at all (the existing "could not evaluate" narrative path) gets a
+# one-line fallback instead of a table of blanks.
 # ---------------------------------------------------------------------------
-test_scan_user_per_user_summary() {
+test_scan_user_per_user_checks() {
     local fns scratch fake_bin fake_passwd
     fns=$(mktemp)
     _sah_extract_fns > "$fns"
     scratch=$(mktemp -d)
     fake_bin="$scratch/bin"
-    mkdir -p "$scratch/alice" "$scratch/bob" "$scratch/carol" "$fake_bin"
+    mkdir -p "$scratch/alice" "$scratch/bob" "$scratch/carol" "$scratch/dave" "$fake_bin"
 
     fake_passwd="$scratch/passwd"
     cat > "$fake_passwd" <<EOF
 alice:x:1000:1000::$scratch/alice:/bin/bash
 bob:x:1001:1001::$scratch/bob:/bin/bash
 carol:x:1002:1002::$scratch/carol:/bin/bash
+dave:x:1003:1003::$scratch/dave:/bin/bash
 EOF
 
-    # Fake sudo hands back canned JSON per user instead of running a real
-    # scan -- this test only cares about result-field extraction and
-    # rendering, not the checks themselves. carol's invocation fails outright
-    # (exit 1, no output) to exercise the "could not evaluate" -> 99 path.
-    cat > "$fake_bin/sudo" <<EOF
+    # Fake sudo hands back canned per-check JSON instead of running a real
+    # scan. carol's invocation fails outright (exit 1, no output) to
+    # exercise the "could not evaluate" fallback.
+    cat > "$fake_bin/sudo" <<'EOF'
 #!/usr/bin/env bash
 shift; shift
-user="\$1"; shift
+user="$1"; shift
 shift
-case "\$user" in
-    alice) echo '{"result":"clean","checks":[]}' ;;
-    bob)   echo '{"result":"warnings","checks":[]}' ;;
+clean6='[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]'
+case "$user" in
+    alice) echo "{\"result\":\"clean\",\"checks\":$clean6}" ;;
+    bob)   echo '{"result":"warnings","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"warning"}]}' ;;
     carol) exit 1 ;;
+    dave)  echo '{"result":"infected","checks":[{"name":"npm cache","status":"infected"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"infected"},{"name":"XDG autostart + shell RCs","status":"clean"}]}' ;;
 esac
 EOF
     chmod +x "$fake_bin/sudo"
@@ -2177,22 +2182,25 @@ EOF
         _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
         EXIT_CODE=0
         _rec() { :; }
-        SCAN_USER_OPTS=(alice bob carol)
+        SCAN_USER_OPTS=(alice bob carol dave)
         _run_scan_all_homes >/dev/null
         _SEP55='-----'
         _SYM_CLEAN='CLEAN_ICON'
         _SYM_WARNINGS='WARN_ICON'
         _SYM_REVIEW_TXT='REVIEW_ICON'
-        _print_sah_user_summary
+        _SYM_INFECTED_TXT='INFECTED_ICON'
+        _print_sah_per_user_checks
     " 2>&1)
 
-    if [[ "$out" == *"Per-user summary"* && \
-          "$out" =~ alice[[:space:]]+CLEAN_ICON && \
-          "$out" =~ bob[[:space:]]+WARN_ICON && \
-          "$out" == *"carol"*"(could not evaluate)"* ]]; then
-        pass "scan_user: per-user summary renders clean/warnings/could-not-evaluate correctly"
+    if [[ "$out" == *"Check summary: USER alice"* && "$out" == *"Check summary: USER bob"* && \
+          "$out" == *"Check summary: USER carol"* && "$out" == *"Check summary: USER dave"* && \
+          "$out" =~ 'XDG autostart + shell RCs'[[:space:]]+WARN_ICON && \
+          "$out" == *"carol"*"(could not evaluate"* && \
+          "$out" =~ 'npm cache'[[:space:]]+INFECTED_ICON && \
+          "$out" =~ 'PKGBUILD obfuscation scan'[[:space:]]+REVIEW_ICON ]]; then
+        pass "scan_user: per-user check tables render per-check detail, correct REVIEW/INFECTED split, and could-not-evaluate fallback"
     else
-        fail "scan_user: expected alice=clean, bob=warnings, carol=could-not-evaluate, out: $out"
+        fail "scan_user: expected 4 per-user tables with correct icons/fallback, out: $out"
     fi
 
     rm -f "$fns"
@@ -2200,9 +2208,9 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# The per-user summary must be wired to --scan-user only, never
-# --scan-all-homes -- _maybe_print_sah_user_summary is the sole gate (named,
-# not inlined, specifically so this is unit-testable without real root).
+# The per-user tables must be wired to --scan-user only, never
+# --scan-all-homes -- _print_scan_summary_section is the sole dispatcher
+# (named, not inlined, specifically so this is unit-testable without root).
 # ---------------------------------------------------------------------------
 test_scan_user_summary_scope() {
     local fns
@@ -2212,17 +2220,18 @@ test_scan_user_summary_scope() {
     local out
     out=$(bash -c "
         source '$fns'
-        _print_sah_user_summary() { echo CALLED; }
+        _print_sah_per_user_checks() { echo PER_USER; }
+        _print_summary() { echo SHARED; }
         SCAN_USER_OPTS=()
-        echo \"empty=[\$(_maybe_print_sah_user_summary)]\"
+        echo \"empty=[\$(_print_scan_summary_section)]\"
         SCAN_USER_OPTS=(alice)
-        echo \"set=[\$(_maybe_print_sah_user_summary)]\"
+        echo \"set=[\$(_print_scan_summary_section)]\"
     ")
 
-    if [[ "$out" == *"empty=[]"* && "$out" == *"set=[CALLED]"* ]]; then
-        pass "scan_user: per-user summary only prints when SCAN_USER_OPTS is non-empty (never for --scan-all-homes)"
+    if [[ "$out" == *"empty=[SHARED]"* && "$out" == *"set=[PER_USER]"* ]]; then
+        pass "scan_user: per-user tables shown only when SCAN_USER_OPTS is non-empty; shared table otherwise (--scan-all-homes unaffected)"
     else
-        fail "scan_user: expected no call with empty SCAN_USER_OPTS and a call once set, out: $out"
+        fail "scan_user: expected shared table with empty SCAN_USER_OPTS and per-user table once set, out: $out"
     fi
 
     rm -f "$fns"
@@ -2809,8 +2818,8 @@ test_scan_user_cli_flags
 $VERBOSE && msg "--- Test 35: --scan-user targets only the named users ---"
 test_scan_user_targets_named_users_only
 
-$VERBOSE && msg "--- Test 36: --scan-user per-user summary rendering ---"
-test_scan_user_per_user_summary
+$VERBOSE && msg "--- Test 36: --scan-user per-user check-table rendering ---"
+test_scan_user_per_user_checks
 
 $VERBOSE && msg "--- Test 37: per-user summary scoped to --scan-user only ---"
 test_scan_user_summary_scope

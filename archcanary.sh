@@ -1216,13 +1216,17 @@ _resolve_scan_user_opts() {
 _run_scan_all_homes() {
     local _sah_bin _sah_users=() _sah_any_failed=false
     _sah_bin="${_SCAN_ALL_HOMES_TEST_BIN:-$(realpath "$0")}"
-    # Per-user overall verdict, alongside the existing per-check worst-of-N
-    # below — only ever rendered for --scan-user (see _print_sah_user_summary's
-    # call site), but populated unconditionally since it's cheap and keeps
-    # this loop uniform. Global (no `local`), same convention as
-    # _SUMMARY_NAMES/_SUMMARY_CODES.
+    # Per-user, per-check detail, alongside the existing shared worst-of-N
+    # fold below — only ever rendered for --scan-user (see
+    # _print_sah_per_user_checks's call site), but populated unconditionally
+    # since it's cheap and keeps this loop uniform. Global (no `local`),
+    # same convention as _SUMMARY_NAMES/_SUMMARY_CODES. _SAH_USER_NAMES is
+    # the ordered, de-duped list of users actually scanned this run (added
+    # once each, whether or not their child scan produced usable data);
+    # _SAH_USER_CHECKS is keyed "user|checkname" -> code — a user with no
+    # entries at all means their child scan never returned parseable output.
     _SAH_USER_NAMES=()
-    _SAH_USER_CODES=()
+    declare -gA _SAH_USER_CHECKS=()
     if [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
         _resolve_scan_user_opts _sah_users
     else
@@ -1276,20 +1280,18 @@ _run_scan_all_homes() {
         else
             echo "  WARNING: no log produced for $_sah_user"
         fi
+        _SAH_USER_NAMES+=("$_sah_user")
         if [[ -z "$_sah_json" ]]; then
             echo "  WARNING: could not evaluate result for $_sah_user (no parseable output)"
             _sah_any_failed=true
-            _SAH_USER_NAMES+=("$_sah_user")
-            _SAH_USER_CODES+=(99)
             continue
         fi
         while IFS='|' read -r _sah_name _sah_status; do
             [[ -n "${_sah_worst[$_sah_name]+x}" ]] || continue
             _sah_code=$(_sah_status_to_code "$_sah_status")
             (( _sah_code > _sah_worst[$_sah_name] )) && _sah_worst[$_sah_name]=$_sah_code
+            _SAH_USER_CHECKS["$_sah_user|$_sah_name"]=$_sah_code
         done < <(_sah_parse_checks "$_sah_json")
-        _SAH_USER_NAMES+=("$_sah_user")
-        _SAH_USER_CODES+=("$(_sah_result_to_code "$(grep -oP '"result":"\K[^"]*' <<< "$_sah_json")")")
     done
 
     for _sah_name in "npm cache" "bun cache" "yarn cache" "pnpm cache" \
@@ -3511,41 +3513,64 @@ _print_summary() {
     printf ' %s\n' "$_SEP55"
 }
 
-# --scan-user only (see call site below) — a per-USER breakdown alongside
-# _print_summary's per-CHECK one, since naming specific accounts is exactly
-# the case where "whose result is whose" matters more than a check-by-check
-# rollup. Code 2 always renders as the softer $_SYM_REVIEW_TXT, never
-# $_SYM_INFECTED_TXT: unlike _print_summary, this reads a child's own
-# top-level JSON "result" field (_SAH_USER_CODES, from _sah_result_to_code),
-# which can't distinguish a confirmed-infected check from a behavior-based
-# one the way _is_behavior_check_name/_any_confirmed_infected do above —
-# so this never overclaims "INFECTED" for a row that might just be a
-# behavior-based review. The correctly-distinguished wording is already in
-# that user's own RESULT banner further up. 99 (_sah_result_to_code's
-# parse-failure sentinel) prints as plain text, no icon.
-_print_sah_user_summary() {
-    local _w=36
-    printf '\nPer-user summary\n'
-    printf ' %s\n' "$_SEP55"
-    local i name code
-    for i in "${!_SAH_USER_NAMES[@]}"; do
-        name="${_SAH_USER_NAMES[$i]}" code="${_SAH_USER_CODES[$i]}"
-        case "$code" in
-            0)  printf ' %-*s %s\n' "$_w" "$name" "$_SYM_CLEAN" ;;
-            1)  printf ' %-*s %s\n' "$_w" "$name" "$_SYM_WARNINGS" ;;
-            2)  printf ' %-*s %s\n' "$_w" "$name" "$_SYM_REVIEW_TXT" ;;
-            *)  printf ' %-*s (could not evaluate)\n' "$_w" "$name" ;;
-        esac
+# --scan-user only (see call site below) — replaces _print_summary's shared,
+# folded-across-everyone table with one full per-check table per named user,
+# reusing _SAH_USER_NAMES/_SAH_USER_CHECKS (populated in _run_scan_all_homes)
+# and the exact same row rendering as _print_summary (including the real
+# _is_behavior_check_name REVIEW-vs-INFECTED distinction, since this reads
+# each user's actual per-check codes, not just a coarse overall verdict) —
+# so naming specific accounts shows exactly whose result is whose, per
+# check, without cross-referencing two separate tables. A user with no
+# entries in _SAH_USER_CHECKS at all means their child scan never returned
+# parseable output (the "could not evaluate" narrative warning above already
+# explains why); shown as a one-line note instead of a table of blanks.
+_print_sah_per_user_checks() {
+    local _w=36 _iw=5
+    local -a _names=(
+        "npm cache" "bun cache" "yarn cache" "pnpm cache"
+        "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"
+    )
+    local -A _idx=(
+        ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
+        ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
+    )
+    local user name code idx has_any
+    for user in "${_SAH_USER_NAMES[@]}"; do
+        printf '\nCheck summary: USER %s\n' "$user"
+        printf ' %s\n' "$_SEP55"
+        has_any=false
+        for name in "${_names[@]}"; do
+            code="${_SAH_USER_CHECKS["$user|$name"]:-}"
+            [[ -z "$code" ]] && continue
+            has_any=true
+            idx="[${_idx[$name]}]"
+            case "$code" in
+                0)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_CLEAN" ;;
+                1)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_WARNINGS" ;;
+                2)  if _is_behavior_check_name "$name"; then
+                        printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_REVIEW_TXT"
+                    else
+                        printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_INFECTED_TXT"
+                    fi
+                    ;;
+                77) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED" ;;
+                78) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
+            esac
+        done
+        $has_any || printf ' (could not evaluate — no parseable output)\n'
+        printf ' %s\n' "$_SEP55"
     done
-    printf ' %s\n' "$_SEP55"
 }
 
-# Named (not inlined at the call site) so the "--scan-user only, never
-# --scan-all-homes" wiring is directly unit-testable via the same
+# Dispatches between --scan-user's per-user tables and the normal/
+# --scan-all-homes shared per-check table -- named (not inlined at the call
+# site) so this choice is directly unit-testable via the same
 # extract-and-source technique the other scan-all-homes/scan-user tests use.
-_maybe_print_sah_user_summary() {
+_print_scan_summary_section() {
     if [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
-        _print_sah_user_summary
+        _print_sah_per_user_checks
+    else
+        _print_summary
     fi
 }
 
@@ -3589,19 +3614,6 @@ _sah_status_to_code() {
         skipped_root)    echo 77 ;;
         skipped_missing) echo 78 ;;
         *)               echo 1 ;;
-    esac
-}
-
-# Inverse of _print_summary_json's top-level "result" field (a child's own
-# overall verdict, not a per-check one -- different vocab, "warnings" plural
-# vs. "warning" singular above, hence a separate mapper). 99 is a local
-# sentinel for "couldn't parse" -- consumed only by _print_sah_user_summary.
-_sah_result_to_code() {
-    case "$1" in
-        clean)    echo 0 ;;
-        warnings) echo 1 ;;
-        infected) echo 2 ;;
-        *)        echo 99 ;;
     esac
 }
 
@@ -4059,8 +4071,7 @@ if $FORMAT_JSON; then
     _print_summary_json
 else
     if ! $NO_SUMMARY; then
-        _print_summary
-        _maybe_print_sah_user_summary
+        _print_scan_summary_section
     fi
 fi
 
