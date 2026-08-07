@@ -3489,26 +3489,69 @@ _any_confirmed_infected() {
     return 1
 }
 
+# Renders one summary row -- shared by _print_summary, _print_summary_general_only,
+# and _print_sah_per_user_checks, all three of which otherwise repeat the
+# identical icon/idx/width formatting.
+_print_summary_row() {
+    local _iw=5 _w=36 idx="$1" name="$2" code="$3"
+    case "$code" in
+        0)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_CLEAN" ;;
+        1)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_WARNINGS" ;;
+        2)  if _is_behavior_check_name "$name"; then
+                printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_REVIEW_TXT"
+            else
+                printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_INFECTED_TXT"
+            fi
+            ;;
+        77) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED" ;;
+        78) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
+    esac
+}
+
 _print_summary() {
-    local _w=36 _iw=5
     printf '\n Check summary\n'
     printf ' %s\n' "$_SEP55"
-    local i
+    local i idx
     for i in "${!_SUMMARY_NAMES[@]}"; do
-        local name="${_SUMMARY_NAMES[$i]}" code="${_SUMMARY_CODES[$i]}"
-        local idx="${_SUMMARY_IDX[$i]:+[${_SUMMARY_IDX[$i]}]}"
-        case "$code" in
-            0)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_CLEAN" ;;
-            1)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_WARNINGS" ;;
-            2)  if _is_behavior_check_name "$name"; then
-                    printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_REVIEW_TXT"
-                else
-                    printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_INFECTED_TXT"
-                fi
-                ;;
-            77) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED" ;;
-            78) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
-        esac
+        idx="${_SUMMARY_IDX[$i]:+[${_SUMMARY_IDX[$i]}]}"
+        _print_summary_row "$idx" "${_SUMMARY_NAMES[$i]}" "${_SUMMARY_CODES[$i]}"
+    done
+    printf ' %s\n' "$_SEP55"
+}
+
+# The six checks _run_scan_all_homes/_print_sah_per_user_checks cover
+# per-user -- used by _print_summary_general_only to skip them (they get
+# their own table per user instead) without hardcoding the list twice.
+_is_sah_per_user_check() {
+    case "$1" in
+        "npm cache"|"bun cache"|"yarn cache"|"pnpm cache"|\
+        "PKGBUILD obfuscation scan"|"XDG autostart + shell RCs")
+            return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# --scan-user only (see call site below) — the *other* checks (--check-ldso,
+# --check-systemd, --check-kmod, etc., all machine-wide, not per-user) still
+# need a summary somewhere; _print_sah_per_user_checks below only ever
+# covers the six per-user ones. Same table as _print_summary, just filtered
+# to skip those six. Prints nothing at all if every recorded check was one
+# of the six (the common case: bare --scan-user with no other --check-*
+# flags) -- an empty "Check summary" table would be pointless.
+_print_summary_general_only() {
+    local i has_any=false
+    for i in "${!_SUMMARY_NAMES[@]}"; do
+        _is_sah_per_user_check "${_SUMMARY_NAMES[$i]}" || { has_any=true; break; }
+    done
+    $has_any || return 0
+
+    printf '\n Check summary\n'
+    printf ' %s\n' "$_SEP55"
+    local idx
+    for i in "${!_SUMMARY_NAMES[@]}"; do
+        _is_sah_per_user_check "${_SUMMARY_NAMES[$i]}" && continue
+        idx="${_SUMMARY_IDX[$i]:+[${_SUMMARY_IDX[$i]}]}"
+        _print_summary_row "$idx" "${_SUMMARY_NAMES[$i]}" "${_SUMMARY_CODES[$i]}"
     done
     printf ' %s\n' "$_SEP55"
 }
@@ -3516,7 +3559,7 @@ _print_summary() {
 # --scan-user only (see call site below) — replaces _print_summary's shared,
 # folded-across-everyone table with one full per-check table per named user,
 # reusing _SAH_USER_NAMES/_SAH_USER_CHECKS (populated in _run_scan_all_homes)
-# and the exact same row rendering as _print_summary (including the real
+# and _print_summary_row's exact same rendering (including the real
 # _is_behavior_check_name REVIEW-vs-INFECTED distinction, since this reads
 # each user's actual per-check codes, not just a coarse overall verdict) —
 # so naming specific accounts shows exactly whose result is whose, per
@@ -3525,7 +3568,6 @@ _print_summary() {
 # parseable output (the "could not evaluate" narrative warning above already
 # explains why); shown as a one-line note instead of a table of blanks.
 _print_sah_per_user_checks() {
-    local _w=36 _iw=5
     local -a _names=(
         "npm cache" "bun cache" "yarn cache" "pnpm cache"
         "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"
@@ -3534,7 +3576,7 @@ _print_sah_per_user_checks() {
         ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
         ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
     )
-    local user name code idx has_any
+    local user name code has_any
     for user in "${_SAH_USER_NAMES[@]}"; do
         printf '\nCheck summary: USER %s\n' "$user"
         printf ' %s\n' "$_SEP55"
@@ -3543,31 +3585,21 @@ _print_sah_per_user_checks() {
             code="${_SAH_USER_CHECKS["$user|$name"]:-}"
             [[ -z "$code" ]] && continue
             has_any=true
-            idx="[${_idx[$name]}]"
-            case "$code" in
-                0)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_CLEAN" ;;
-                1)  printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_WARNINGS" ;;
-                2)  if _is_behavior_check_name "$name"; then
-                        printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_REVIEW_TXT"
-                    else
-                        printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_INFECTED_TXT"
-                    fi
-                    ;;
-                77) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED" ;;
-                78) printf ' %-*s%-*s %s\n'  "$_iw" "$idx" "$_w" "$name" "$_SYM_SKIPPED_MISSING" ;;
-            esac
+            _print_summary_row "[${_idx[$name]}]" "$name" "$code"
         done
         $has_any || printf ' (could not evaluate — no parseable output)\n'
         printf ' %s\n' "$_SEP55"
     done
 }
 
-# Dispatches between --scan-user's per-user tables and the normal/
+# Dispatches between --scan-user's per-user tables (plus a general-checks
+# table for anything else that ran alongside it) and the normal/
 # --scan-all-homes shared per-check table -- named (not inlined at the call
 # site) so this choice is directly unit-testable via the same
 # extract-and-source technique the other scan-all-homes/scan-user tests use.
 _print_scan_summary_section() {
     if [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
+        _print_summary_general_only
         _print_sah_per_user_checks
     else
         _print_summary

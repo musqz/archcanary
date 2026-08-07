@@ -1726,6 +1726,10 @@ _sah_extract_fns() {
     sed -n '/^_sah_parse_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_status_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_is_behavior_check_name()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_summary_row()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_summary()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_is_sah_per_user_check()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_summary_general_only()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_print_sah_per_user_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_print_scan_summary_section()/,/^}/p' "$REPO_DIR/archcanary.sh"
 }
@@ -2201,6 +2205,72 @@ EOF
         pass "scan_user: per-user check tables render per-check detail, correct REVIEW/INFECTED split, and could-not-evaluate fallback"
     else
         fail "scan_user: expected 4 per-user tables with correct icons/fallback, out: $out"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# Regression coverage for a real report: `--scan-user=a --check-ldso
+# --scan-user=b --check-ldso` made check_ldso's own result vanish from the
+# final output entirely -- _print_sah_per_user_checks only ever covers the
+# six per-user checks, so a general/machine-wide check (ld.so.preload,
+# systemd, kmod, ...) recorded via the normal _rec path had nowhere left to
+# render once _print_summary itself stopped being called for --scan-user.
+# _print_summary_general_only must still show it, in its own "Check summary"
+# table above the per-user ones -- and must print nothing at all when there
+# is no such general check (bare --scan-user, the common case).
+# ---------------------------------------------------------------------------
+test_scan_user_general_check_still_shown() {
+    local fns scratch fake_bin fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+EOF
+
+    cat > "$fake_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+shift; shift; shift; shift
+echo '{"result":"clean","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]}'
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    local out
+    out=$(PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
+        EXIT_CODE=0
+        _SUMMARY_NAMES=(); _SUMMARY_CODES=(); _SUMMARY_IDX=()
+        _rec() { _SUMMARY_NAMES+=(\"\$1\"); _SUMMARY_CODES+=(\"\$2\"); _SUMMARY_IDX+=(\"\${3:-}\"); }
+        _SEP55='-----'
+        _SYM_CLEAN='CLEAN_ICON'
+        SCAN_USER_OPTS=(alice)
+        _run_scan_all_homes >/dev/null
+        echo '===bare==='
+        _print_summary_general_only
+        _rec 'ld.so.preload injection' 0 '9'
+        echo '===with-general==='
+        _print_scan_summary_section
+    " 2>&1)
+
+    local bare with_general
+    bare=$(sed -n '/===bare===/,/===with-general===/p' <<< "$out")
+    with_general=$(sed -n '/===with-general===/,$p' <<< "$out")
+
+    if [[ "$bare" != *"Check summary"* && \
+          "$with_general" == *"Check summary"* && "$with_general" =~ 'ld.so.preload injection'[[:space:]]+CLEAN_ICON && \
+          "$with_general" == *"Check summary: USER alice"* ]]; then
+        pass "scan_user: a general (non-per-user) check alongside --scan-user still gets its own summary table, and none prints when there isn't one"
+    else
+        fail "scan_user: expected no table for bare --scan-user and a general table + per-user table when combined, out: $out"
     fi
 
     rm -f "$fns"
@@ -2823,6 +2893,9 @@ test_scan_user_per_user_checks
 
 $VERBOSE && msg "--- Test 37: per-user summary scoped to --scan-user only ---"
 test_scan_user_summary_scope
+
+$VERBOSE && msg "--- Test 38: general checks still shown alongside --scan-user ---"
+test_scan_user_general_check_still_shown
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
