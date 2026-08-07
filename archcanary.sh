@@ -601,6 +601,57 @@ _init_color() {
 }
 _init_color
 
+# --scan-all-homes/--scan-user interact silently with several other flags:
+# some are pure no-ops when combined (the six per-user checks, since those
+# are already covered per scanned user), others quietly scope to only the
+# invoking user (list overrides, --refresh, --verbose, --log-file) or lose
+# per-user granularity (--format=json). None of these are errors, but each
+# is a real "I expected X, got Y" trap — reported live combining --scan-user
+# with --check-ldso and separately expecting a custom --malicious-npm-list=
+# to apply to a scanned user. Surfaced as one-line NOTEs (stderr, same
+# convention as --doctor's ignored-flags notice) so they're visible before
+# the scan runs, not discovered after the fact. Call site (after the root
+# guard, main script body) skips this entirely under --doctor, which never
+# runs a real scan.
+_warn_scan_homes_flag_interactions() {
+    local -a dup=() overrides=()
+
+    $CHECK_NPM_CACHE  && dup+=("--check-npm-cache")
+    $CHECK_BUN_CACHE  && dup+=("--check-bun-cache")
+    $CHECK_YARN_CACHE && dup+=("--check-yarn-cache")
+    $CHECK_PNPM_CACHE && dup+=("--check-pnpm-cache")
+    $CHECK_PKGBUILD   && dup+=("--check-pkgbuild")
+    $CHECK_AUTOSTART  && dup+=("--check-autostart")
+    if [[ ${#dup[@]} -gt 0 ]]; then
+        printf 'NOTE: %s add nothing extra here -- those checks are already covered per scanned user.\n' "${dup[*]}" >&2
+    fi
+
+    [[ -n "$PACKAGE_LIST_FILE_OPT" ]]  && overrides+=("--package-list=")
+    [[ -n "$MALICIOUS_NPM_LIST_OPT" ]] && overrides+=("--malicious-npm-list=")
+    [[ -n "$CHAOS_RAT_LIST_OPT" ]]     && overrides+=("--chaos-rat-list=")
+    [[ -n "$RUSSIAN_SPAM_LIST_OPT" ]]  && overrides+=("--russian-spam-list=")
+    [[ -n "$COMMUNITY_LIST_OPT" ]]     && overrides+=("--community-list=")
+    if [[ ${#overrides[@]} -gt 0 ]]; then
+        printf 'NOTE: %s only applies to your own checks -- each scanned user always uses their own default lists.\n' "${overrides[*]}" >&2
+    fi
+
+    if $REFRESH_PACKAGE_LIST; then
+        printf 'NOTE: --refresh only refreshes your own lists -- scanned users keep whatever lists they already have until they refresh themselves.\n' >&2
+    fi
+
+    if $VERBOSE; then
+        printf 'NOTE: --verbose/--debug only affects your own output -- per-user child scans always run at default verbosity.\n' >&2
+    fi
+
+    if [[ -n "${LOG_FILE:-}" ]]; then
+        printf "NOTE: --log-file only applies to this summary -- each scanned user's own detail always logs to ~/.cache/archcanary/last-user-scan.log in their home.\n" >&2
+    fi
+
+    if $FORMAT_JSON; then
+        printf "NOTE: --format=json has no per-user breakdown -- each scanned user's detail is only in their own ~/.cache/archcanary/last-user-scan.log.\n" >&2
+    fi
+}
+
 # --format=json: a stable, structured contract for callers other than a human
 # terminal (archcanary-gtk in particular) instead of scraping the text output
 # above, which is formatted for a human and not meant to be a stable contract.
@@ -632,6 +683,8 @@ if $SCAN_HOMES_MODE && ! $DOCTOR && [[ $EUID -ne 0 ]]; then
     echo "Error: --scan-all-homes/--scan-user requires root (enumerating other users' homes needs root) — run via sudo" >&2
     exit 1
 fi
+
+$SCAN_HOMES_MODE && ! $DOCTOR && _warn_scan_homes_flag_interactions
 
 # Focused mode: a specific --check-* flag was given without --full.
 # Suppresses the campaign header and the always-on package/log checks so
@@ -3545,7 +3598,12 @@ _print_summary_general_only() {
     done
     $has_any || return 0
 
-    printf '\n Check summary\n'
+    # Labeled distinctly from _print_summary's plain "Check summary" (and
+    # from the "Check summary: USER x" tables below) -- reported live as
+    # genuinely ambiguous: these rows aren't about any of the named users,
+    # they're the machine as a whole, checked once regardless of who you
+    # named.
+    printf '\n Check summary (system-wide, not per-user)\n'
     printf ' %s\n' "$_SEP55"
     local idx
     for i in "${!_SUMMARY_NAMES[@]}"; do

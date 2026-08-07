@@ -1732,6 +1732,7 @@ _sah_extract_fns() {
     sed -n '/^_print_summary_general_only()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_print_sah_per_user_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_print_scan_summary_section()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_warn_scan_homes_flag_interactions()/,/^}/p' "$REPO_DIR/archcanary.sh"
 }
 
 test_enumerate_local_users() {
@@ -2266,9 +2267,10 @@ EOF
     with_general=$(sed -n '/===with-general===/,$p' <<< "$out")
 
     if [[ "$bare" != *"Check summary"* && \
-          "$with_general" == *"Check summary"* && "$with_general" =~ 'ld.so.preload injection'[[:space:]]+CLEAN_ICON && \
+          "$with_general" == *"Check summary (system-wide, not per-user)"* && \
+          "$with_general" =~ 'ld.so.preload injection'[[:space:]]+CLEAN_ICON && \
           "$with_general" == *"Check summary: USER alice"* ]]; then
-        pass "scan_user: a general (non-per-user) check alongside --scan-user still gets its own summary table, and none prints when there isn't one"
+        pass "scan_user: a general (non-per-user) check alongside --scan-user still gets its own labeled summary table, and none prints when there isn't one"
     else
         fail "scan_user: expected no table for bare --scan-user and a general table + per-user table when combined, out: $out"
     fi
@@ -2302,6 +2304,65 @@ test_scan_user_summary_scope() {
         pass "scan_user: per-user tables shown only when SCAN_USER_OPTS is non-empty; shared table otherwise (--scan-all-homes unaffected)"
     else
         fail "scan_user: expected shared table with empty SCAN_USER_OPTS and per-user table once set, out: $out"
+    fi
+
+    rm -f "$fns"
+}
+
+# ---------------------------------------------------------------------------
+# --scan-user/--scan-all-homes interact silently with several other flags --
+# _warn_scan_homes_flag_interactions must fire the right NOTE for each,
+# fire nothing at all when none apply (the common case), and each NOTE must
+# be independent of the others (only the conditions actually true fire).
+# ---------------------------------------------------------------------------
+test_warn_scan_homes_flag_interactions() {
+    local fns
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+
+    local out
+    out=$(bash -c "
+        source '$fns'
+        CHECK_NPM_CACHE=true CHECK_BUN_CACHE=false CHECK_YARN_CACHE=false
+        CHECK_PNPM_CACHE=false CHECK_PKGBUILD=false CHECK_AUTOSTART=true
+        PACKAGE_LIST_FILE_OPT='' MALICIOUS_NPM_LIST_OPT='/tmp/custom-npm.txt'
+        CHAOS_RAT_LIST_OPT='' RUSSIAN_SPAM_LIST_OPT='' COMMUNITY_LIST_OPT=''
+        REFRESH_PACKAGE_LIST=true
+        VERBOSE=true
+        LOG_FILE='/tmp/custom.log'
+        FORMAT_JSON=true
+        _warn_scan_homes_flag_interactions
+    " 2>&1)
+
+    if [[ "$out" == *"--check-npm-cache"*"--check-autostart"*"add nothing extra"* && \
+          "$out" == *"--malicious-npm-list="*"only applies to your own checks"* && \
+          "$out" == *"--refresh only refreshes your own lists"* && \
+          "$out" == *"--verbose/--debug only affects your own output"* && \
+          "$out" == *"--log-file only applies to this summary"* && \
+          "$out" == *"--format=json has no per-user breakdown"* ]]; then
+        pass "warn_scan_homes: all six flag-interaction NOTEs fire when their condition is true"
+    else
+        fail "warn_scan_homes: expected all six NOTEs, out: $out"
+    fi
+
+    local quiet
+    quiet=$(bash -c "
+        source '$fns'
+        CHECK_NPM_CACHE=false CHECK_BUN_CACHE=false CHECK_YARN_CACHE=false
+        CHECK_PNPM_CACHE=false CHECK_PKGBUILD=false CHECK_AUTOSTART=false
+        PACKAGE_LIST_FILE_OPT='' MALICIOUS_NPM_LIST_OPT='' CHAOS_RAT_LIST_OPT=''
+        RUSSIAN_SPAM_LIST_OPT='' COMMUNITY_LIST_OPT=''
+        REFRESH_PACKAGE_LIST=false
+        VERBOSE=false
+        LOG_FILE=''
+        FORMAT_JSON=false
+        _warn_scan_homes_flag_interactions
+    " 2>&1)
+
+    if [[ -z "$quiet" ]]; then
+        pass "warn_scan_homes: bare --scan-user (nothing else set) prints no NOTEs"
+    else
+        fail "warn_scan_homes: expected no output with nothing set, out: $quiet"
     fi
 
     rm -f "$fns"
@@ -2896,6 +2957,9 @@ test_scan_user_summary_scope
 
 $VERBOSE && msg "--- Test 38: general checks still shown alongside --scan-user ---"
 test_scan_user_general_check_still_shown
+
+$VERBOSE && msg "--- Test 39: --scan-user flag-interaction NOTEs ---"
+test_warn_scan_homes_flag_interactions
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
