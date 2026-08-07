@@ -1240,11 +1240,23 @@ _resolve_scan_user_opts() {
     for _name in "${SCAN_USER_OPTS[@]}"; do
         [[ "$_seen" == *":$_name:"* ]] && continue
         _seen+="$_name:"
-        _home=$(if [[ -n "${_SCAN_ALL_HOMES_TEST_PASSWD:-}" ]]; then
-                    cat -- "$_SCAN_ALL_HOMES_TEST_PASSWD"
-                else
-                    getent passwd
-                fi | awk -F: -v u="$_name" '$1==u{print $6; exit}')
+        # Targeted lookup (getent passwd NAME), not bulk enumeration
+        # (getent passwd) -- matches the pattern used elsewhere in this file
+        # (e.g. real_home/_invoker_home above) and avoids two problems bulk
+        # enumeration has here: (1) some NSS backends (sssd's `enumerate =
+        # false`, common on LDAP/AD-joined systems) refuse bulk listing
+        # while still answering targeted lookups, so a valid --scan-user=X
+        # could never resolve; (2) a targeted lookup's own "not found" exit
+        # status, piped through pipefail into this bare `var=$(...)`
+        # assignment, would otherwise kill the whole script under set -e on
+        # every ordinary typo (not just the NSS-refusal case) -- `|| true`
+        # neutralizes that, leaving the existing empty-$_home check below to
+        # report it properly instead.
+        if [[ -n "${_SCAN_ALL_HOMES_TEST_PASSWD:-}" ]]; then
+            _home=$(awk -F: -v u="$_name" '$1==u{print $6; exit}' "$_SCAN_ALL_HOMES_TEST_PASSWD")
+        else
+            _home=$(getent passwd "$_name" | cut -d: -f6) || true
+        fi
         if [[ -z "$_home" ]]; then
             echo "Error: --scan-user='$_name' is not a known local user" >&2
             exit 1
@@ -1266,6 +1278,23 @@ _resolve_scan_user_opts() {
 # privilege-drops today. Folds each user's worst-of-N result into the
 # existing summary labels/indices (never a per-user-suffixed label —
 # _is_behavior_check_name matches names verbatim).
+# The six checks --scan-all-homes/--scan-user cover per-user (their own
+# ~/.npm, ~/.cache/yarn, AUR helper caches, ~/.config/autostart, etc. --
+# everything else archcanary checks is machine-wide, checked once regardless
+# of who's named). Single source of truth for _run_scan_all_homes (fold into
+# the shared worst-of-N / _rec), _is_sah_per_user_check (exclude from the
+# general table), and _print_sah_per_user_checks (render one row per user)
+# -- previously duplicated independently in all three, with nothing
+# enforcing agreement between them.
+_SAH_PER_USER_CHECK_NAMES=(
+    "npm cache" "bun cache" "yarn cache" "pnpm cache"
+    "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"
+)
+declare -A _SAH_PER_USER_CHECK_IDX=(
+    ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
+    ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
+)
+
 _run_scan_all_homes() {
     local _sah_bin _sah_users=() _sah_any_failed=false
     _sah_bin="${_SCAN_ALL_HOMES_TEST_BIN:-$(realpath "$0")}"
@@ -1281,7 +1310,10 @@ _run_scan_all_homes() {
     _SAH_USER_NAMES=()
     declare -gA _SAH_USER_CHECKS=()
     if [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
-        _resolve_scan_user_opts _sah_users
+        # Already resolved/validated once, before the log-file/JSON redirect
+        # (see _SAH_RESOLVED_USERS below _run_scan_all_homes's own
+        # definition) — reused here rather than re-resolving.
+        _sah_users=("${_SAH_RESOLVED_USERS[@]}")
     else
         _enumerate_local_users _sah_users
     fi
@@ -1289,14 +1321,11 @@ _run_scan_all_homes() {
         echo "  No real local users found (UID range, shell, or home-dir filters excluded everyone)."
     fi
 
-    local -A _sah_worst=(
-        ["npm cache"]=-1 ["bun cache"]=-1 ["yarn cache"]=-1 ["pnpm cache"]=-1
-        ["PKGBUILD obfuscation scan"]=-1 ["XDG autostart + shell RCs"]=-1
-    )
-    local -A _sah_idx=(
-        ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
-        ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
-    )
+    local -A _sah_worst=()
+    local _sah_init_name
+    for _sah_init_name in "${_SAH_PER_USER_CHECK_NAMES[@]}"; do
+        _sah_worst[$_sah_init_name]=-1
+    done
 
     local _sah_entry _sah_user _sah_home _sah_log _sah_json
     local _sah_name _sah_status _sah_code
@@ -1347,16 +1376,36 @@ _run_scan_all_homes() {
         done < <(_sah_parse_checks "$_sah_json")
     done
 
-    for _sah_name in "npm cache" "bun cache" "yarn cache" "pnpm cache" \
-                      "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"; do
+    for _sah_name in "${_SAH_PER_USER_CHECK_NAMES[@]}"; do
         _sah_code="${_sah_worst[$_sah_name]}"
         if [[ $_sah_code -eq -1 ]]; then
             $_sah_any_failed && _sah_code=1 || _sah_code=0
         fi
         [[ $_sah_code -gt $EXIT_CODE ]] && EXIT_CODE=$_sah_code
-        _rec "$_sah_name" "$_sah_code" "${_sah_idx[$_sah_name]}"
+        _rec "$_sah_name" "$_sah_code" "${_SAH_PER_USER_CHECK_IDX[$_sah_name]}"
     done
 }
+
+# Resolve/validate --scan-user names now, before the log-file/--format=json
+# redirect below -- a typo previously wasn't caught until deep inside
+# _run_scan_all_homes (check-sequence position "10b"), by which point
+# earlier requested checks had already run, and in JSON mode the error
+# message went only to the (already-redirected) log file, leaving a JSON
+# caller's actual stdout completely empty. The mutual-exclusion and root
+# checks above already validate early for the same reason; this closes the
+# same gap for name resolution. _run_scan_all_homes reuses this array
+# instead of re-resolving (also fixes the "--- [10b] ... ---" header below,
+# which used to print the raw, non-deduped SCAN_USER_OPTS). Named function
+# (not inlined) so tests can populate _SAH_RESOLVED_USERS directly without
+# needing to fake $SCAN_HOMES_MODE/$DOCTOR.
+_resolve_and_store_scan_users() {
+    _SAH_RESOLVED_USERS=()
+    [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]] && _resolve_scan_user_opts _SAH_RESOLVED_USERS
+    return 0
+}
+if $SCAN_HOMES_MODE && ! $DOCTOR; then
+    _resolve_and_store_scan_users
+fi
 
 # systemd *system* services (and some cron contexts) start with no $HOME, which
 # would make the ${XDG_*:-$HOME/...} fallbacks below fatal under `set -u`.
@@ -3572,16 +3621,11 @@ _print_summary() {
     printf ' %s\n' "$_SEP55"
 }
 
-# The six checks _run_scan_all_homes/_print_sah_per_user_checks cover
-# per-user -- used by _print_summary_general_only to skip them (they get
-# their own table per user instead) without hardcoding the list twice.
+# Used by _print_summary_general_only to skip the six per-user checks (they
+# get their own table per user instead) -- see _SAH_PER_USER_CHECK_IDX
+# (defined above _run_scan_all_homes) for the single source of truth.
 _is_sah_per_user_check() {
-    case "$1" in
-        "npm cache"|"bun cache"|"yarn cache"|"pnpm cache"|\
-        "PKGBUILD obfuscation scan"|"XDG autostart + shell RCs")
-            return 0 ;;
-        *) return 1 ;;
-    esac
+    [[ -n "${_SAH_PER_USER_CHECK_IDX[$1]+x}" ]]
 }
 
 # --scan-user only (see call site below) — the *other* checks (--check-ldso,
@@ -3626,28 +3670,40 @@ _print_summary_general_only() {
 # parseable output (the "could not evaluate" narrative warning above already
 # explains why); shown as a one-line note instead of a table of blanks.
 _print_sah_per_user_checks() {
-    local -a _names=(
-        "npm cache" "bun cache" "yarn cache" "pnpm cache"
-        "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"
-    )
-    local -A _idx=(
-        ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
-        ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
-    )
     local user name code has_any
     for user in "${_SAH_USER_NAMES[@]}"; do
         printf '\nCheck summary: USER %s\n' "$user"
         printf ' %s\n' "$_SEP55"
         has_any=false
-        for name in "${_names[@]}"; do
+        for name in "${_SAH_PER_USER_CHECK_NAMES[@]}"; do
             code="${_SAH_USER_CHECKS["$user|$name"]:-}"
             [[ -z "$code" ]] && continue
             has_any=true
-            _print_summary_row "[${_idx[$name]}]" "$name" "$code"
+            _print_summary_row "[${_SAH_PER_USER_CHECK_IDX[$name]}]" "$name" "$code"
         done
         $has_any || printf ' (could not evaluate — no parseable output)\n'
         printf ' %s\n' "$_SEP55"
     done
+}
+
+# The "--- [10b] ... ---" section header, printed once before
+# _run_scan_all_homes. --scan-user's variant lists names from
+# _SAH_RESOLVED_USERS ("name:home" pairs, already resolved/deduped by
+# _resolve_and_store_scan_users above) rather than the raw SCAN_USER_OPTS,
+# which can repeat a name (--scan-user=a --scan-user=a) even though only
+# one child scan and one "Check summary: USER a" table actually happen.
+# Named (not inlined at the call site) so this is directly unit-testable.
+_print_sah_section_header() {
+    if $SCAN_ALL_HOMES; then
+        echo "--- [10b] Scan all local user homes (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
+    else
+        local -a _shm_names=()
+        local _shm_entry
+        for _shm_entry in "${_SAH_RESOLVED_USERS[@]}"; do
+            _shm_names+=("${_shm_entry%%:*}")
+        done
+        echo "--- [10b] Scan user home(s): ${_shm_names[*]} (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
+    fi
 }
 
 # Dispatches between --scan-user's per-user tables (plus a general-checks
@@ -4101,11 +4157,7 @@ if $CHECK_AUTOSTART && ! $SCAN_HOMES_MODE; then
 fi
 
 if $SCAN_HOMES_MODE; then
-    if $SCAN_ALL_HOMES; then
-        echo "--- [10b] Scan all local user homes (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
-    else
-        echo "--- [10b] Scan user home(s): ${SCAN_USER_OPTS[*]} (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
-    fi
+    _print_sah_section_header
     _run_scan_all_homes
     echo
 fi

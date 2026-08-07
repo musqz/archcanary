@@ -1722,7 +1722,9 @@ test_color_flag_validation() {
 _sah_extract_fns() {
     sed -n '/^_enumerate_local_users()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_resolve_scan_user_opts()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_SAH_PER_USER_CHECK_NAMES=(/,/^_run_scan_all_homes()/{ /^_run_scan_all_homes()/!p }' "$REPO_DIR/archcanary.sh"
     sed -n '/^_run_scan_all_homes()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_resolve_and_store_scan_users()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_parse_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_status_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_is_behavior_check_name()/,/^}/p' "$REPO_DIR/archcanary.sh"
@@ -1731,6 +1733,7 @@ _sah_extract_fns() {
     sed -n '/^_is_sah_per_user_check()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_print_summary_general_only()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_print_sah_per_user_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_sah_section_header()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_print_scan_summary_section()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_warn_scan_homes_flag_interactions()/,/^}/p' "$REPO_DIR/archcanary.sh"
 }
@@ -1843,8 +1846,150 @@ EOF
         fail "resolve_scan_user_opts: expected no-home-dir error, rc=$rc, out: $out"
     fi
 
+    # Regression: a failing `getent passwd NAME` (not just an ordinary "not
+    # found") must not silently kill the whole script under set -e --
+    # /code-review found the original bulk `getent passwd | awk ...` did
+    # exactly that whenever getent itself failed (e.g. sssd's
+    # `enumerate = false`, common on LDAP/AD-joined systems, refuses bulk
+    # listing while still answering targeted lookups -- which is also why
+    # the fix switched to a targeted `getent passwd NAME` call). Reproduced
+    # directly: a fake `getent` that exits nonzero with no output, WITHOUT
+    # the test-seam env var (so the real getent-calling branch runs), under
+    # explicit `set -e` in the test shell itself -- the extracted function
+    # snippet doesn't carry the real script's own `set -euo pipefail`.
+    local fake_bin
+    fake_bin=$(mktemp -d)
+    cat > "$fake_bin/getent" <<'EOF'
+#!/usr/bin/env bash
+exit 2
+EOF
+    chmod +x "$fake_bin/getent"
+    rc=0
+    out=$(PATH="$fake_bin:$PATH" bash -c "
+        set -euo pipefail
+        source '$fns'
+        SCAN_USER_OPTS=(alice)
+        _resolve_scan_user_opts users
+        echo 'UNREACHABLE ON FAILURE'
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'alice' is not a known local user"* && \
+          "$out" != *UNREACHABLE* ]]; then
+        pass "resolve_scan_user_opts: a failing getent reports the normal error instead of silently killing the script"
+    else
+        fail "resolve_scan_user_opts: expected clean error on getent failure (not a silent set -e death), rc=$rc, out: $out"
+    fi
+    rm -rf "$fake_bin"
+
     rm -f "$fns"
     rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# _resolve_and_store_scan_users (the early, pre-log-redirect validation step
+# /code-review found missing -- previously a --scan-user typo wasn't caught
+# until deep inside _run_scan_all_homes, after other requested checks had
+# already run and, in --format=json mode, after the log-only redirect, so a
+# JSON caller's actual stdout was completely empty on error). Must populate
+# _SAH_RESOLVED_USERS for valid names, leave it empty (no error) when
+# SCAN_USER_OPTS is empty (the --scan-all-homes / normal-scan case), and
+# propagate _resolve_scan_user_opts's hard error for an invalid name.
+# ---------------------------------------------------------------------------
+test_resolve_and_store_scan_users() {
+    local fns scratch fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    mkdir -p "$scratch/alice" "$scratch/bob"
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/zsh
+EOF
+
+    local out rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(alice bob)
+        _resolve_and_store_scan_users
+        printf '%s\n' \"\${_SAH_RESOLVED_USERS[@]}\"
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == "alice:$scratch/alice"$'\n'"bob:$scratch/bob" ]]; then
+        pass "resolve_and_store_scan_users: populates _SAH_RESOLVED_USERS for valid names"
+    else
+        fail "resolve_and_store_scan_users: expected alice+bob resolved, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=()
+        _resolve_and_store_scan_users
+        echo \"count=\${#_SAH_RESOLVED_USERS[@]}\"
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == "count=0" ]]; then
+        pass "resolve_and_store_scan_users: no-op (empty, no error) when SCAN_USER_OPTS is empty"
+    else
+        fail "resolve_and_store_scan_users: expected a clean no-op with empty SCAN_USER_OPTS, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(ghost)
+        _resolve_and_store_scan_users
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'ghost' is not a known local user"* ]]; then
+        pass "resolve_and_store_scan_users: propagates the hard error for an unknown username"
+    else
+        fail "resolve_and_store_scan_users: expected unknown-user error, rc=$rc, out: $out"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# The "--- [10b] ... ---" section header must list the deduped names
+# actually scanned (from _SAH_RESOLVED_USERS), not the raw, possibly
+# repeated SCAN_USER_OPTS CLI array -- /code-review found
+# --scan-user=bob --scan-user=alice --scan-user=bob printed "bob alice bob"
+# even though only one child scan and one "Check summary: USER bob" table
+# ever happen.
+# ---------------------------------------------------------------------------
+test_sah_section_header_deduped_names() {
+    local fns
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+
+    local out
+    out=$(bash -c "
+        source '$fns'
+        SCAN_ALL_HOMES=false
+        _SAH_RESOLVED_USERS=(bob:/home/bob alice:/home/alice)
+        _print_sah_section_header
+    ")
+    if [[ "$out" == "--- [10b] Scan user home(s): bob alice (npm/bun/yarn/pnpm/pkgbuild/autostart) ---" ]]; then
+        pass "sah_section_header: lists deduped names from _SAH_RESOLVED_USERS, not raw SCAN_USER_OPTS"
+    else
+        fail "sah_section_header: expected 'bob alice' (deduped), out: $out"
+    fi
+
+    out=$(bash -c "
+        source '$fns'
+        SCAN_ALL_HOMES=true
+        _SAH_RESOLVED_USERS=()
+        _print_sah_section_header
+    ")
+    if [[ "$out" == "--- [10b] Scan all local user homes (npm/bun/yarn/pnpm/pkgbuild/autostart) ---" ]]; then
+        pass "sah_section_header: --scan-all-homes wording unaffected"
+    else
+        fail "sah_section_header: expected the scan-all-homes header, out: $out"
+    fi
+
+    rm -f "$fns"
 }
 
 test_scan_all_homes_worst_of_n() {
@@ -2117,6 +2262,7 @@ EOF
         EXIT_CODE=0
         _rec() { :; }
         SCAN_USER_OPTS=(carol alice carol)
+        _resolve_and_store_scan_users
         _run_scan_all_homes
     " >/dev/null 2>&1
 
@@ -2188,6 +2334,7 @@ EOF
         EXIT_CODE=0
         _rec() { :; }
         SCAN_USER_OPTS=(alice bob carol dave)
+        _resolve_and_store_scan_users
         _run_scan_all_homes >/dev/null
         _SEP55='-----'
         _SYM_CLEAN='CLEAN_ICON'
@@ -2254,6 +2401,7 @@ EOF
         _SEP55='-----'
         _SYM_CLEAN='CLEAN_ICON'
         SCAN_USER_OPTS=(alice)
+        _resolve_and_store_scan_users
         _run_scan_all_homes >/dev/null
         echo '===bare==='
         _print_summary_general_only
@@ -2960,6 +3108,12 @@ test_scan_user_general_check_still_shown
 
 $VERBOSE && msg "--- Test 39: --scan-user flag-interaction NOTEs ---"
 test_warn_scan_homes_flag_interactions
+
+$VERBOSE && msg "--- Test 40: resolve_and_store_scan_users (early --scan-user validation) ---"
+test_resolve_and_store_scan_users
+
+$VERBOSE && msg "--- Test 41: --scan-user section header lists deduped names ---"
+test_sah_section_header_deduped_names
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
