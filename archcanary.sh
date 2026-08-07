@@ -103,6 +103,7 @@ COMMUNITY_LIST_OPT=""
 START_DATE_OPT=""
 END_DATE_OPT=""
 EXTRA_LIST_OPTS=()
+SCAN_USER_OPTS=()
 
 # Temp file cleanup on exit/interrupt
 CLEANUP_FILES=()
@@ -439,6 +440,7 @@ for arg in "$@"; do
         --check-pkginteg)   CHECK_PKGINTEG=true ;;
         --check-list-overlap) CHECK_LIST_OVERLAP=true ;;
         --scan-all-homes) SCAN_ALL_HOMES=true ;;
+        --scan-user=*)    SCAN_USER_OPTS+=("${arg#*=}") ;;
         --full)          CHECK_SYSTEMD=true; CHECK_EBPF=true; CHECK_NPM_CACHE=true; CHECK_BUN_CACHE=true; CHECK_YARN_CACHE=true; CHECK_PNPM_CACHE=true; CHECK_PKGBUILD=true; CHECK_BPFTOOL=true; CHECK_LDSO=true; CHECK_AUTOSTART=true; CHECK_KMOD=true; CHECK_LYNIS=true; CHECK_PKGINTEG=true; CHECK_FULL=true ;;
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
@@ -498,6 +500,9 @@ for arg in "$@"; do
             echo "                        remove — advisory only, not included in --full"
             echo "  --scan-all-homes   Enumerate real local users and run the npm/bun/yarn/pnpm/pkgbuild/autostart"
             echo "                     checks against each of their homes, not just yours (needs root, not included in --full)"
+            echo "  --scan-user=NAME   Run those same checks against one specific user's home instead of yours"
+            echo "                     (repeatable: --scan-user=a --scan-user=b; needs root; mutually exclusive"
+            echo "                     with --scan-all-homes)"
             echo "  --search-packages=PKG[,PKG...]  Check package name(s) against every loaded threat list"
             echo "                                   (no scan; prints a ready-to-copy 'pacman -Rns' command"
             echo "                                   for any match) and exit"
@@ -608,8 +613,23 @@ case "$_FORMAT_ARG" in
         ;;
 esac
 
-if $SCAN_ALL_HOMES && ! $DOCTOR && [[ $EUID -ne 0 ]]; then
-    echo "Error: --scan-all-homes requires root (enumerating other users' homes needs root) — run via sudo" >&2
+if $SCAN_ALL_HOMES && [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
+    echo "Error: --scan-all-homes and --scan-user are mutually exclusive" >&2
+    exit 1
+fi
+
+# Derived: true for either "scan everyone" or "scan these specific named
+# users" -- the two share the exact same privilege-dropped-subprocess
+# machinery in _run_scan_all_homes, just differing in which users get
+# enumerated (see _resolve_scan_user_opts vs _enumerate_local_users). Every
+# other place that used to branch on $SCAN_ALL_HOMES alone to mean "the
+# per-user-subprocess path owns these checks instead of the normal
+# single-shot ones" now branches on this instead.
+SCAN_HOMES_MODE=false
+{ $SCAN_ALL_HOMES || [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; } && SCAN_HOMES_MODE=true
+
+if $SCAN_HOMES_MODE && ! $DOCTOR && [[ $EUID -ne 0 ]]; then
+    echo "Error: --scan-all-homes/--scan-user requires root (enumerating other users' homes needs root) — run via sudo" >&2
     exit 1
 fi
 
@@ -620,7 +640,7 @@ FOCUSED_MODE=false
 if ! $CHECK_FULL && { $CHECK_SYSTEMD || $CHECK_EBPF || $CHECK_NPM_CACHE || \
     $CHECK_BUN_CACHE || $CHECK_YARN_CACHE || $CHECK_PNPM_CACHE || $CHECK_PKGBUILD || \
     $CHECK_BPFTOOL || $CHECK_LDSO || $CHECK_AUTOSTART || $CHECK_KMOD || $CHECK_LYNIS || \
-    $CHECK_PKGINTEG || $SCAN_ALL_HOMES; }; then
+    $CHECK_PKGINTEG || $SCAN_HOMES_MODE; }; then
     FOCUSED_MODE=true
 fi
 
@@ -643,6 +663,7 @@ run_doctor() {
     [[ ${#EXTRA_LIST_OPTS[@]} -gt 0 ]] && _ignored+=("--extra-list")
     $CHECK_FULL                       && _ignored+=("--full")
     $SCAN_ALL_HOMES                   && _ignored+=("--scan-all-homes")
+    [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]  && _ignored+=("--scan-user")
     if [[ ${#_ignored[@]} -gt 0 ]]; then
         printf 'NOTE: the following flags are ignored with --doctor: %s\n\n' "${_ignored[*]}" >&2
     fi
@@ -1150,18 +1171,56 @@ _enumerate_local_users() {
              fi)
 }
 
-# --scan-all-homes: enumerates real local users and runs the six
-# home-dependent checks against each of their homes as a privilege-dropped
-# subprocess (the same flag bundle archcanary-user.service already runs in
-# production, just centrally triggered) — not an in-process loop, since
-# check_autostart's `command -v` resolution needs the target user's real
-# PATH, and only check_npm_cache privilege-drops today. Folds each user's
-# worst-of-N result into the existing summary labels/indices (never a
-# per-user-suffixed label — _is_behavior_check_name matches names verbatim).
+# Resolves SCAN_USER_OPTS (repeatable --scan-user=NAME, order preserved,
+# de-duped) to "name:home" pairs — the same convention _enumerate_local_users
+# produces, so _run_scan_all_homes's loop works unchanged regardless of
+# source. Unlike full enumeration, a named user skips the UID-range/shell
+# filters entirely: naming a specific account is exactly the case those
+# filters exist to make unnecessary. An unknown name or a missing home
+# directory is a hard error (a typo here should be obvious, not silently
+# dropped the way enumeration silently excludes non-matching accounts). Same
+# _SCAN_ALL_HOMES_TEST_PASSWD test seam as _enumerate_local_users.
+_resolve_scan_user_opts() {
+    local -n _rsuo_out="$1"
+    _rsuo_out=()
+    local _name _home _seen=":"
+    for _name in "${SCAN_USER_OPTS[@]}"; do
+        [[ "$_seen" == *":$_name:"* ]] && continue
+        _seen+="$_name:"
+        _home=$(if [[ -n "${_SCAN_ALL_HOMES_TEST_PASSWD:-}" ]]; then
+                    cat -- "$_SCAN_ALL_HOMES_TEST_PASSWD"
+                else
+                    getent passwd
+                fi | awk -F: -v u="$_name" '$1==u{print $6; exit}')
+        if [[ -z "$_home" ]]; then
+            echo "Error: --scan-user='$_name' is not a known local user" >&2
+            exit 1
+        fi
+        if [[ ! -d "$_home" ]]; then
+            echo "Error: --scan-user='$_name' has no home directory ($_home)" >&2
+            exit 1
+        fi
+        _rsuo_out+=("$_name:$_home")
+    done
+}
+
+# --scan-all-homes/--scan-user: enumerates real local users (or resolves the
+# explicitly named ones) and runs the six home-dependent checks against each
+# of their homes as a privilege-dropped subprocess (the same flag bundle
+# archcanary-user.service already runs in production, just centrally
+# triggered) — not an in-process loop, since check_autostart's `command -v`
+# resolution needs the target user's real PATH, and only check_npm_cache
+# privilege-drops today. Folds each user's worst-of-N result into the
+# existing summary labels/indices (never a per-user-suffixed label —
+# _is_behavior_check_name matches names verbatim).
 _run_scan_all_homes() {
     local _sah_bin _sah_users=() _sah_any_failed=false
     _sah_bin="${_SCAN_ALL_HOMES_TEST_BIN:-$(realpath "$0")}"
-    _enumerate_local_users _sah_users
+    if [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
+        _resolve_scan_user_opts _sah_users
+    else
+        _enumerate_local_users _sah_users
+    fi
     if [[ ${#_sah_users[@]} -eq 0 ]]; then
         echo "  No real local users found (UID range, shell, or home-dir filters excluded everyone)."
     fi
@@ -3813,7 +3872,7 @@ if $CHECK_EBPF; then
     echo
 fi
 
-if $CHECK_NPM_CACHE && ! $SCAN_ALL_HOMES; then
+if $CHECK_NPM_CACHE && ! $SCAN_HOMES_MODE; then
     echo "--- [5] npm cache check ---"
     check_npm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3821,7 +3880,7 @@ if $CHECK_NPM_CACHE && ! $SCAN_ALL_HOMES; then
     echo
 fi
 
-if $CHECK_BUN_CACHE && ! $SCAN_ALL_HOMES; then
+if $CHECK_BUN_CACHE && ! $SCAN_HOMES_MODE; then
     echo "--- [6] bun cache check ---"
     check_bun_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3829,7 +3888,7 @@ if $CHECK_BUN_CACHE && ! $SCAN_ALL_HOMES; then
     echo
 fi
 
-if $CHECK_YARN_CACHE && ! $SCAN_ALL_HOMES; then
+if $CHECK_YARN_CACHE && ! $SCAN_HOMES_MODE; then
     echo "--- [6b] yarn cache check ---"
     check_yarn_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3837,7 +3896,7 @@ if $CHECK_YARN_CACHE && ! $SCAN_ALL_HOMES; then
     echo
 fi
 
-if $CHECK_PNPM_CACHE && ! $SCAN_ALL_HOMES; then
+if $CHECK_PNPM_CACHE && ! $SCAN_HOMES_MODE; then
     echo "--- [6c] pnpm cache check ---"
     check_pnpm_cache && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3845,7 +3904,7 @@ if $CHECK_PNPM_CACHE && ! $SCAN_ALL_HOMES; then
     echo
 fi
 
-if $CHECK_PKGBUILD && ! $SCAN_ALL_HOMES; then
+if $CHECK_PKGBUILD && ! $SCAN_HOMES_MODE; then
     echo "--- [7] PKGBUILD/install file scan (obfuscation-aware) ---"
     check_pkgbuild_caches && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3869,7 +3928,7 @@ if $CHECK_LDSO; then
     echo
 fi
 
-if $CHECK_AUTOSTART && ! $SCAN_ALL_HOMES; then
+if $CHECK_AUTOSTART && ! $SCAN_HOMES_MODE; then
     echo "--- [10] XDG autostart + shell RC persistence check ---"
     check_autostart && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
@@ -3877,8 +3936,12 @@ if $CHECK_AUTOSTART && ! $SCAN_ALL_HOMES; then
     echo
 fi
 
-if $SCAN_ALL_HOMES; then
-    echo "--- [10b] Scan all local user homes (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
+if $SCAN_HOMES_MODE; then
+    if $SCAN_ALL_HOMES; then
+        echo "--- [10b] Scan all local user homes (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
+    else
+        echo "--- [10b] Scan user home(s): ${SCAN_USER_OPTS[*]} (npm/bun/yarn/pnpm/pkgbuild/autostart) ---"
+    fi
     _run_scan_all_homes
     echo
 fi

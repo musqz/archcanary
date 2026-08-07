@@ -4,6 +4,7 @@
 
 - Fix: `--scan-all-homes` forwarded the invoking (sudo) user's own list-path flags (`--malicious-npm-list=`, `--package-list=`, etc.) into every other local user's per-user child scan. Those resolve into the invoking user's own home, which a second real account has no read access into — the list looked missing, the self-heal bundled-default copy then also failed writing into someone else's home, and the whole per-user scan came back an unparseable WARNING. Each child now resolves its own list paths from its own `$HOME`, matching `archcanary-user.service`'s existing behavior. Reported live against a freshly created second local account.
 - Fix: `install.sh --system` seeded `/usr/lib/archcanary/*.txt` (the bundled-default threat lists every non-root user's first run falls back to) with a plain `cp` and no explicit mode, so the result inherited root's umask at install time — on a restrictive umask this left the files unreadable by anyone but root, breaking that same fallback for every user but root. Now `chmod 644`'d explicitly after the copy.
+- Added: `--scan-user=NAME` — runs `--scan-all-homes`'s same npm/bun/yarn/pnpm/pkgbuild/autostart checks against one specific user's home instead of enumerating everyone. Repeatable (`--scan-user=alice --scan-user=bob`), de-duped, needs root, mutually exclusive with `--scan-all-homes`. For checking a single newly-created or flagged account without sweeping every local user.
 
 ## v0.1.27 (2026-08-06)
 

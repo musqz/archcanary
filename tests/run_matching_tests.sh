@@ -1721,6 +1721,7 @@ test_color_flag_validation() {
 # ---------------------------------------------------------------------------
 _sah_extract_fns() {
     sed -n '/^_enumerate_local_users()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_resolve_scan_user_opts()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_run_scan_all_homes()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_parse_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_status_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
@@ -1772,6 +1773,66 @@ EOF
         pass "enumerate_local_users: SCAN_ALL_HOMES_EXCLUDE skips the named user"
     else
         fail "enumerate_local_users: exclude list not respected, out: $out2"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+test_resolve_scan_user_opts() {
+    local fns scratch fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    mkdir -p "$scratch/alice" "$scratch/bob"
+    # nohome deliberately not created -- a named user with no home dir must
+    # be a hard error here (unlike enumeration, which just silently drops it).
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/zsh
+nohome:x:1002:1002::$scratch/nohome:/bin/bash
+EOF
+
+    local out rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(bob alice bob)
+        _resolve_scan_user_opts users
+        printf '%s\n' \"\${users[@]}\"
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == "bob:$scratch/bob"$'\n'"alice:$scratch/alice" ]]; then
+        pass "resolve_scan_user_opts: repeatable, order-preserving, de-duped"
+    else
+        fail "resolve_scan_user_opts: expected bob then alice, deduped, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(ghost)
+        _resolve_scan_user_opts users
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'ghost' is not a known local user"* ]]; then
+        pass "resolve_scan_user_opts: unknown username is a hard error"
+    else
+        fail "resolve_scan_user_opts: expected unknown-user error, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$(bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        SCAN_USER_OPTS=(nohome)
+        _resolve_scan_user_opts users
+    " 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"'nohome' has no home directory"* ]]; then
+        pass "resolve_scan_user_opts: known user with no home dir is a hard error"
+    else
+        fail "resolve_scan_user_opts: expected no-home-dir error, rc=$rc, out: $out"
     fi
 
     rm -f "$fns"
@@ -1873,7 +1934,7 @@ EOF
 test_scan_all_homes_root_guard() {
     local out rc=0
     out=$("$REPO_DIR/archcanary.sh" --scan-all-homes 2>&1) || rc=$?
-    if [[ $rc -eq 1 && "$out" == *"--scan-all-homes requires root"* ]]; then
+    if [[ $rc -eq 1 && "$out" == *"--scan-all-homes/--scan-user requires root"* ]]; then
         pass "scan_all_homes: non-root invocation rejected with a clear error"
     else
         fail "scan_all_homes: expected root-required rejection, rc=$rc, out: $out"
@@ -1901,6 +1962,37 @@ test_scan_all_homes_flag_wiring() {
         pass "scan_all_homes: --full does not implicitly enable --scan-all-homes"
     else
         fail "scan_all_homes: --full incorrectly triggered the --scan-all-homes root guard, out: $out"
+    fi
+}
+
+test_scan_user_cli_flags() {
+    local out rc=0
+
+    # Same root guard as --scan-all-homes, worded to cover both flags.
+    out=$("$REPO_DIR/archcanary.sh" --scan-user=alice 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"--scan-all-homes/--scan-user requires root"* ]]; then
+        pass "scan_user: non-root invocation rejected with a clear error"
+    else
+        fail "scan_user: expected root-required rejection, rc=$rc, out: $out"
+    fi
+
+    # --doctor bypasses the guard, same convention as --scan-all-homes.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" --doctor --scan-user=alice 2>&1) || rc=$?
+    if [[ "$out" == *"following flags are ignored with --doctor"*"--scan-user"* ]]; then
+        pass "scan_user: --doctor --scan-user bypasses the root guard, reports as ignored"
+    else
+        fail "scan_user: expected --doctor to bypass the guard and report ignored flag, rc=$rc, out: $out"
+    fi
+
+    # Combining both is ambiguous (scan everyone vs. scan just these) --
+    # rejected before the root guard even runs, so this is testable non-root.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" --scan-all-homes --scan-user=alice 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"mutually exclusive"* ]]; then
+        pass "scan_user: --scan-all-homes + --scan-user together rejected as mutually exclusive"
+    else
+        fail "scan_user: expected mutual-exclusion rejection, rc=$rc, out: $out"
     fi
 }
 
@@ -1973,6 +2065,62 @@ EOF
         pass "scan_all_homes: per-user child invocations don't leak the invoking user's list paths"
     else
         fail "scan_all_homes: expected no --*-list flags in child invocations, argv: $argv"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# _run_scan_all_homes must scan exactly the users named via SCAN_USER_OPTS,
+# not fall back to enumerating everyone -- the whole point of --scan-user
+# over --scan-all-homes is scoping down to specific accounts.
+# ---------------------------------------------------------------------------
+test_scan_user_targets_named_users_only() {
+    local fns scratch fake_bin fake_passwd argv_log
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$scratch/bob" "$scratch/carol" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/bash
+carol:x:1002:1002::$scratch/carol:/bin/bash
+EOF
+
+    argv_log="$scratch/argv.log"
+    cat > "$fake_bin/sudo" <<EOF
+#!/usr/bin/env bash
+shift; shift
+user="\$1"; shift
+shift
+printf 'user=%s\n' "\$user" >> "$argv_log"
+echo '{}'
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
+        EXIT_CODE=0
+        _rec() { :; }
+        SCAN_USER_OPTS=(carol alice carol)
+        _run_scan_all_homes
+    " >/dev/null 2>&1
+
+    local argv
+    argv=$(cat "$argv_log" 2>/dev/null)
+    local carol_count
+    carol_count=$(grep -c '^user=carol$' "$argv_log" 2>/dev/null || true)
+    if [[ "$argv" == *"user=carol"* && "$argv" == *"user=alice"* && \
+          "$argv" != *"user=bob"* && "$carol_count" -eq 1 ]]; then
+        pass "scan_user: only the named users are scanned, repeats collapsed to one invocation each"
+    else
+        fail "scan_user: expected exactly carol+alice (deduped, no bob), argv: $argv"
     fi
 
     rm -f "$fns"
@@ -2550,6 +2698,15 @@ test_scan_all_homes_no_cross_user_list_paths
 
 $VERBOSE && msg "--- Test 32: root-install bundled lists are world-readable regardless of umask ---"
 test_root_install_bundled_lists_world_readable
+
+$VERBOSE && msg "--- Test 33: resolve_scan_user_opts (--scan-user resolution) ---"
+test_resolve_scan_user_opts
+
+$VERBOSE && msg "--- Test 34: --scan-user CLI flags (root guard, doctor, mutual exclusion) ---"
+test_scan_user_cli_flags
+
+$VERBOSE && msg "--- Test 35: --scan-user targets only the named users ---"
+test_scan_user_targets_named_users_only
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
