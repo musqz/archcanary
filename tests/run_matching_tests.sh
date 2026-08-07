@@ -1861,6 +1861,81 @@ test_scan_all_homes_flag_wiring() {
 }
 
 # ---------------------------------------------------------------------------
+# scan_all_homes must not leak the invoking (root/sudo) process's own list
+# paths into other users' child scans. Regression coverage for a real bug:
+# `sudo archcanary --scan-all-homes`'s $MALICIOUS_NPM_LIST/$PACKAGE_LIST_FILE/
+# etc. resolve to the SUDO_USER's own $HOME/.config/archcanary (via the
+# HOME-rebind earlier in the script) -- fine for that user's own child scan,
+# but a second real account (e.g. a freshly-created `leonie`) has no access
+# into the first user's home. Passing those paths through via
+# --malicious-npm-list=/--package-list=/etc made the file look "missing" to
+# every other user, and the self-heal bundled-default `cp` then also failed
+# (no write access into someone else's home), producing an unparseable
+# WARNING for every user but the invoking one. Fix: don't pass those flags at
+# all -- each child resolves its own list paths from its own $HOME, same as
+# a standalone run or archcanary-user.service.
+# ---------------------------------------------------------------------------
+test_scan_all_homes_no_cross_user_list_paths() {
+    local fns scratch fake_bin fake_passwd argv_log
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$scratch/bob" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/bash
+EOF
+
+    argv_log="$scratch/argv.log"
+    # Fake sudo: -H -u <user> -- <cmd...>. Logs the full argv it was asked to
+    # run instead of execing anything -- this test only cares what
+    # _run_scan_all_homes decided to pass, not a child's actual scan result.
+    cat > "$fake_bin/sudo" <<EOF
+#!/usr/bin/env bash
+shift; shift
+user="\$1"; shift
+shift
+{ printf 'user=%s' "\$user"; printf ' %q' "\$@"; printf '\n'; } >> "$argv_log"
+echo '{}'
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    # Realistic invoking-process state: paths rebound into one real user's
+    # home, exactly like $MALICIOUS_NPM_LIST etc. after the SUDO_USER
+    # HOME-rebind in the real report.
+    PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
+        EXIT_CODE=0
+        _rec() { :; }
+        MALICIOUS_NPM_LIST='/home/vogel/.config/archcanary/malicious_npm_packages.txt'
+        PACKAGE_LIST_FILE='/home/vogel/.config/archcanary/package_list.txt'
+        CHAOS_RAT_LIST='/home/vogel/.config/archcanary/chaos_rat_packages.txt'
+        RUSSIAN_SPAM_LIST='/home/vogel/.config/archcanary/malicious_russian_spam_packages.txt'
+        COMMUNITY_REPORTS_LIST='/home/vogel/.config/archcanary/community_reports.txt'
+        _run_scan_all_homes
+    " >/dev/null 2>&1
+
+    local argv
+    argv=$(cat "$argv_log" 2>/dev/null)
+    if [[ "$argv" == *"user=alice"* && "$argv" == *"user=bob"* && \
+          "$argv" != *"--malicious-npm-list"* && "$argv" != *"--package-list"* && \
+          "$argv" != *"--chaos-rat-list"* && "$argv" != *"--russian-spam-list"* && \
+          "$argv" != *"--community-list"* ]]; then
+        pass "scan_all_homes: per-user child invocations don't leak the invoking user's list paths"
+    else
+        fail "scan_all_homes: expected no --*-list flags in child invocations, argv: $argv"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
 # _refresh_aur_audit — RED-only versions companion file. Regression coverage
 # for the name-only-forever bug: a package's aur-audit RED verdict belongs to
 # a specific version, but configs/yay-init.lua's Lua hook only ever matched
@@ -2425,6 +2500,9 @@ test_refresh_aur_audit_versions_stale_clear
 
 $VERBOSE && msg "--- Test 30: check_logs LOG_HIST seen-once downgrade ---"
 test_check_logs_seen_once
+
+$VERBOSE && msg "--- Test 31: scan-all-homes doesn't leak invoking user's list paths to other users ---"
+test_scan_all_homes_no_cross_user_list_paths
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
