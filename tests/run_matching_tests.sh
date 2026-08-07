@@ -1272,6 +1272,50 @@ test_bundled_list_path_usr_bin_layout() {
 }
 
 # ---------------------------------------------------------------------------
+# lib/archcanary-root-install.sh's bundled-list seeding loop must leave
+# /usr/lib/archcanary/*.txt world-readable regardless of root's umask at
+# install time. Regression coverage for a real bug: plain `cp` (no explicit
+# mode) inherits the invoking (root) shell's umask, and a restrictive umask
+# (0027, reported live) left these files 640 root:root -- unreadable by any
+# non-root user, breaking _bundled_list_path's system-lib fallback for every
+# local user but root. This only exercises the seeding loop itself (safe to
+# run unprivileged against a temp dir) -- not the rest of the root-only
+# installer, which needs real root and isn't run by this suite.
+# ---------------------------------------------------------------------------
+test_root_install_bundled_lists_world_readable() {
+    local fake_repo fake_lib snippet f mode
+    fake_repo=$(mktemp -d)
+    fake_lib=$(mktemp -d)
+    mkdir -p "$fake_repo/lists"
+    for f in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt \
+             malicious_russian_spam_packages.txt community_reports.txt; do
+        echo "dummy" > "$fake_repo/lists/$f"
+    done
+
+    snippet=$(sed -n '/^    for _list in package_list\.txt/,/^    done$/p' \
+        "$REPO_DIR/lib/archcanary-root-install.sh")
+
+    ( umask 0027
+      REPO_DIR="$fake_repo" SYSTEM_LIB="$fake_lib"
+      eval "$snippet" )
+
+    local bad=()
+    for f in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt \
+             malicious_russian_spam_packages.txt community_reports.txt; do
+        mode=$(stat -c '%a' "$fake_lib/$f" 2>/dev/null)
+        [[ "$mode" == "644" ]] || bad+=("$f:${mode:-missing}")
+    done
+
+    if [[ ${#bad[@]} -eq 0 ]]; then
+        pass "root_install: bundled list files are 644 regardless of umask at install time"
+    else
+        fail "root_install: expected 644 on all bundled lists, got: ${bad[*]}"
+    fi
+
+    rm -rf "$fake_repo" "$fake_lib"
+}
+
+# ---------------------------------------------------------------------------
 # RESULT banner wording — regression coverage for a real report: a scan
 # where every check that ran was clean, and the only reason for a non-zero
 # exit code was an optional/root-only check being skipped, still printed
@@ -2503,6 +2547,9 @@ test_check_logs_seen_once
 
 $VERBOSE && msg "--- Test 31: scan-all-homes doesn't leak invoking user's list paths to other users ---"
 test_scan_all_homes_no_cross_user_list_paths
+
+$VERBOSE && msg "--- Test 32: root-install bundled lists are world-readable regardless of umask ---"
+test_root_install_bundled_lists_world_readable
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

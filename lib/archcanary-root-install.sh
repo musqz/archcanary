@@ -60,8 +60,16 @@ install-components)
     cp "$REPO_DIR/configs/org.archcanary.policy" /usr/share/polkit-1/actions/
     # Seed the bundled package lists next to the system script so a root scan
     # (system service) finds them — root's $HOME is /root, which is not seeded.
+    # Also the fallback every non-root local user's own first-ever run
+    # self-heals from (_bundled_list_path's third candidate). Explicit 644:
+    # plain `cp` inherits root's umask, which on a restrictive umask (0027)
+    # left these unreadable outside root/root's group — breaking that
+    # self-heal for every user but root.
     for _list in package_list.txt malicious_npm_packages.txt chaos_rat_packages.txt malicious_russian_spam_packages.txt community_reports.txt; do
-        [[ -f "$REPO_DIR/lists/$_list" ]] && cp "$REPO_DIR/lists/$_list" "$SYSTEM_LIB/$_list"
+        if [[ -f "$REPO_DIR/lists/$_list" ]]; then
+            cp "$REPO_DIR/lists/$_list" "$SYSTEM_LIB/$_list"
+            chmod 644 "$SYSTEM_LIB/$_list"
+        fi
     done
 
     # DKMS allowlist — single system-wide file (the kmod audit only runs as root).
