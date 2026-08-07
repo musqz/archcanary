@@ -1186,16 +1186,23 @@ _run_scan_all_homes() {
         # `sudo`, since sudo's own env_reset/secure_path policy (sudoers is
         # per-machine config, not something to assume about) can silently
         # discard a PATH set only on the invoking side.
+        # Deliberately no --malicious-npm-list/--package-list/--chaos-rat-list/
+        # --russian-spam-list/--community-list here: those default to
+        # $MALICIOUS_NPM_LIST etc. in *this* (root) process, which — thanks to
+        # the SUDO_USER HOME-rebind above — resolve to the invoking user's own
+        # $HOME/.config/archcanary/. Passing them through would point every
+        # other user's child scan at a directory only the invoking user can
+        # read (typically 700), making the list look "missing" and sending the
+        # self-heal `cp` in the bundled-default fallback at a destination it
+        # can't write either — a guaranteed permission-denied, unparseable-JSON
+        # failure for every user but the invoking one. Let each child resolve
+        # its own list paths from its own $HOME instead, same as a standalone
+        # run or archcanary-user.service.
         _sah_json=$(sudo -H -u "$_sah_user" -- env \
                 PATH="$_sah_home/.local/bin:$_sah_home/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin" \
                 "$_sah_bin" \
                 --check-npm-cache --check-bun-cache --check-yarn-cache \
                 --check-pnpm-cache --check-pkgbuild --check-autostart \
-                --malicious-npm-list="$MALICIOUS_NPM_LIST" \
-                --package-list="$PACKAGE_LIST_FILE" \
-                --chaos-rat-list="$CHAOS_RAT_LIST" \
-                --russian-spam-list="$RUSSIAN_SPAM_LIST" \
-                --community-list="$COMMUNITY_REPORTS_LIST" \
                 --no-notify --color=never --format=json \
                 --log-file="$_sah_log" 2>/dev/null) || true
         if [[ -f "$_sah_log" ]]; then
