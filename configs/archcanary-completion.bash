@@ -43,6 +43,10 @@ _archcanary() {
             _filedir
             return 0
             ;;
+        --scan-user)
+            COMPREPLY=($(compgen -u -- "$cur"))
+            return 0
+            ;;
     esac
     $split && return 0   # e.g. --start-date=, --end-date= — no value completion
 
@@ -50,7 +54,7 @@ _archcanary() {
         --check-systemd --check-ebpf --check-npm-cache --check-bun-cache
         --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-bpftool
         --check-ldso --check-autostart --check-kmod --check-lynis
-        --check-pkginteg --check-list-overlap --scan-all-homes --search-packages= --full --refresh --no-aur-audit --verbose -v --debug
+        --check-pkginteg --check-list-overlap --scan-all-homes --scan-user= --search-packages= --full --refresh --no-aur-audit --verbose -v --debug
         --no-notify --no-summary --run-lynis --doctor --version -V --help -h
         --log-file= --package-list= --malicious-npm-list= --chaos-rat-list=
         --russian-spam-list= --community-list= --extra-list= --start-date= --end-date=
