@@ -1216,6 +1216,13 @@ _resolve_scan_user_opts() {
 _run_scan_all_homes() {
     local _sah_bin _sah_users=() _sah_any_failed=false
     _sah_bin="${_SCAN_ALL_HOMES_TEST_BIN:-$(realpath "$0")}"
+    # Per-user overall verdict, alongside the existing per-check worst-of-N
+    # below — only ever rendered for --scan-user (see _print_sah_user_summary's
+    # call site), but populated unconditionally since it's cheap and keeps
+    # this loop uniform. Global (no `local`), same convention as
+    # _SUMMARY_NAMES/_SUMMARY_CODES.
+    _SAH_USER_NAMES=()
+    _SAH_USER_CODES=()
     if [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
         _resolve_scan_user_opts _sah_users
     else
@@ -1272,6 +1279,8 @@ _run_scan_all_homes() {
         if [[ -z "$_sah_json" ]]; then
             echo "  WARNING: could not evaluate result for $_sah_user (no parseable output)"
             _sah_any_failed=true
+            _SAH_USER_NAMES+=("$_sah_user")
+            _SAH_USER_CODES+=(99)
             continue
         fi
         while IFS='|' read -r _sah_name _sah_status; do
@@ -1279,6 +1288,8 @@ _run_scan_all_homes() {
             _sah_code=$(_sah_status_to_code "$_sah_status")
             (( _sah_code > _sah_worst[$_sah_name] )) && _sah_worst[$_sah_name]=$_sah_code
         done < <(_sah_parse_checks "$_sah_json")
+        _SAH_USER_NAMES+=("$_sah_user")
+        _SAH_USER_CODES+=("$(_sah_result_to_code "$(grep -oP '"result":"\K[^"]*' <<< "$_sah_json")")")
     done
 
     for _sah_name in "npm cache" "bun cache" "yarn cache" "pnpm cache" \
@@ -3500,6 +3511,44 @@ _print_summary() {
     printf ' %s\n' "$_SEP55"
 }
 
+# --scan-user only (see call site below) — a per-USER breakdown alongside
+# _print_summary's per-CHECK one, since naming specific accounts is exactly
+# the case where "whose result is whose" matters more than a check-by-check
+# rollup. Code 2 always renders as the softer $_SYM_REVIEW_TXT, never
+# $_SYM_INFECTED_TXT: unlike _print_summary, this reads a child's own
+# top-level JSON "result" field (_SAH_USER_CODES, from _sah_result_to_code),
+# which can't distinguish a confirmed-infected check from a behavior-based
+# one the way _is_behavior_check_name/_any_confirmed_infected do above —
+# so this never overclaims "INFECTED" for a row that might just be a
+# behavior-based review. The correctly-distinguished wording is already in
+# that user's own RESULT banner further up. 99 (_sah_result_to_code's
+# parse-failure sentinel) prints as plain text, no icon.
+_print_sah_user_summary() {
+    local _w=36
+    printf '\nPer-user summary\n'
+    printf ' %s\n' "$_SEP55"
+    local i name code
+    for i in "${!_SAH_USER_NAMES[@]}"; do
+        name="${_SAH_USER_NAMES[$i]}" code="${_SAH_USER_CODES[$i]}"
+        case "$code" in
+            0)  printf ' %-*s %s\n' "$_w" "$name" "$_SYM_CLEAN" ;;
+            1)  printf ' %-*s %s\n' "$_w" "$name" "$_SYM_WARNINGS" ;;
+            2)  printf ' %-*s %s\n' "$_w" "$name" "$_SYM_REVIEW_TXT" ;;
+            *)  printf ' %-*s (could not evaluate)\n' "$_w" "$name" ;;
+        esac
+    done
+    printf ' %s\n' "$_SEP55"
+}
+
+# Named (not inlined at the call site) so the "--scan-user only, never
+# --scan-all-homes" wiring is directly unit-testable via the same
+# extract-and-source technique the other scan-all-homes/scan-user tests use.
+_maybe_print_sah_user_summary() {
+    if [[ ${#SCAN_USER_OPTS[@]} -gt 0 ]]; then
+        _print_sah_user_summary
+    fi
+}
+
 # Escapes backslash/double-quote for the JSON string values below. The
 # inputs here are always script-controlled labels (check names) plus a
 # package count, never raw user/network input, but escaping is cheap and
@@ -3540,6 +3589,19 @@ _sah_status_to_code() {
         skipped_root)    echo 77 ;;
         skipped_missing) echo 78 ;;
         *)               echo 1 ;;
+    esac
+}
+
+# Inverse of _print_summary_json's top-level "result" field (a child's own
+# overall verdict, not a per-check one -- different vocab, "warnings" plural
+# vs. "warning" singular above, hence a separate mapper). 99 is a local
+# sentinel for "couldn't parse" -- consumed only by _print_sah_user_summary.
+_sah_result_to_code() {
+    case "$1" in
+        clean)    echo 0 ;;
+        warnings) echo 1 ;;
+        infected) echo 2 ;;
+        *)        echo 99 ;;
     esac
 }
 
@@ -3996,7 +4058,10 @@ fi
 if $FORMAT_JSON; then
     _print_summary_json
 else
-    $NO_SUMMARY || _print_summary
+    if ! $NO_SUMMARY; then
+        _print_summary
+        _maybe_print_sah_user_summary
+    fi
 fi
 
 printf '%s============================================================%s\n' "$_CB" "$_CN"

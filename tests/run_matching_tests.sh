@@ -1725,6 +1725,9 @@ _sah_extract_fns() {
     sed -n '/^_run_scan_all_homes()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_parse_checks()/,/^}/p' "$REPO_DIR/archcanary.sh"
     sed -n '/^_sah_status_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_sah_result_to_code()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_print_sah_user_summary()/,/^}/p' "$REPO_DIR/archcanary.sh"
+    sed -n '/^_maybe_print_sah_user_summary()/,/^}/p' "$REPO_DIR/archcanary.sh"
 }
 
 test_enumerate_local_users() {
@@ -2125,6 +2128,104 @@ EOF
 
     rm -f "$fns"
     rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# _run_scan_all_homes must also capture each user's own overall verdict
+# (from the child's top-level JSON "result" field, not just its per-check
+# breakdown) into _SAH_USER_NAMES/_SAH_USER_CODES, and _print_sah_user_summary
+# must render that as a per-user table -- clean/warnings/infected mapped via
+# _sah_result_to_code, and a child that produced no parseable output at all
+# (the existing "could not evaluate" path) still shows up, as code 99.
+# ---------------------------------------------------------------------------
+test_scan_user_per_user_summary() {
+    local fns scratch fake_bin fake_passwd
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+    scratch=$(mktemp -d)
+    fake_bin="$scratch/bin"
+    mkdir -p "$scratch/alice" "$scratch/bob" "$scratch/carol" "$fake_bin"
+
+    fake_passwd="$scratch/passwd"
+    cat > "$fake_passwd" <<EOF
+alice:x:1000:1000::$scratch/alice:/bin/bash
+bob:x:1001:1001::$scratch/bob:/bin/bash
+carol:x:1002:1002::$scratch/carol:/bin/bash
+EOF
+
+    # Fake sudo hands back canned JSON per user instead of running a real
+    # scan -- this test only cares about result-field extraction and
+    # rendering, not the checks themselves. carol's invocation fails outright
+    # (exit 1, no output) to exercise the "could not evaluate" -> 99 path.
+    cat > "$fake_bin/sudo" <<EOF
+#!/usr/bin/env bash
+shift; shift
+user="\$1"; shift
+shift
+case "\$user" in
+    alice) echo '{"result":"clean","checks":[]}' ;;
+    bob)   echo '{"result":"warnings","checks":[]}' ;;
+    carol) exit 1 ;;
+esac
+EOF
+    chmod +x "$fake_bin/sudo"
+
+    local out
+    out=$(PATH="$fake_bin:$PATH" bash -c "
+        source '$fns'
+        _SCAN_ALL_HOMES_TEST_PASSWD='$fake_passwd'
+        _SCAN_ALL_HOMES_TEST_BIN='/usr/bin/true'
+        EXIT_CODE=0
+        _rec() { :; }
+        SCAN_USER_OPTS=(alice bob carol)
+        _run_scan_all_homes >/dev/null
+        _SEP55='-----'
+        _SYM_CLEAN='CLEAN_ICON'
+        _SYM_WARNINGS='WARN_ICON'
+        _SYM_REVIEW_TXT='REVIEW_ICON'
+        _print_sah_user_summary
+    " 2>&1)
+
+    if [[ "$out" == *"Per-user summary"* && \
+          "$out" =~ alice[[:space:]]+CLEAN_ICON && \
+          "$out" =~ bob[[:space:]]+WARN_ICON && \
+          "$out" == *"carol"*"(could not evaluate)"* ]]; then
+        pass "scan_user: per-user summary renders clean/warnings/could-not-evaluate correctly"
+    else
+        fail "scan_user: expected alice=clean, bob=warnings, carol=could-not-evaluate, out: $out"
+    fi
+
+    rm -f "$fns"
+    rm -rf "$scratch"
+}
+
+# ---------------------------------------------------------------------------
+# The per-user summary must be wired to --scan-user only, never
+# --scan-all-homes -- _maybe_print_sah_user_summary is the sole gate (named,
+# not inlined, specifically so this is unit-testable without real root).
+# ---------------------------------------------------------------------------
+test_scan_user_summary_scope() {
+    local fns
+    fns=$(mktemp)
+    _sah_extract_fns > "$fns"
+
+    local out
+    out=$(bash -c "
+        source '$fns'
+        _print_sah_user_summary() { echo CALLED; }
+        SCAN_USER_OPTS=()
+        echo \"empty=[\$(_maybe_print_sah_user_summary)]\"
+        SCAN_USER_OPTS=(alice)
+        echo \"set=[\$(_maybe_print_sah_user_summary)]\"
+    ")
+
+    if [[ "$out" == *"empty=[]"* && "$out" == *"set=[CALLED]"* ]]; then
+        pass "scan_user: per-user summary only prints when SCAN_USER_OPTS is non-empty (never for --scan-all-homes)"
+    else
+        fail "scan_user: expected no call with empty SCAN_USER_OPTS and a call once set, out: $out"
+    fi
+
+    rm -f "$fns"
 }
 
 # ---------------------------------------------------------------------------
@@ -2707,6 +2808,12 @@ test_scan_user_cli_flags
 
 $VERBOSE && msg "--- Test 35: --scan-user targets only the named users ---"
 test_scan_user_targets_named_users_only
+
+$VERBOSE && msg "--- Test 36: --scan-user per-user summary rendering ---"
+test_scan_user_per_user_summary
+
+$VERBOSE && msg "--- Test 37: per-user summary scoped to --scan-user only ---"
+test_scan_user_summary_scope
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
