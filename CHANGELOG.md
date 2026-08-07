@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.28 (unreleased)
+
+- Fix: `--scan-all-homes` forwarded the invoking (sudo) user's own list-path flags (`--malicious-npm-list=`, `--package-list=`, etc.) into every other local user's per-user child scan. Those resolve into the invoking user's own home, which a second real account has no read access into — the list looked missing, the self-heal bundled-default copy then also failed writing into someone else's home, and the whole per-user scan came back an unparseable WARNING. Each child now resolves its own list paths from its own `$HOME`, matching `archcanary-user.service`'s existing behavior. Reported live against a freshly created second local account.
+- Fix: `install.sh --system` seeded `/usr/lib/archcanary/*.txt` (the bundled-default threat lists every non-root user's first run falls back to) with a plain `cp` and no explicit mode, so the result inherited root's umask at install time — on a restrictive umask this left the files unreadable by anyone but root, breaking that same fallback for every user but root. Now `chmod 644`'d explicitly after the copy.
+
 ## v0.1.27 (2026-08-06)
 
 - Fix: `configs/yay-init.lua`'s aur-audit RED warning matched by package name only, so a once-flagged package kept warning on every future install even after a newer version was rescanned clean — reported live on `firefox-pure`. `--refresh` now also captures the flagged version into `aur_audit_red_versions.txt` (RED only; BLACK's block stays unconditional); the hook compares it against the installing PKGBUILD's own `pkgver`/`pkgrel` and only keeps full severity on an exact match. Marker bumped to `(v6)`.
