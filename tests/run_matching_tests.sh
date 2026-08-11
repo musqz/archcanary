@@ -1469,7 +1469,7 @@ test_doctor_stale_yay_init() {
     # with the exact re-copy fix command.
     fake_home=$(mktemp -d)
     mkdir -p "$fake_home/.config/yay"
-    sed 's/ (v6)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
+    sed -E 's/ \(v[0-9]+\)\.$/./' "$REPO_DIR/configs/yay-init.lua" > "$fake_home/.config/yay/init.lua"
     out=$(XDG_CONFIG_HOME="$fake_home/.config" "$REPO_DIR/archcanary.sh" --doctor=external 2>&1) || true
     if [[ "$out" == *"yay init.lua"*"(outdated)"* && "$out" == *"cp "*"configs/yay-init.lua"* ]]; then
         pass "doctor: outdated yay init.lua marker -> WARN with fix hint"
