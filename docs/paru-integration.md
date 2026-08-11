@@ -7,6 +7,6 @@ paru's native `PreBuildCommand` hook (`~/.config/paru/paru.conf`, `[bin]` sectio
 
 Runs `archcanary --check-pkgbuild` before every AUR build, scoped to just that package's own build directory (`PKGBUILD_CACHE_DIRS=.`) — a nonzero exit (pattern match found) genuinely aborts the build, since paru propagates `PreBuildCommand`'s exit status as a real error. `--no-notify --no-summary` keep this silent-unless-flagged on every single build. Fails open if archcanary isn't on `$PATH` (build proceeds rather than hard-blocking on a missing optional dependency).
 
-**Limitation:** `PreBuildCommand` fires before paru's own diff/edit review menus (confirmed in paru's source, `src/install.rs`) — paru has no post-review hook point to move it to, unlike yay's `AURPostDownload`. It's also narrower in scope than yay's hook: only the PKGBUILD pattern check, no aur-audit black/red lookup.
+**Limitation:** `PreBuildCommand` fires before paru's own diff/edit review menus (confirmed in paru's source, `src/install.rs`) — paru has no post-review hook point to move it to, unlike yay's `AURPostDownload`. It's also narrower in scope than yay's hook: only the PKGBUILD pattern check, no aur-audit black/red lookup, and no equivalent to yay's non-abort "press Enter to continue" checkpoint — a clean paru build stays fully silent (`--no-notify --no-summary`) and never pauses.
 
 Uninstalling removes just the two hook lines (marker comment + `PreBuildCommand`) from `paru.conf` — the rest of the file, including the `[bin]` section header itself, is left untouched.
