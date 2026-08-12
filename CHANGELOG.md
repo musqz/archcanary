@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.28 (unreleased)
+## v0.1.28 (2026-08-12)
 
 - Added: `check_pkgbuild_caches` Pattern 9 — flags a PKGBUILD that declares the same `source=()`/`source_$CARCH=()` key more than once. makepkg only ever honors the last assignment, so an earlier one is dead code; a legitimate PKGBUILD never has a reason to declare the same key twice (per-arch keys are tracked separately and don't collide with each other or the bare `source=`, so the normal multi-arch idiom isn't flagged). Prompted by `storageexplorer-bin` (below): a fake `source=('optimizer')` prepended above the real array to stage a git-tracked binary makepkg never actually references — a later push correcting the array would silently arm it.
 - Added: `storageexplorer-bin` to `lists/community_reports.txt` — a stripped 43 KB ELF binary (`optimizer`) committed directly into the AUR git repo, with a `source=('optimizer')` line prepended above the real `source=()` array. The prepend is currently dead (the real array further down overwrites it, so makepkg never stages the binary and `.SRCINFO` stays clean), but it's still a git-tracked binary in a source-based PKGBUILD's own tree. Verified directly against a clone of the real repo (commit `031bed6`, single squashed commit, AUR maintainer differs from the `# Maintainer:` comment): both the pre-existing Pattern 8 (undocumented ELF binary check) and the new Pattern 9 above flag it correctly.
