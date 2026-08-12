@@ -2603,6 +2603,10 @@ check_pkgbuild_caches() {
     while IFS= read -r file; do
         (( scanned++ )) || true
         local lineno=0
+        local -A _source_seen=()
+        local _dup_source_key=""
+        local _is_pkgbuild=false
+        [[ "$(basename "$file")" == "PKGBUILD" ]] && _is_pkgbuild=true
         while IFS= read -r line || [[ -n "$line" ]]; do
             (( lineno++ )) || true
 
@@ -2663,7 +2667,37 @@ check_pkgbuild_caches() {
                 found_count=2
             fi
 
+            # --- Pattern 9: duplicate source=()/source_$CARCH=() declaration ---
+            # makepkg only ever honors the last assignment to a given array
+            # name -- an earlier source=() is silently dead code. A legitimate
+            # PKGBUILD has no reason to declare the *same* source key twice;
+            # per-arch keys (source_x86_64=, source_i686=, ...) are a separate,
+            # normal mechanism and don't collide with the bare source= key or
+            # each other, since each is tracked under its own key below. Known
+            # false-positive shape: a small number of PKGBUILDs pick between
+            # two source=() arrays via if/else instead of source_$CARCH= --
+            # rarer than the arch-specific idiom, and worth a look either way,
+            # since a real duplicate is either dead build-variant logic or a
+            # staged-but-not-yet-armed payload. Reported live: storageexplorer-
+            # bin prepended a fake source=('optimizer') above the real
+            # source=() to stage a git-tracked binary makepkg never actually
+            # references -- a later push correcting the array would arm it.
+            if $_is_pkgbuild && [[ "$line" =~ ^[[:space:]]*(source(_[A-Za-z0-9_]+)?)\+?=\( ]]; then
+                local _key="${BASH_REMATCH[1]}"
+                if [[ -n "${_source_seen[$_key]:-}" ]]; then
+                    _dup_source_key="$_key"
+                fi
+                _source_seen["$_key"]=1
+            fi
+
         done < "$file"
+
+        if [[ -n "$_dup_source_key" ]]; then
+            echo "  WARNING: duplicate ${_dup_source_key}=() declaration in $file"
+            echo "    makepkg only honors the last one -- the earlier declaration is dead"
+            echo "    code, a known trick for staging a file that isn't fetched/used yet."
+            found_count=2
+        fi
     done < <(
         for dir in "${cache_dirs[@]}"; do
             [[ -d "$dir" ]] || continue
