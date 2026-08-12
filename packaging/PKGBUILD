@@ -22,7 +22,7 @@ backup=('etc/archcanary/dkms_allowlist.conf'
         'etc/archcanary/autostart_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/musqz/$pkgname/archive/v$pkgver.tar.gz")
-sha256sums=('0000000000000000000000000000000000000000000000000000000000000000')
+sha256sums=('6b0b05b904338eacc67041d57309b188149468afa1b8564ae1036e6a21562b4c')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
