@@ -1,0 +1,13 @@
+pkgname=pkg-multiarch
+pkgver=1.0
+pkgrel=1
+arch=('x86_64' 'i686')
+source=('common.tar.gz::https://example.com/common.tar.gz')
+source_x86_64=('https://example.com/pkg-1.0-x86_64.bin')
+source_i686=('https://example.com/pkg-1.0-i686.bin')
+sha256sums=('0000000000000000000000000000000000000000000000000000000000000000')
+sha256sums_x86_64=('0000000000000000000000000000000000000000000000000000000000000000')
+sha256sums_i686=('0000000000000000000000000000000000000000000000000000000000000000')
+package() {
+    install -m 755 "pkg-1.0-${CARCH}.bin" "${pkgdir}/usr/bin/pkg"
+}

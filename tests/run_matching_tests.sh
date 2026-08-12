@@ -997,6 +997,32 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: untracked ELF incorrectly flagged, rc=$rc, out: $out"
     fi
     rm -rf "$untracked_git_dir"
+
+    # Sub-test L: duplicate source=() declaration → WARNING. Reported live:
+    # storageexplorer-bin prepended a fake source=('optimizer') above the
+    # real source=() array, staging a git-tracked binary makepkg never
+    # actually references since the real array silently wins.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-dupsource" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: duplicate source=() declaration in"* ]]; then
+        pass "pkgbuild_obfuscation: duplicate source=() declaration detected"
+    else
+        fail "pkgbuild_obfuscation: duplicate source=() not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test M: source=() plus per-arch source_x86_64=()/source_i686=() →
+    # NOT flagged. Regression guard against false positives on the normal,
+    # widely-used multi-arch PKGBUILD idiom — each key is tracked separately,
+    # so distinct keys appearing once each must not look like a duplicate.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-multiarch" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* && "$out" != *"duplicate"* ]]; then
+        pass "pkgbuild_obfuscation: per-arch source_\$CARCH=() not flagged as duplicate"
+    else
+        fail "pkgbuild_obfuscation: per-arch source_\$CARCH=() incorrectly flagged, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------

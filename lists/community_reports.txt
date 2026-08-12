@@ -90,3 +90,4 @@ google-chrome-stable
 chrome
 google-chrome-bin
 ttf-mac-fonts-all
+storageexplorer-bin
