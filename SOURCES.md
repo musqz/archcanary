@@ -336,6 +336,14 @@ A separate, later campaign from the June 2026 atomic-lockfile/js-digest attack (
 - **Added to:** `lists/community_reports.txt` (2026-08-02), annotated `[community report]` on hit.
 - **Why here and not a dedicated campaign list:** as of 11.2's last update the full scope of this wave isn't known yet — a single confirmed package fits the Community Reports list's stated purpose (11 above) better than a new campaign-specific list, which would imply a settled, bounded scope this wave doesn't have yet. Revisit if/when this wave gets its own confirmed package count and closure, the way the June campaign did.
 
+### 11.7 aurweb v6.5.0 — Adoption Review, the Structural Fix
+- **URL:** https://gitlab.archlinux.org/archlinux/aurweb/-/commits/v6.5.0 (primary — GitLab commit history for the tagged release); https://github.com/archlinux/aurweb (read-only mirror of the same repo)
+- **Date:** Tagged 2026-08-11 (`chore(release): prepare version 6.5.0`, Leonidas Spyropoulos); announced on aur-general and deployed to aur.archlinux.org 2026-08-12.
+- **Author:** Leonidas Spyropoulos, Arch Linux DevOps/aurweb maintainer — confirmed as the commit author for the relevant changes, matching the aur-general announcement's signature (PGP `244740D17C7FD0EC`). No direct message-ID/URL for the aur-general post itself was located; sourced from the forwarded announcement text plus the GitLab commit history that implements it.
+- **Content:** SSH/git push and package adoption are re-enabled (both suspended since 11.1's 2026-07-30 containment measure) — but adoption now files a review request instead of transferring maintainership immediately (`659472f7`, "feat: add adoption request expiry and filtering by request type"): a Package Maintainer must grant it, only one request can be pending per package base, and an unactioned request auto-rejects after 14 days. Separately, unverified accounts get a warning at 7 days and are removed at 14 (`9f700307`, "feat: automatic cleanup for unverified accounts") — explicitly framed as prep for eventual SSO integration and ongoing anti-spam/anti-malicious-account work. Registration itself remains closed for now.
+- **Relevant for:** This is the permanent structural fix for the vulnerability 11.1's "adoption disabled" was only ever a stopgap for — the *orphan/instant-adoption takeover* pattern that both this second wave and the 2018 Acroread incident (section 12) share. Closes out the open thread flagged in 11.6 ("revisit if/when this wave gets its own... closure") for the adoption-lock angle specifically, though 11.2's broader "not a closed incident" caveat about new malicious commits still stands independently.
+- **Not actionable in archcanary:** this is AUR-side infrastructure/policy, not something a client-side scanner interacts with — no code or list change follows from it. Documented here purely for the incident timeline.
+
 ---
 
 ## 12. Acroread (2018) — Orphan Package Takeover

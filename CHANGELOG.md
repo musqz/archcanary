@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.29 (unreleased)
+
+- Docs: added aurweb v6.5.0 to `SOURCES.md` (§11.7) — the permanent structural fix for the orphan/instant-adoption takeover pattern (sections 11.1 and 12): package adoption now files a review request a Package Maintainer must grant (auto-rejected after 14 days unactioned) instead of transferring maintainership immediately, and unverified accounts are warned at 7 days and removed at 14. Closes out the "adoption disabled" containment measure from July 2026's second wave with a lasting fix rather than an indefinite lock. Purely AUR-side infrastructure policy — no code or list change in archcanary follows from it.
+
 ## v0.1.28 (2026-08-12)
 
 - Added: `check_pkgbuild_caches` Pattern 9 — flags a PKGBUILD that declares the same `source=()`/`source_$CARCH=()` key more than once. makepkg only ever honors the last assignment, so an earlier one is dead code; a legitimate PKGBUILD never has a reason to declare the same key twice (per-arch keys are tracked separately and don't collide with each other or the bare `source=`, so the normal multi-arch idiom isn't flagged). Prompted by `storageexplorer-bin` (below): a fake `source=('optimizer')` prepended above the real array to stage a git-tracked binary makepkg never actually references — a later push correcting the array would silently arm it.
