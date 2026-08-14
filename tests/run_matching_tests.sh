@@ -1023,6 +1023,37 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: per-arch source_\$CARCH=() incorrectly flagged, rc=$rc, out: $out"
     fi
+
+    # Sub-test N: source=() followed by source+=(...) (idiomatic array
+    # append) -> NOT flagged. Regression guard for a real false positive
+    # reported live on vscodium-bin: its PKGBUILD declares source=(...) then
+    # appends one more entry via source+=("...code.svg"), which the
+    # duplicate-source regex used to conflate with a second cold source=()
+    # declaration since its capture group didn't distinguish "=" from "+=".
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-source-append" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* && "$out" != *"duplicate"* ]]; then
+        pass "pkgbuild_obfuscation: source=() then source+=() append not flagged as duplicate"
+    else
+        fail "pkgbuild_obfuscation: source=() then source+=() append incorrectly flagged, rc=$rc, out: $out"
+    fi
+
+    # Sub-test O: source+=('optimizer') staged BEFORE the real source=(...)
+    # -> WARNING. Regression guard for the storageexplorer-bin attack with
+    # the two operators swapped: source+=(...) on an as-yet-unset array is
+    # bash-equivalent to source=(...), so a fake entry staged via += before
+    # a later bare source=() is silently discarded exactly like the
+    # already-caught two-bare-= case (Sub-test L) -- the Sub-test N fix must
+    # not blind the check to this ordering just because a `+=` is involved.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-source-append-before-dup" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: duplicate source=() declaration in"* ]]; then
+        pass "pkgbuild_obfuscation: source+=() staged before real source=() detected as duplicate"
+    else
+        fail "pkgbuild_obfuscation: source+=() staged before real source=() not detected, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------
