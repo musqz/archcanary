@@ -38,7 +38,7 @@ sudo archcanary --full
 # Check setup health
 archcanary --doctor
 
-# Refresh package list from the live HedgeDoc, then scan
+# Refresh package lists online, then scan
 archcanary --refresh --full
 
 # GUI frontend (requires yad)
