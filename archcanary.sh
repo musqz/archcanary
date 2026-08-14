@@ -2682,9 +2682,25 @@ check_pkgbuild_caches() {
             # bin prepended a fake source=('optimizer') above the real
             # source=() to stage a git-tracked binary makepkg never actually
             # references -- a later push correcting the array would arm it.
-            if $_is_pkgbuild && [[ "$line" =~ ^[[:space:]]*(source(_[A-Za-z0-9_]+)?)\+?=\( ]]; then
+            # Only a bare `=` is destructive -- it unconditionally replaces
+            # the whole array, silently discarding anything assigned to the
+            # same key before it (via `=` or `+=`). `source+=(...)` never
+            # discards anything, so it must never itself trip this check
+            # (e.g. vscodium-bin's legitimate source=(...) then
+            # source+=("...code.svg")) -- but a prior `+=` still counts as
+            # "already assigned" for the purpose of catching a *later* bare
+            # `=` that wipes it out, since `source+=('optimizer')` staged
+            # before the real `source=(...)` is the storageexplorer-bin
+            # attack with the two operators swapped, not a different case.
+            # Known limitation: `unset source` between two assignments resets
+            # the array outside what this line-by-line tracker models, so
+            # `source=(A); unset source; source+=(B)` still isn't caught --
+            # not worth chasing further; Pattern 9 is a best-effort heuristic
+            # like the others in this scan, not an adversarial-proof parser.
+            if $_is_pkgbuild && [[ "$line" =~ ^[[:space:]]*(source(_[A-Za-z0-9_]+)?)(\+?)=\( ]]; then
                 local _key="${BASH_REMATCH[1]}"
-                if [[ -n "${_source_seen[$_key]:-}" ]]; then
+                local _is_append="${BASH_REMATCH[3]}"
+                if [[ -z "$_is_append" && -n "${_source_seen[$_key]:-}" ]]; then
                     _dup_source_key="$_key"
                 fi
                 _source_seen["$_key"]=1

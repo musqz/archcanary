@@ -1,0 +1,13 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-source-append
+pkgver=1.0
+pkgrel=1
+arch=('x86_64')
+source=('pkg.desktop' 'pkg.install')
+source+=("https://example.com/icon.svg")
+sha256sums=('0000000000000000000000000000000000000000000000000000000000000000'
+            '0000000000000000000000000000000000000000000000000000000000000000'
+            '0000000000000000000000000000000000000000000000000000000000000000')
+package() {
+    install -m 755 "pkg-1.0/pkg" "${pkgdir}/usr/bin/pkg"
+}
