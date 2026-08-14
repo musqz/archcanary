@@ -79,19 +79,50 @@ much it changed since the last run — handy for noticing a threat-intel feed
 just grew:
 
 ```
+archcanary --refresh
+Fetching infected package list...
+Updating /home/vogel/.config/archcanary/package_list.txt...
+Fetching malicious npm list...
+Updated /home/vogel/.config/archcanary/malicious_npm_packages.txt (4 entries)
+Fetching CHAOS RAT list...
+Updated /home/vogel/.config/archcanary/chaos_rat_packages.txt (7 entries)
+Fetching Russian spam list...
+Updated /home/vogel/.config/archcanary/malicious_russian_spam_packages.txt (75 entries)
+Fetching community reports list...
+Updated /home/vogel/.config/archcanary/community_reports.txt (93 entries)
+Fetching aur-audit black list...
+Updated /home/vogel/.config/archcanary/aur_audit_black.txt (101 entries)
+Fetching aur-audit red list...
+Updated /home/vogel/.config/archcanary/aur_audit_red.txt (269 entries)
 ============================================================
- Archcanary v0.1.20
- Scanned: 2026-08-01 16:14
+ Archcanary v0.1.28
+ Scanned: 2026-08-14 12:41
 
  Lists loaded
    package_list.txt  infostealer + eBPF rootkit  1936 pkgs
    + CHAOS RAT         7 pkgs
    + Russian Spam     75 pkgs
-   + aur-audit black 101 pkgs (+17)
-   + aur-audit red   306 pkgs (+27)
-   + extra: archlinux-list.txt    68 pkgs
+   + Community Reports 93 pkgs
+   + aur-audit black 101 pkgs
+   + aur-audit red   269 pkgs
 
- Packages checked: 2493
+ Packages checked: 2481
+============================================================
+
+--- [1] Currently installed foreign packages ---
+  Clean: no infected packages currently installed.
+
+--- [2] Historical pacman logs ---
+  Clean: no historical log matches found.
+
+
+ Check summary
+ ───────────────────────────────────────────────────────
+ [1]  Package list (2481 pkgs)             ✅  clean
+ [2]  pacman.log history                   ✅  clean
+ ───────────────────────────────────────────────────────
+============================================================
+ RESULT: CLEAN - No indicators found.
 ============================================================
 ```
 
