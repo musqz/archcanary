@@ -2600,6 +2600,44 @@ check_pkgbuild_caches() {
     local re_ansi_c
     re_ansi_c='\$'"'"'(\\x[0-9a-fA-F]{2}|\\[0-7]{1,3}){3,}'
 
+    # Tor/SOCKS-proxied fetch (curl -x socks5h://..., torsocks, proxychains,
+    # or a bare .onion URL) — a real 2026-08-23 AUR incident (xsnow/xsnow-bin,
+    # reported on aur-general) used exactly this to pull a payload binary
+    # through Tor from a .install scriptlet, evading plain URL-blocklist
+    # scanning. No legitimate PKGBUILD/.install fetches a build source or
+    # dependency through Tor.
+    # -[A-Za-z]*x / -[A-Za-z]*[oO] (not bare -x / -[oO]) so a bundled short
+    # option cluster (e.g. curl's extremely common `-fsSLo file`/`-fsSLx
+    # proxy` idiom, boolean flags bundled ahead of the value-taking one)
+    # isn't missed just because it isn't written as a standalone flag —
+    # caught in code review, verified live with a real bundled-flag PoC.
+    local re_tor_proxy='(curl|wget)[[:space:]].*(-[A-Za-z]*x[[:space:]]*socks[0-9]?h?://|--socks[0-9]?h?[[:space:]]|--proxy[[:space:]]+socks)'
+    local re_torsocks='(^|[;&|[:space:]])(torsocks|proxychains4?)[[:space:]]'
+    # Trailing delimiter is optional (end-of-line included) — a bare .onion
+    # URL as the last token on a line has nothing after it to delimit on.
+    local re_onion='\.onion([/"'"'"'[:space:]]|$)'
+
+    # Fetching straight into a system path (/usr, /etc, /opt, /boot) instead
+    # of the makepkg build sandbox ($srcdir/$pkgdir) — same incident: the
+    # scriptlet curl'd a binary directly to /usr/local/bin/systemmanager,
+    # bypassing pacman's own file tracking entirely.
+    local re_dl_syspath='(curl|wget)[[:space:]].*-[A-Za-z]*[oO][[:space:]]*/(usr|etc|opt|boot)/'
+
+    # A reference to the AUR's own git SSH remote (aur@aur.archlinux.org) —
+    # the same incident's self-propagation mechanism: harvest each local
+    # user's SSH keys, clone every repo the key can push to, and commit a
+    # trojaned install= field back into it. No legitimate PKGBUILD/.install
+    # has any reason to reference this remote at all.
+    local re_aur_ssh='aur@aur\.archlinux\.org'
+
+    # pacman invoked non-interactively from inside a scriptlet — pacman
+    # cannot safely re-enter itself mid-transaction, so any real .install
+    # usage of pacman is a read-only query (e.g. `pacman -Qi`, as
+    # archcanary's own PKGBUILD does). --noconfirm only makes sense paired
+    # with a mutating operation (-S/-R), which the incident used to silently
+    # install an unrelated dependency (tor) to stage its backdoor.
+    local re_pacman_noninteractive='pacman[[:space:]].*--noconfirm'
+
     while IFS= read -r file; do
         (( scanned++ )) || true
         local lineno=0
@@ -2664,6 +2702,42 @@ check_pkgbuild_caches() {
                [[ "$line" =~ \|[[:space:]]*(bash|sh|eval) ]]; then
                 echo "  WARNING: rev/tr pipe-to-shell obfuscation in $file:$lineno"
                 echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 10: Tor/SOCKS-proxied network fetch ---
+            if [[ "$line" =~ $re_tor_proxy ]] || [[ "$line" =~ $re_torsocks ]] || \
+               [[ "$line" =~ $re_onion ]]; then
+                echo "  WARNING: Tor/SOCKS-proxied fetch in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 11: download straight into a system path ---
+            if [[ "$line" =~ $re_dl_syspath ]]; then
+                echo "  WARNING: download targets a system path (bypasses pacman) in $file:$lineno"
+                echo "    $line"
+                found_count=2
+            fi
+
+            # --- Pattern 12: reference to the AUR's own git SSH remote ---
+            if [[ "$line" =~ $re_aur_ssh ]]; then
+                echo "  WARNING: reference to the AUR git SSH remote in $file:$lineno"
+                echo "    $line"
+                echo "    A PKGBUILD/.install has no legitimate reason to touch its own AUR"
+                echo "    remote -- this is the self-propagation mechanism seen in the"
+                echo "    2026-08 xsnow/xsnow-bin incident (harvest local SSH keys, push a"
+                echo "    trojaned install= into every other repo reachable with them)."
+                found_count=2
+            fi
+
+            # --- Pattern 13: pacman invoked non-interactively from a scriptlet ---
+            if [[ "$line" =~ $re_pacman_noninteractive ]]; then
+                echo "  WARNING: non-interactive pacman call in $file:$lineno"
+                echo "    $line"
+                echo "    pacman can't safely re-enter itself mid-transaction -- a real"
+                echo "    .install usage is a read-only query, never a mutating -S/-R with"
+                echo "    --noconfirm."
                 found_count=2
             fi
 

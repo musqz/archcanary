@@ -1054,6 +1054,106 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: source+=() staged before real source=() not detected, rc=$rc, out: $out"
     fi
+
+    # Sub-tests P-S: patterns added after the 2026-08-23 xsnow/xsnow-bin
+    # AUR incident (aur-general mailing list) — a .install scriptlet pulled
+    # a payload binary through Tor into /usr/local/bin, then self-propagated
+    # by harvesting local SSH keys and pushing a trojaned install= field
+    # into every other AUR repo reachable with them. Fixtures below use the
+    # actual technique from the real .xsnow.install, not a paraphrase.
+
+    # Sub-test P: curl through a SOCKS/Tor proxy to an .onion address → WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-tor-fetch" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: Tor/SOCKS-proxied fetch in"* ]]; then
+        pass "pkgbuild_obfuscation: Tor/SOCKS-proxied fetch detected"
+    else
+        fail "pkgbuild_obfuscation: Tor/SOCKS-proxied fetch not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Q: download written straight into /usr/local/bin (not the
+    # makepkg sandbox) → WARNING. Regression guard: a clean PKGBUILD fetching
+    # its own source into $srcdir must NOT trip this (checked via pkg-clean
+    # in Sub-test E already using a plain source=() URL, no -o at all).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-dl-syspath" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: download targets a system path"* ]]; then
+        pass "pkgbuild_obfuscation: download-to-system-path detected"
+    else
+        fail "pkgbuild_obfuscation: download-to-system-path not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test R: reference to the AUR's own git SSH remote → WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-aur-ssh" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: reference to the AUR git SSH remote in"* ]]; then
+        pass "pkgbuild_obfuscation: AUR git SSH remote reference detected"
+    else
+        fail "pkgbuild_obfuscation: AUR git SSH remote reference not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test S: pacman -S --noconfirm invoked from a scriptlet → WARNING.
+    # Regression guard: a read-only pacman query (e.g. -Qi, as archcanary's
+    # own PKGBUILD post_install does to check whether lynis is installed)
+    # must NOT trip this — no --noconfirm on that line, covered by pkg-clean
+    # staying clean in Sub-test E.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pacman-noninteractive" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: non-interactive pacman call in"* ]]; then
+        pass "pkgbuild_obfuscation: non-interactive pacman call detected"
+    else
+        fail "pkgbuild_obfuscation: non-interactive pacman call not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test T: a single scriptlet combining all four techniques (same
+    # shape as the real .xsnow.install, values defanged/synthetic — not the
+    # verbatim incident payload, deliberately not committing a working
+    # backdoor script into the repo) → all four new patterns fire on one
+    # file. Belt-and-suspenders: any one pattern alone already flags it, but
+    # this guards against a future edit narrowing a regex enough to lose
+    # coverage on the combined real-world shape.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-multi-technique" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"Tor/SOCKS-proxied fetch"* \
+          && "$out" == *"download targets a system path"* \
+          && "$out" == *"reference to the AUR git SSH remote"* \
+          && "$out" == *"non-interactive pacman call"* ]]; then
+        pass "pkgbuild_obfuscation: combined multi-technique payload caught by all 4 new patterns"
+    else
+        fail "pkgbuild_obfuscation: combined multi-technique payload not fully caught, rc=$rc, out: $out"
+    fi
+
+    # Sub-tests U-V: regression guards for two evasions of Sub-test P found in
+    # code review, both confirmed live before the fix — the original re_tor_proxy/
+    # re_dl_syspath required "-x"/"-o" as a standalone flag, so curl's extremely
+    # common bundled short-option style (-fsSLx, -fsSLo) evaded both patterns
+    # entirely; re_onion required a delimiter right after ".onion", so a bare
+    # .onion URL as the last token on a line evaded it too.
+
+    # Sub-test U: bundled curl flags (-fsSLx proxy ... ) → still WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-tor-fetch-bundled" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: Tor/SOCKS-proxied fetch in"* ]]; then
+        pass "pkgbuild_obfuscation: bundled curl short-flags (-fsSLx) still detected"
+    else
+        fail "pkgbuild_obfuscation: bundled curl short-flags (-fsSLx) evaded detection, rc=$rc, out: $out"
+    fi
+
+    # Sub-test V: bare .onion URL at end-of-line (no trailing delimiter) → still WARNING
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-onion-eol" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: Tor/SOCKS-proxied fetch in"* ]]; then
+        pass "pkgbuild_obfuscation: bare .onion URL at end-of-line still detected"
+    else
+        fail "pkgbuild_obfuscation: bare .onion URL at end-of-line evaded detection, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------

