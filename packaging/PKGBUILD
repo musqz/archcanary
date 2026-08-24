@@ -59,6 +59,13 @@ package() {
     "$pkgdir/usr/lib/archcanary/lynis-custom.prf"
   install -Dm644 configs/audit-rules.conf \
     "$pkgdir/usr/lib/archcanary/audit-rules.conf"
+  # yay Lua hook template — read-only reference copy, never installed to
+  # ~/.config/yay/init.lua automatically (that's a per-user path a pacman
+  # transaction can't reach, and hooks are opt-in either way). Lets an
+  # AUR-only install (no git clone) still have something to `cp`; see
+  # `archcanary --doctor`.
+  install -Dm644 configs/yay-init.lua \
+    "$pkgdir/usr/lib/archcanary/yay-init.lua"
 
   # Polkit policy (authorises root-helper via pkexec)
   install -Dm644 configs/org.archcanary.policy \

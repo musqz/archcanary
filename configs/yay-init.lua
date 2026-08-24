@@ -1,13 +1,19 @@
--- ~/.config/yay/init.lua
+-- Template for ~/.config/yay/init.lua — yay's own hook filename, hardcoded
+-- by yay itself (not archcanary's choice). This file is never copied there
+-- automatically by any archcanary install path (AUR package or install.sh):
+-- it's your per-user yay config, and the hook is opt-in. Copy it yourself:
+--   cp configs/yay-init.lua ~/.config/yay/init.lua      # from a git clone
+--   cp /usr/lib/archcanary/yay-init.lua ~/.config/yay/init.lua   # AUR package
+-- `archcanary --doctor` prints the exact command for your install and flags
+-- an existing copy as outdated when the hooks below have moved on.
 --
 -- yay 13.0 Lua hooks for the AUR security stack (v9).
--- Seeded to ~/.config/yay/init.lua by install.sh if not already present.
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
 --
 -- Version marker above (the "(vN)" suffix) is checked by `--doctor` to
--- detect a stale local copy, since install.sh never overwrites an existing
+-- detect a stale local copy, since nothing ever overwrites an existing
 -- init.lua. Bump it whenever the hooks below change; never touch the text
 -- before "(vN)", since --doctor also prefix-matches on that stable part to
 -- tell "some archcanary version present" from "never installed".

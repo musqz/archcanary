@@ -178,7 +178,17 @@ sudo pacman -S libnotify bpf yad polkit
 
 ## yay 13.0 integration
 
-The yay 13.0 Lua hooks (`~/.config/yay/init.lua`) — seeded by `install.sh` **only if the file doesn't already exist** (source: [`configs/yay-init.lua`](../configs/yay-init.lua)). If you already have an `init.lua` from before a hook was added here, `install.sh` won't retrofit it — re-copy `configs/yay-init.lua` by hand (merging in any of your own customizations) to pick up new hooks. An offline backstop that fires on every AUR build:
+The yay 13.0 Lua hooks (`~/.config/yay/init.lua`) — **never installed automatically**, by either the AUR package or `install.sh`: it's a per-user path no install path can reach, and the hook is opt-in regardless. Copy the template in yourself:
+
+```bash
+# from a git clone
+cp configs/yay-init.lua ~/.config/yay/init.lua
+
+# from the AUR package
+cp /usr/lib/archcanary/yay-init.lua ~/.config/yay/init.lua
+```
+
+`archcanary --doctor` prints the exact command for your install (source: [`configs/yay-init.lua`](../configs/yay-init.lua)) and re-copy it by hand (merging in any of your own customizations) whenever `--doctor` flags your copy as outdated — nothing ever overwrites an existing `init.lua` for you. An offline backstop that fires on every AUR build:
 
 | Hook | Event | What it does |
 |------|-------|--------------|
@@ -208,7 +218,6 @@ git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 sudo pacman -S libnotify bpf yad polkit
 
 # 3. Run install script (installs to ~/.local/bin by default)
-#    Also seeds ~/.config/yay/init.lua if not already present
 bash ~/Github/archcanary/install.sh
 
 # Also install root helper + polkit policy (enables eBPF/kmod checks in the GUI)

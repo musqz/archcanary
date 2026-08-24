@@ -744,7 +744,21 @@ run_doctor() {
         installer="install.sh  # (cd to the archcanary repo first)"
         installer_sys="install.sh --system  # (cd to the archcanary repo first)"
     fi
-    [[ -f $luasrc ]] || luasrc="configs/yay-init.lua  # (from the archcanary repo)"
+    # Not run from a clone (AUR install): fall back to the read-only template
+    # the package ships at /usr/lib/archcanary/yay-init.lua so there's still
+    # something to `cp` from without needing a git clone. (Not reusing
+    # _bundled_list_path for this — it's defined much later in this script,
+    # past the --doctor dispatch's own `exit`, so it isn't callable yet.)
+    # luasrc_found tracks whether $luasrc is an actual file — when it's
+    # neither, no path is safe to embed in a literal `cp` command below.
+    local luasrc_found=1
+    if [[ ! -f $luasrc ]]; then
+        if [[ -f /usr/lib/archcanary/yay-init.lua ]]; then
+            luasrc="/usr/lib/archcanary/yay-init.lua"
+        else
+            luasrc_found=0
+        fi
+    fi
 
     # --- Section selection -------------------------------------------------
     # Sections are listed in install order (prerequisite chain) so a full run
@@ -1012,23 +1026,35 @@ run_doctor() {
         # comment (not a public API, just this project's own convention) — if
         # that header ever changes, bump these too. STABLE prefix-matches any
         # archcanary-authored version; CURRENT matches only the exact latest
-        # one, so a present-but-outdated copy (install.sh never overwrites an
-        # existing init.lua — see docs/my-setup.md, "yay 13.0 integration")
-        # is distinguishable from "never installed". This check fails
-        # silently (reports a working hook as missing) rather than erroring
-        # out.
+        # one, so a present-but-outdated copy is distinguishable from "never
+        # installed". Nothing ever writes $yay_init_lua automatically — it's
+        # a per-user path no install path can reach, and the hook is opt-in
+        # either way (see docs/my-setup.md, "yay 13.0 integration") — so
+        # "never installed" is the common, unremarkable case, not a failure.
+        # This check fails silently (reports a working hook as missing)
+        # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
         local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v9)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
+        # No local copy at all (neither a git clone nor an AUR/--system
+        # install) — nothing safe to embed in a literal `cp` command.
+        local _lua_fix
+        if [[ $luasrc_found -eq 1 ]]; then
+            _lua_fix="cp $luasrc $yay_init_lua"
+        else
+            _lua_fix="grab configs/yay-init.lua from https://github.com/musqz/archcanary, then cp it to $yay_init_lua"
+        fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         if [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_CURRENT" "$yay_init_lua")" -eq 0 ]]; then
             _ok "$_lua_label" "path: $yay_init_lua"
         elif [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_STABLE" "$yay_init_lua")" -eq 0 ]]; then
             _warn "$_lua_label (outdated)" \
-                "cp $luasrc $yay_init_lua   # merge in any of your own customizations first" \
+                "$_lua_fix   # merge in any of your own customizations first" \
                 "$yay_init_lua's archcanary-managed hooks are from an older version"
         else
-            _opt "$_lua_label" "" "path: $yay_init_lua"
+            _opt "$_lua_label" \
+                "$_lua_fix" \
+                "not installed — hooks are opt-in, never installed automatically; path once enabled: $yay_init_lua"
         fi
         if command -v paru >/dev/null 2>&1; then
             local paru_conf="${XDG_CONFIG_HOME:-$real_home/.config}/paru/paru.conf"
