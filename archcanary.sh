@@ -1038,11 +1038,16 @@ run_doctor() {
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
-        local _lua_fix
+        # _lua_source_hint names the same resolved source in prose, for the
+        # "merge by hand" branch below, which can't just reuse _lua_fix
+        # verbatim since that one's a `cp` (i.e. overwrite) command.
+        local _lua_fix _lua_source_hint
         if [[ $luasrc_found -eq 1 ]]; then
             _lua_fix="cp $luasrc $yay_init_lua"
+            _lua_source_hint="$luasrc"
         else
             _lua_fix="grab configs/yay-init.lua from https://github.com/musqz/archcanary, then cp it to $yay_init_lua"
+            _lua_source_hint="configs/yay-init.lua (https://github.com/musqz/archcanary)"
         fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         if [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_CURRENT" "$yay_init_lua")" -eq 0 ]]; then
@@ -1051,6 +1056,15 @@ run_doctor() {
             _warn "$_lua_label (outdated)" \
                 "$_lua_fix   # merge in any of your own customizations first" \
                 "$yay_init_lua's archcanary-managed hooks are from an older version"
+        elif [[ -e $yay_init_lua ]]; then
+            # Present but no archcanary marker at all — could be the user's
+            # own hand-written yay 13.0 hooks (yay 13.0's Lua hook support is
+            # its headline feature) or a copy from before markers existed.
+            # Either way it's not ours to overwrite: no `cp` suggestion here,
+            # unlike the two branches above/below.
+            _opt "$_lua_label (present, not archcanary-managed)" \
+                "back it up, then merge in the hooks from $_lua_source_hint by hand — see docs/my-setup.md, \"yay 13.0 integration\"" \
+                "$yay_init_lua exists without archcanary's marker — not overwriting it automatically"
         else
             _opt "$_lua_label" \
                 "$_lua_fix" \

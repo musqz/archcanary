@@ -188,7 +188,7 @@ cp configs/yay-init.lua ~/.config/yay/init.lua
 cp /usr/lib/archcanary/yay-init.lua ~/.config/yay/init.lua
 ```
 
-`archcanary --doctor` prints the exact command for your install (source: [`configs/yay-init.lua`](../configs/yay-init.lua)) and re-copy it by hand (merging in any of your own customizations) whenever `--doctor` flags your copy as outdated — nothing ever overwrites an existing `init.lua` for you. An offline backstop that fires on every AUR build:
+`archcanary --doctor` prints the exact command for your install (source: [`configs/yay-init.lua`](../configs/yay-init.lua)). Re-copy it by hand (merging in any of your own customizations) whenever `--doctor` flags your copy as outdated — nothing ever overwrites an existing `init.lua` for you, whether it's an older archcanary copy or hooks you wrote yourself. An offline backstop that fires on every AUR build:
 
 | Hook | Event | What it does |
 |------|-------|--------------|
