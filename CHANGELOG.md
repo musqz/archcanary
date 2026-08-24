@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.30 (unreleased)
+
+- Changed: the yay Lua hook template (`configs/yay-init.lua`) is now also shipped read-only to `/usr/lib/archcanary/yay-init.lua` (AUR package and `install.sh --system`), same pattern as `lynis-custom.prf`. v0.1.29 stopped seeding `~/.config/yay/init.lua` automatically (correctly — it's a per-user path no install step should reach, and the hook is opt-in) but left AUR-only installs with no local copy to `cp` from at all. `archcanary --doctor` now resolves the fix command against this path when no git clone is present.
+- Fix: `archcanary --doctor` printed no actionable guidance at all when `~/.config/yay/init.lua` was simply never installed (the common case) — just a silent `[OPT ]` line. Now prints a one-line `cp` command to enable it (falling back to a plain-language pointer at the GitHub repo when neither a git clone nor the new system template is present, rather than embedding a `# comment`-truncated, non-pasteable command — the same latent bug this also fixed in the pre-existing "outdated copy" warning).
+
 ## v0.1.29 (2026-08-24)
 
 - Added: `check_pkgbuild_caches` gained four patterns — Tor/SOCKS-proxied fetches (`curl -x socks5h://...`, `torsocks`, bare `.onion` URLs), downloads written straight into a system path (`/usr`, `/etc`, `/opt`, `/boot`) instead of the makepkg build sandbox, references to the AUR's own git SSH remote (`aur@aur.archlinux.org`), and non-interactive `pacman` calls (`--noconfirm`) from inside a scriptlet. Prompted by the `xsnow`/`xsnow-bin` AUR incident (2026-08-23, aur-general mailing list): a dot-prefixed `.install` scriptlet pulled a payload binary through Tor into `/usr/local/bin`, then harvested every local user's SSH keys to self-propagate a trojaned `install=` field into other AUR repos reachable with them. Both curl/tor patterns account for bundled short-option style (`-fsSLx`, `-fsSLo`) and a delimiter-less end-of-line `.onion` host — both evasions found and fixed during review before merge.

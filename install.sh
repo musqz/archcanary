@@ -235,7 +235,8 @@ done
 
 # Seed paru's PreBuildCommand hook — only when paru is actually installed.
 # Never touches an existing PreBuildCommand line, ours or the user's own,
-# at any version — same "never overwrite" rule as yay's init.lua above.
+# at any version. (yay's equivalent, configs/yay-init.lua, is never seeded
+# here at all — copy it in yourself, see `archcanary --doctor`.)
 if command -v paru >/dev/null 2>&1; then
     PARU_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/paru"
     PARU_CONF="$PARU_CONFIG_DIR/paru.conf"
