@@ -241,6 +241,20 @@ don't apply to your setup.
 
 ## Installation
 
+### From the AUR
+
+```bash
+yay -S archcanary
+# or
+paru -S archcanary
+```
+
+This runs `install.sh` automatically as part of the package build/install —
+see below for what that sets up, and enable the timers manually afterward
+(neither install path turns them on for you).
+
+### From source
+
 ```bash
 # User install — scripts, config seeding, desktop entry
 ./install.sh
