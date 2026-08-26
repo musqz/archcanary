@@ -20,6 +20,11 @@ against the known-bad list and scans
 .I /var/log/pacman.log
 for historical installs.
 All checks are read-only; nothing is removed or quarantined.
+.PP
+.B archcanary-tui
+provides an interactive, menu-driven front end over the same checks and
+list/config management flags documented below \(em no separate options of
+its own.
 .SH OPTIONS
 .SS Scan checks
 .TP
@@ -127,6 +132,15 @@ their homes, not just yours — privilege-dropped per user via
 For shared/multi-user machines. Requires root. Not included in
 .BR \-\-full .
 .TP
+\fB\-\-scan\-user\fR=\fINAME\fR
+Same checks as
+.BR \-\-scan\-all\-homes ,
+but against one named user's home instead of enumerating everyone.
+Repeatable, de-duplicated, mutually exclusive with
+.BR \-\-scan\-all\-homes .
+Requires root. Not included in
+.BR \-\-full .
+.TP
 .B \-\-search\-packages= PKG [, PKG ...]
 Check package name(s) against every loaded threat list, independent of
 what's installed locally. No scan is run; prints a ready-to-copy
@@ -181,6 +195,14 @@ Load an additional package list from a file path or
 .B https://
 URL.
 Repeatable.
+.TP
+\fB\-\-start-date\fR=\fIYYYY\-MM\-DD\fR
+Only flag packages installed on or after this date. Env:
+.IR START_DATE .
+.TP
+\fB\-\-end-date\fR=\fIYYYY\-MM\-DD\fR
+Only flag packages installed on or before this date. Env:
+.IR END_DATE .
 .SS Output control
 .TP
 .BR \-\-verbose ", " \-v
@@ -211,6 +233,10 @@ Control color and Unicode symbol output (default:
 .BR auto ).
 .B auto
 enables color only when stdout is a terminal.
+.TP
+\fB\-\-format\fR=\fItext\fR|\fIjson\fR
+Output a JSON summary instead of the human-readable report (default:
+.BR text ).
 .SS Health check
 .TP
 .B \-\-doctor
@@ -224,6 +250,70 @@ Sections:
 Tool names
 .RB ( paru ", " bpftool \&...)
 are also accepted.
+.SS List and config editing
+.TP
+\fB\-\-allowlist\-list\fR=\fINAME\fR
+List entries in an allowlist and exit.
+.I NAME
+is one of
+.BR dkms ", " systemd ", " bpftool ", " autostart .
+.TP
+\fB\-\-allowlist\-add\fR=\fINAME\fR:\fIVALUE\fR
+Add
+.I VALUE
+to an allowlist and exit. Requires root.
+.TP
+\fB\-\-allowlist\-remove\fR=\fINAME\fR:\fIVALUE\fR
+Remove
+.I VALUE
+from an allowlist and exit. Requires root.
+.TP
+.B \-\-extra\-lists\-list
+List
+.I ~/.config/archcanary/extra_lists.conf
+entries and exit.
+.TP
+\fB\-\-extra\-lists\-add\fR=\fIVALUE\fR
+Add a path or URL to
+.I extra_lists.conf
+and exit.
+.TP
+\fB\-\-extra\-lists\-remove\fR=\fIVALUE\fR
+Remove a path or URL from
+.I extra_lists.conf
+and exit.
+.TP
+.B \-\-aur\-audit\-status
+Print the
+.I aur\-audit.wtako.net
+feed setting
+.RI ( true / false )
+and exit.
+.TP
+.B \-\-aur\-audit\-enable
+Enable the
+.I aur\-audit.wtako.net
+feed on
+.BR \-\-refresh .
+.TP
+.B \-\-aur\-audit\-disable
+Disable the
+.I aur\-audit.wtako.net
+feed on
+.BR \-\-refresh .
+.TP
+.B \-\-audit\-rules\-get
+Print the auditd rules file and exit.
+.TP
+.B \-\-audit\-rules\-set
+Read new auditd rules from stdin and save. Requires root.
+.TP
+.B \-\-lynis\-config\-get
+Print the Lynis custom profile and exit.
+.TP
+.B \-\-lynis\-config\-set
+Read a new Lynis custom profile from stdin and save. Requires root.
+.SS Version and help
 .TP
 .B \-\-version ", " \-V
 Print the version and exit.
