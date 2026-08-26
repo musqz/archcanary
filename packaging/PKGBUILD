@@ -8,9 +8,8 @@ url="https://github.com/musqz/archcanary"
 license=('MIT')
 depends=('bash' 'pacman')
 optdepends=(
-  'yad: GTK GUI frontend (archcanary-gui)'
   'libnotify: desktop alerts on infected scan result'
-  'polkit: GUI privilege escalation for root checks'
+  'polkit: privileged remediation commands (allowlist edits, audit-rules/lynis-config writes)'
   'bpf: bpftool for eBPF rootkit detection'
   'yay: AUR helper with Lua hook support'
   'paru: AUR helper with PreBuildCommand hook support'
@@ -29,14 +28,13 @@ package() {
 
   # Stamp the real version into the placeholder install.sh normally sed's at
   # install time — package() bypasses install.sh entirely, so without this
-  # every installed copy keeps the literal "@VERSION@" and -V/About show
-  # "unknown" (archcanary-gui's About dialog runs `archcanary --version`).
+  # every installed copy keeps the literal "@VERSION@" and --version shows
+  # "unknown".
   sed -i "s/@VERSION@/$pkgver/" archcanary.sh
   sed -i "s/@VERSION@/$pkgver/" man/archcanary.1
 
-  # Main user-facing binaries
+  # Main user-facing binary
   install -Dm755 archcanary.sh    "$pkgdir/usr/bin/archcanary"
-  install -Dm755 archcanary-gui.sh "$pkgdir/usr/bin/archcanary-gui"
 
   # Man page
   install -Dm644 man/archcanary.1 "$pkgdir/usr/share/man/man1/archcanary.1"
@@ -70,10 +68,6 @@ package() {
   # Polkit policy (authorises root-helper via pkexec)
   install -Dm644 configs/org.archcanary.policy \
     "$pkgdir/usr/share/polkit-1/actions/org.archcanary.policy"
-
-  # Desktop entry
-  install -Dm644 configs/archcanary.desktop \
-    "$pkgdir/usr/share/applications/archcanary.desktop"
 
   # Systemd system units (root scan: weekly timer + pacman-triggered path;
   # scan-all-homes: opt-in weekly sweep of every real local user's home)

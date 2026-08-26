@@ -157,9 +157,7 @@ leaving any previously fetched black/red lists on disk untouched. Persists
 across runs via
 .I AUR_AUDIT_ENABLE=false
 in
-.I ~/.config/archcanary/env
-(also toggleable from
-.BR archcanary-gui "'s " "Scan settings" " menu row)."
+.IR ~/.config/archcanary/env .
 .TP
 \fB\-\-package-list\fR=\fIPATH\fR
 Override the infected AUR package list (default:
@@ -224,7 +222,7 @@ Check only the named section(s) with extra per-item detail.
 Sections:
 .BR platform ", " deps ", " user ", " system ", " systemd ", " external .
 Tool names
-.RB ( paru ", " yad \&...)
+.RB ( paru ", " bpftool \&...)
 are also accepted.
 .TP
 .B \-\-version ", " \-V

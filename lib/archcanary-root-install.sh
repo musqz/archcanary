@@ -22,10 +22,8 @@ case "$mode" in
 install-bins)
     REPO_DIR="$1"; VERSION="$2"
     install -m 755 "$REPO_DIR/archcanary.sh"     "$SYSTEM_BIN/archcanary"
-    install -m 755 "$REPO_DIR/archcanary-gui.sh" "$SYSTEM_BIN/archcanary-gui"
     sed -i "s/@VERSION@/$VERSION/" "$SYSTEM_BIN/archcanary"
     echo "  installed: $SYSTEM_BIN/archcanary"
-    echo "  installed: $SYSTEM_BIN/archcanary-gui"
 
     install -d -m 755 /usr/share/man/man1
     sed "s/@VERSION@/$VERSION/" "$REPO_DIR/man/archcanary.1" > /usr/share/man/man1/archcanary.1
@@ -40,9 +38,7 @@ install-bins)
     ;;
 
 cleanup-bins)
-    for f in archcanary archcanary-gui; do
-        rm -f "$SYSTEM_BIN/$f"
-    done
+    rm -f "$SYSTEM_BIN/archcanary"
     ;;
 
 install-components)
@@ -200,7 +196,7 @@ EOF
         if ! grep -qE '^\s*-[waAbfe]' "$_audit_cfg" 2>/dev/null; then
             install -m 644 "$REPO_DIR/configs/audit-rules.conf" "$_audit_cfg"
             augenrules --load >/dev/null 2>&1 || true
-            echo "  installed: $_audit_cfg (auditd rules — edit via GUI)"
+            echo "  installed: $_audit_cfg (auditd rules — edit with --audit-rules-get/--audit-rules-set)"
         else
             echo "  kept:      $_audit_cfg (already has rules)"
         fi
@@ -225,14 +221,12 @@ EOF
     ;;
 
 uninstall-bins)
-    for f in archcanary archcanary-gui; do
-        if [[ -f "$SYSTEM_BIN/$f" ]]; then
-            rm -f "$SYSTEM_BIN/$f"
-            echo "  removed: $SYSTEM_BIN/$f"
-        else
-            echo "  not found: $SYSTEM_BIN/$f"
-        fi
-    done
+    if [[ -f "$SYSTEM_BIN/archcanary" ]]; then
+        rm -f "$SYSTEM_BIN/archcanary"
+        echo "  removed: $SYSTEM_BIN/archcanary"
+    else
+        echo "  not found: $SYSTEM_BIN/archcanary"
+    fi
     rm -f /usr/share/man/man1/archcanary.1
     echo "  removed: /usr/share/man/man1/archcanary.1"
     rm -f /usr/share/bash-completion/completions/archcanary \

@@ -40,12 +40,6 @@ archcanary --doctor
 
 # Refresh package lists online, then scan
 archcanary --refresh --full
-
-# GUI frontend (requires yad)
-archcanary-gui
-
-# Full scan in terminal — no GUI, structured summary output
-archcanary-gui --no-gui
 ```
 
 Every scan prints a per-check summary before the final verdict:
@@ -128,19 +122,6 @@ Updated /home/USER/.config/archcanary/aur_audit_red.txt (269 entries)
 
 ---
 
-## Screenshots
-
-<table>
-<tr>
-<td align="center" width="40%">
-<img src="images/gui.png" alt="Archcanary GUI — main menu" width="320"/><br/>
-<sub>Main menu — all checks passed</sub>
-</td>
-</tr>
-</table>
-
----
-
 ## Checks
 
 Every optional check is off by default — bare `archcanary` just matches your
@@ -170,13 +151,13 @@ run everything at once with `--full`.
 | `--check-lynis` | Read last Lynis report — hardening index, warnings, scan date | Yes |
 | `--run-lynis` | Run `lynis audit system`, stream output | Yes |
 | `--check-pkginteg` | Verify installed file checksums via `pacman -Qkk`. Reports SHA256 mismatches on non-backup, non-factory files. Backup files (pacman-managed configs expected to diverge) and `/factory/` paths are filtered out. Prioritise hits in `/usr/bin/`, `/usr/lib/`, `/usr/sbin/`. | Yes |
-| `--check-list-overlap` | A note, not a warning: custom (`--extra-list`) entries already covered by an official list are grouped by file, with a ready-to-run `sed` command to remove them — safe to remove, since the official list is authoritative. Never affects the exit code or the check summary, and not included in `--full`. Also reachable from the GUI: Edit config → List overlap check. | No |
+| `--check-list-overlap` | A note, not a warning: custom (`--extra-list`) entries already covered by an official list are grouped by file, with a ready-to-run `sed` command to remove them — safe to remove, since the official list is authoritative. Never affects the exit code or the check summary, and not included in `--full`. | No |
 | `--scan-all-homes` | Enumerate real local users (UID range from `/etc/login.defs`, valid shell, home dir exists) and run the npm/bun/yarn/pnpm/pkgbuild/autostart checks against each of their homes, not just yours — privilege-dropped per user via `sudo -u`. For shared/multi-user machines; not included in `--full`. | Yes |
 | `--scan-user=NAME` | Same checks as `--scan-all-homes`, but against one named user's home instead of enumerating everyone — repeatable (`--scan-user=alice --scan-user=bob`), mutually exclusive with `--scan-all-homes`, not included in `--full`. | Yes |
 | `--search-packages=PKG[,PKG...]` | Check package name(s) against every loaded threat list, independent of what's installed — no scan, prints a ready-to-copy `pacman -Rns` command for any match, and exits. | No |
 | `--full` | All of the above except `--check-list-overlap`, `--scan-all-homes`, and `--scan-user` | Partial |
 | `--refresh (internet connection)` | Fetch the live package list from the Arch Linux HedgeDoc, plus the supplementary npm/CHAOS RAT/Russian Spam/Community Reports lists and the aur-audit black/red feed | — |
-| `--no-aur-audit` | Skip the aur-audit.wtako.net feed on `--refresh`. Persists via `AUR_AUDIT_ENABLE=false` in `~/.config/archcanary/env`, also toggleable from the GUI's Scan settings menu row | — |
+| `--no-aur-audit` | Skip the aur-audit.wtako.net feed on `--refresh`. Persists via `AUR_AUDIT_ENABLE=false` in `~/.config/archcanary/env` | — |
 | `--verbose`, `-v`, `--debug` | Verbose output (`--debug` also enables `set -x`) | — |
 | `--log-file=PATH` | Write the full detail log to `PATH` (default: `~/.cache/archcanary/aur-check-<date>.log`) | — |
 | `--package-list=PATH` | Override the infected AUR package list | — |
@@ -192,7 +173,7 @@ run everything at once with `--full`.
 | `--color=auto\|always\|never` | Control symbol/color output (default: `auto`; also obeys `NO_COLOR` env) | — |
 | `--format=text\|json` | Output a JSON summary instead of the human-readable report | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
-| `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `paru`/`yad` also map to a section) | — |
+| `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `paru`/`bpftool` also map to a section) | — |
 | `--allowlist-list=NAME` | List entries in an allowlist and exit (`NAME`: `dkms`, `systemd`, `bpftool`, `autostart`) | No |
 | `--allowlist-add=NAME:VALUE` | Add `VALUE` to an allowlist and exit | Yes |
 | `--allowlist-remove=NAME:VALUE` | Remove `VALUE` from an allowlist and exit | Yes |
@@ -278,8 +259,8 @@ youruser yourhostname=(root) /usr/bin/bash /path/to/archcanary/lib/archcanary-ro
 `--system` (and, equivalently, installing the built package via `makepkg -si` or an AUR helper) sets up:
 - Root system timer: weekly + on boot + after each pacman transaction
 - User notifier: watches `/var/lib/archcanary/last-scan.log`, fires a desktop alert on `INFECTED`
-- pkexec root helper for GUI-triggered root checks (eBPF, bpftool, kmod, Lynis)
-- auditd ruleset at `/etc/audit/rules.d/30-archcanary.rules` when auditd is installed (seeded from template, editable via GUI)
+- pkexec root helper for privileged remediation commands (allowlist edits, audit-rules/lynis-config writes)
+- auditd ruleset at `/etc/audit/rules.d/30-archcanary.rules` when auditd is installed (seeded from template, editable via `--audit-rules-get`/`--audit-rules-set`)
 - `archcanary-scan-all-homes.timer`, opt-in and disabled by default (see below) — covers other local users' home checks that the per-user timer only covers for whoever enables it themselves
 
 **Neither install path enables the timers automatically** — activation is always a manual, explicit step:
@@ -313,11 +294,9 @@ does and how it's wired in:
 |---------|----------|
 | [yay](https://github.com/Jguer/yay) 13.0 | Optional |
 | [paru](https://github.com/Morganamilo/paru) | Optional |
-| [yad](https://github.com/v1cont/yad) | GUI only |
-| [noto-fonts-emoji](https://archlinux.org/packages/extra/any/noto-fonts-emoji/) | GUI only (🔐 icons) |
 | [bpftool](https://github.com/libbpf/bpftool) (pkg: `bpf`) | Optional (`--check-bpftool`) |
 | [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | Optional |
-| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | GUI + `--system` install |
+| [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | Optional (privileged remediation) + `--system` install |
 | [lynis](https://cisofy.com/lynis/) | Optional |
 | [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional |
 
@@ -328,7 +307,7 @@ Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malwar
 An automatic layer fires at AUR build time — yay's offline `init.lua` hooks,
 or paru's native `PreBuildCommand` hook, whichever AUR helper you use — plus
 a continuous root scan (`archcanary --full`, weekly + on boot + after every
-pacman transaction), a desktop notifier on detection, and the on-demand GUI.
+pacman transaction) and a desktop notifier on detection.
 paru's hook fires before its own diff/edit review menus (a paru limitation —
 it has no post-review hook point) and only runs the PKGBUILD pattern check,
 not the aur-audit black/red lookup, so yay's integration is the more
@@ -373,7 +352,7 @@ A hand-curated list (`community_reports.txt`), sourced from AUR malware reports 
 
 The same synced lists also gate installs directly: yay's `AURPostDownload` hook (see [yay 13.0 integration](docs/my-setup.md#yay-130-integration)) checks the black/red list itself and aborts on a black hit, warns on a red hit — a pre-build check that needs no LLM. This one's yay-only for now — paru's [`PreBuildCommand` hook](docs/paru-integration.md) runs `archcanary --check-pkgbuild` before every build, which covers the same PKGBUILD obfuscation patterns as yay's hook, but not this aur-audit lookup. A black abort is a blocking action driven by this unverified third-party source; there's no per-source toggle, so the only way to opt out is to stop running `--refresh` (or delete `aur_audit_black.txt`/`aur_audit_red.txt` from `~/.config/archcanary/`), which makes both the hook and the scan-side check silently skip it.
 
-The GUI's "Scan settings" checkbox is framed as "I have an internet connection" rather than an aur-audit-specific toggle — turning it off also stops Full scan from attempting `--refresh` at all, not just the aur-audit sync (CLI users are unaffected: `--no-aur-audit`/`--aur-audit-enable`/`--aur-audit-disable` still work exactly as documented above, since typing `--refresh` yourself already implies you know whether you have a connection). Turning it off only stops *refreshing* `aur_audit_black.txt`/`aur_audit_red.txt` — it doesn't delete files already fetched, so the yay hook keeps using whatever was last synced, indefinitely, with no signal that the data may now be stale.
+Turning it off (`--no-aur-audit` / `--aur-audit-disable`) only stops *refreshing* `aur_audit_black.txt`/`aur_audit_red.txt` — it doesn't delete files already fetched, so the yay hook keeps using whatever was last synced, indefinitely, with no signal that the data may now be stale.
 
 ---
 
