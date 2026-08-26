@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Archcanary
+Comment=Scan for compromised AUR packages
+Exec=archcanary-tui
+Icon=security-high
+Categories=System;Security;
+Terminal=true
+StartupNotify=false
