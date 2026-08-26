@@ -22,8 +22,10 @@ case "$mode" in
 install-bins)
     REPO_DIR="$1"; VERSION="$2"
     install -m 755 "$REPO_DIR/archcanary.sh"     "$SYSTEM_BIN/archcanary"
+    install -m 755 "$REPO_DIR/archcanary-tui.sh" "$SYSTEM_BIN/archcanary-tui"
     sed -i "s/@VERSION@/$VERSION/" "$SYSTEM_BIN/archcanary"
     echo "  installed: $SYSTEM_BIN/archcanary"
+    echo "  installed: $SYSTEM_BIN/archcanary-tui"
 
     install -d -m 755 /usr/share/man/man1
     sed "s/@VERSION@/$VERSION/" "$REPO_DIR/man/archcanary.1" > /usr/share/man/man1/archcanary.1
@@ -38,7 +40,9 @@ install-bins)
     ;;
 
 cleanup-bins)
-    rm -f "$SYSTEM_BIN/archcanary"
+    for f in archcanary archcanary-tui; do
+        rm -f "$SYSTEM_BIN/$f"
+    done
     ;;
 
 install-components)
@@ -221,12 +225,14 @@ EOF
     ;;
 
 uninstall-bins)
-    if [[ -f "$SYSTEM_BIN/archcanary" ]]; then
-        rm -f "$SYSTEM_BIN/archcanary"
-        echo "  removed: $SYSTEM_BIN/archcanary"
-    else
-        echo "  not found: $SYSTEM_BIN/archcanary"
-    fi
+    for f in archcanary archcanary-tui; do
+        if [[ -f "$SYSTEM_BIN/$f" ]]; then
+            rm -f "$SYSTEM_BIN/$f"
+            echo "  removed: $SYSTEM_BIN/$f"
+        else
+            echo "  not found: $SYSTEM_BIN/$f"
+        fi
+    done
     rm -f /usr/share/man/man1/archcanary.1
     echo "  removed: /usr/share/man/man1/archcanary.1"
     rm -f /usr/share/bash-completion/completions/archcanary \
