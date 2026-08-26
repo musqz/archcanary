@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.31 (2026-08-26)
+
+- Removed: the yad GUI (`archcanary-gui.sh`) — its pkexec/yad root-scan window had a recurring, unfixable focus bug. root-helper, the polkit policy, and pkexec stay; they're the CLI's own privileged-remediation mechanism (`--allowlist-add`/`-remove`, `--audit-rules-set`, `--lynis-config-set`), not GUI-exclusive.
+- Added: `archcanary-tui` — a plain-bash interactive menu replacing the GUI, streaming `archcanary` output live to the terminal instead of capturing it to a file first (the GUI's biggest recurring complaint: a scan looked frozen for its entire duration). No `dialog` dependency.
+- Fix: `--run-lynis` output was silently corrupted (runs of ordinary letters/digits stripped) under a UTF-8 locale — the sed filter meant to strip non-ASCII bytes from Lynis's output used `\xHH` bracket-expression ranges that GNU sed misinterprets outside the `C` locale, and `LC_CTYPE=en_US.UTF-8` is the Arch default. Forced `LC_ALL=C` on that one sed invocation; same bug predated the GUI removal.
+- Fix: the AUR package never actually installed `archcanary-tui` or its desktop entry — `PKGBUILD`'s `package()` only ever shipped the main `archcanary` binary, so the GUI's replacement was invisible to anyone installing from the AUR. Also ported several flags that were `--help`-only (`--scan-user`, `--start-date`/`--end-date`, `--format`, the allowlist/extra-lists/aur-audit/audit-rules/lynis-config family) into `man/archcanary.1`, which had drifted behind them.
+
 ## v0.1.30 (2026-08-25)
 
 - Changed: the yay Lua hook template (`configs/yay-init.lua`) is now also shipped read-only to `/usr/lib/archcanary/yay-init.lua` (AUR package and `install.sh --system`), same pattern as `lynis-custom.prf`. v0.1.29 stopped seeding `~/.config/yay/init.lua` automatically (correctly — it's a per-user path no install step should reach, and the hook is opt-in) but left AUR-only installs with no local copy to `cp` from at all. `archcanary --doctor` now resolves the fix command against this path when no git clone is present.
