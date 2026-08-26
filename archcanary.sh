@@ -1106,8 +1106,12 @@ if $RUN_LYNIS; then
     # Can't use exec: pipe through sed to strip non-ASCII block chars (▆ etc.)
     # for terminal-safety across encodings. pipefail off so set -e doesn't
     # fire on lynis's own exit code before we can capture it.
+    # LC_ALL=C is required: sed's \xHH bracket-expression ranges are
+    # misinterpreted under a UTF-8 locale (the default on Arch), silently
+    # eating runs of ordinary ASCII letters/digits instead of only the
+    # intended non-ASCII bytes.
     set +o pipefail
-    lynis audit system --no-colors 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
+    lynis audit system --no-colors 2>&1 | LC_ALL=C sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
     _lynis_exit="${PIPESTATUS[0]}"
     # Lynis exit 2 = "found suggestions/warnings" — normal for a hardening audit,
     # not a malware signal. Map to 1 (warnings), not 2 (infected).
