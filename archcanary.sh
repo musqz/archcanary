@@ -2818,7 +2818,16 @@ check_pkgbuild_caches() {
     done < <(
         for dir in "${cache_dirs[@]}"; do
             [[ -d "$dir" ]] || continue
-            find "$dir" \( -name "PKGBUILD" -o -name "*.install" \) -type f 2>/dev/null
+            # -path match is relative to $dir's own descendants, so this only
+            # prunes tests/fake_pkgbuilds/ when it's nested *inside* a cached
+            # AUR build (e.g. archcanary's own AUR source tree). It never
+            # matches when a test harness points PKGBUILD_CACHE_DIRS directly
+            # at a fixture dir under tests/fake_pkgbuilds/ -- that path is an
+            # ancestor of $dir there, not a descendant, so find never walks
+            # into it. Without this, archcanary scanning its own cached AUR
+            # build flags its own obfuscation-technique test fixtures as if
+            # they were a real package's malicious PKGBUILD.
+            find "$dir" \( -path '*/tests/fake_pkgbuilds' -prune \) -o \( -name "PKGBUILD" -o -name "*.install" \) -type f -print 2>/dev/null
         done
     )
 
@@ -2865,7 +2874,8 @@ check_pkgbuild_caches() {
     done < <(
         for dir in "${cache_dirs[@]}"; do
             [[ -d "$dir" ]] || continue
-            find "$dir" -name "PKGBUILD" -type f 2>/dev/null
+            # Same self-scan exclusion as the pattern-scan find above.
+            find "$dir" \( -path '*/tests/fake_pkgbuilds' -prune \) -o -name "PKGBUILD" -type f -print 2>/dev/null
         done
     )
 
