@@ -298,12 +298,10 @@ CONF
 }
 
 # ---------------------------------------------------------------------------
-# --aur-audit-{status,enable,disable} — the one persisted setting the yad
-# GUI's "Scan Settings" dialog writes to ~/.config/archcanary/env (see
-# scan_settings() in archcanary-gui.sh): whether to fetch the
-# aur-audit.wtako.net feed on --refresh. User-owned, no root needed. Absence
-# of the AUR_AUDIT_ENABLE line means enabled — mirrors the yad GUI's own
-# format exactly, so either can edit the file and the other still reads it.
+# --aur-audit-{status,enable,disable} — persisted setting in
+# ~/.config/archcanary/env: whether to fetch the aur-audit.wtako.net feed on
+# --refresh. User-owned, no root needed. Absence of the AUR_AUDIT_ENABLE line
+# means enabled.
 # ---------------------------------------------------------------------------
 _aur_audit_env_path() {
     echo "${ARCHCANARY_ENV_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/archcanary/env}"
@@ -324,15 +322,9 @@ _aur_audit_set_cli() {
     local enable="$1" f
     f="$(_aur_audit_env_path)"
     mkdir -p "$(dirname "$f")"
-    # Preserve GUI_LOG_SAVE_DIR (archcanary-gui.sh's remembered scan-log save
-    # directory) — this file has two writers, and rebuilding it from only
-    # this function's own known key would silently wipe the other one out.
-    local gui_log_dir
-    gui_log_dir="$(grep -oP '^GUI_LOG_SAVE_DIR=\K.*' "$f" 2>/dev/null | tail -1)" || true
     {
-        printf '# archcanary settings — managed by archcanary-gui\n'
+        printf '# archcanary settings\n'
         [[ "$enable" == false ]] && printf 'AUR_AUDIT_ENABLE=false\n'
-        [[ -n "$gui_log_dir" ]] && printf 'GUI_LOG_SAVE_DIR=%s\n' "$gui_log_dir"
     } > "$f"
     if [[ "$enable" == false ]]; then
         echo "aur-audit: disabled"
@@ -343,14 +335,13 @@ _aur_audit_set_cli() {
 }
 
 # ---------------------------------------------------------------------------
-# --audit-rules-{get,set} — the root-owned auditd rules file the yad GUI
-# edits via a raw pkexec-tee text editor (edit_audit_rules() in
-# archcanary-gui.sh). --get mirrors that function's exact same read-fallback
-# order (real rules in the live file, then the pre-migration legacy path,
-# then the seed template) so both frontends see identical content. --set
-# needs root; content comes from stdin, matching the existing GUI's
-# free-form text editor (no line-level validation here either — auditctl
-# syntax isn't something this script can meaningfully validate).
+# --audit-rules-{get,set} — the root-owned auditd rules file. --get reads
+# with fallback (real rules in the live file, then the pre-migration legacy
+# path, then the seed template). --set needs root (invoke via
+# `pkexec /usr/lib/archcanary/root-helper --audit-rules-set` — see
+# lib/archcanary-root-helper); content comes from stdin, no line-level
+# validation (auditctl syntax isn't something this script can meaningfully
+# validate).
 # ---------------------------------------------------------------------------
 _audit_rules_get_cli() {
     local cfg="/etc/audit/rules.d/30-archcanary.rules"
@@ -392,8 +383,8 @@ _audit_rules_set_cli() {
 
 # ---------------------------------------------------------------------------
 # --lynis-config-{get,set} — the root-owned Lynis custom profile, same
-# rationale as audit rules above (see edit_lynis_config() in
-# archcanary-gui.sh). No daemon to restart — Lynis reads this at scan time.
+# rationale as audit rules above. No daemon to restart — Lynis reads this at
+# scan time.
 # ---------------------------------------------------------------------------
 _lynis_config_get_cli() {
     local cfg="/etc/lynis/custom.prf"
@@ -529,7 +520,7 @@ for arg in "$@"; do
             echo "                            (deps, install, systemd, yay/paru hooks) and exit"
             echo "  --doctor=SECTION[,...]    Check only the named section(s), with extra detail."
             echo "                            Sections: platform, deps, user, system, systemd, external"
-            echo "                            (tool names like paru/yad also map to a section)"
+            echo "                            (tool names like paru/bpftool also map to a section)"
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
             echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
@@ -704,10 +695,8 @@ fi
 # of the stack and exit. Runs BEFORE the scan machinery (no log tee, no list
 # loading) so it never errors on the very state it is meant to report.
 #
-# Each missing/misconfigured item prints the exact command to fix it. The GUI
-# surfaces these fix commands as copyable text / open-terminal actions — it
-# never runs them automatically (this is a security tool: it guides, it does
-# not silently execute installs).
+# Each missing/misconfigured item prints the exact command to fix it — this
+# is a security tool: it guides, it never runs fixes automatically.
 # ---------------------------------------------------------------------------
 run_doctor() {
     # Warn about scan-only flags that have no effect with --doctor.
@@ -773,7 +762,7 @@ run_doctor() {
         for s in "${_sel[@]}"; do
             s="${s//[[:space:]]/}"; [[ -z $s ]] && continue
             case "$s" in
-                dep|deps|dependencies|yad|bpftool|bpf|notify-send|libnotify|pkexec|polkit) want[deps]=1 ;;
+                dep|deps|dependencies|bpftool|bpf|notify-send|libnotify|pkexec|polkit) want[deps]=1 ;;
                 user|user_install|user-install)     want[user]=1 ;;
                 system|system_install|system-install|root) want[system]=1 ;;
                 systemd|automation|timer|timers)    want[systemd]=1 ;;
@@ -784,7 +773,7 @@ run_doctor() {
                 *)
                     printf 'Unknown --doctor section: %s\n' "$s" >&2
                     printf 'Valid: platform, deps, user, system, systemd, external (or all).\n' >&2
-                    printf 'Tool names (paru, yad, …) also map to a section.\n' >&2
+                    printf 'Tool names (paru, bpftool, …) also map to a section.\n' >&2
                     return 2 ;;
             esac
         done
@@ -842,8 +831,8 @@ run_doctor() {
     # _dep LABEL CMD PKG PURPOSE FIX [VERSION_ARGS] — like _item but, in detail
     # mode, also reports the resolved path and version of an installed dep.
     # VERSION_ARGS is the EXACT version invocation (default "--version"); never
-    # guessed, because a wrong arg can make a GUI tool (yad) pop a dialog. Pass
-    # "" to skip running the tool entirely (use for GUI binaries).
+    # guessed, because a wrong arg can make an interactive tool pop a dialog
+    # or block on stdin. Pass "" to skip running the tool entirely.
     _dep() {
         local label=$1 cmd=$2 pkg=$3 purpose=$4 fix=$5 d=""
         local vargs="--version"; [[ $# -ge 6 ]] && vargs="$6"
@@ -947,12 +936,9 @@ run_doctor() {
     if [[ -n ${want[deps]:-} ]]; then
         printf '%sDependencies (official repos)%s\n' "$B" "$N"
         if true; then
-            # yad is a GUI binary — never run it to probe a version (a bad arg opens
-            # a dialog); pass "" to skip the probe and just report path + pkg.
-            _dep "yad (GUI toolkit)"            yad         yad       "GTK dialog toolkit"          "sudo pacman -S yad"        ""
-            _dep "bpftool (eBPF enumeration)"  bpftool      bpf       "loaded-eBPF enumeration"     "sudo pacman -S bpf"        version
-            _dep "notify-send (desktop alerts)" notify-send libnotify "desktop notifications"       "sudo pacman -S libnotify"
-            _dep "pkexec (GUI root checks)"    pkexec       polkit    "GUI privilege escalation"    "sudo pacman -S polkit"
+            _dep "bpftool (eBPF enumeration)"  bpftool      bpf       "loaded-eBPF enumeration"          "sudo pacman -S bpf"        version
+            _dep "notify-send (desktop alerts)" notify-send libnotify "desktop notifications"           "sudo pacman -S libnotify"
+            _dep "pkexec (privileged remediation)" pkexec   polkit    "runs root-only fixes (allowlist edits, audit-rules/lynis-config writes)" "sudo pacman -S polkit"
             printf '\n'
         fi
     fi
@@ -962,7 +948,6 @@ run_doctor() {
         printf '%sUser install%s\n' "$B" "$N"
         if ! $system_installed; then
             _item "main scanner (~/.local/bin)" "$(_file "$user_bin/archcanary")"    "bash $installer" "path: $user_bin/archcanary"
-            _item "GUI (~/.local/bin)"          "$(_file "$user_bin/archcanary-gui")" "bash $installer" "path: $user_bin/archcanary-gui"
         fi
         _item "package list (config dir)"   "$(_file "$cfg_dir/package_list.txt")" "archcanary --refresh" "path: $cfg_dir/package_list.txt"
         if [[ -e "$cfg_dir" && ! -w "$cfg_dir" ]]; then
@@ -992,7 +977,7 @@ run_doctor() {
     if [[ -n ${want[system]:-} ]]; then
         printf '%sSystem install (root)%s\n' "$B" "$N"
         _item "scanner script (/usr/lib/archcanary)"     "$(_file /usr/lib/archcanary/archcanary.sh)"          "bash $installer_sys" "path: /usr/lib/archcanary/archcanary.sh"
-        _item "root helper (enables root checks in GUI)" "$(_file /usr/lib/archcanary/root-helper)"           "bash $installer_sys" "path: /usr/lib/archcanary/root-helper"
+        _item "root helper (privileged remediation commands)" "$(_file /usr/lib/archcanary/root-helper)"      "bash $installer_sys" "path: /usr/lib/archcanary/root-helper"
         _item "polkit policy (authorizes the root helper)" "$(_file /usr/share/polkit-1/actions/org.archcanary.policy)" "bash $installer_sys" "path: /usr/share/polkit-1/actions/org.archcanary.policy"
         _item "DKMS allowlist"                           "$(_file /etc/archcanary/dkms_allowlist.conf)"       "bash $installer_sys" "path: /etc/archcanary/dkms_allowlist.conf"
         _item "systemd allowlist"                        "$(_file /etc/archcanary/systemd_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/systemd_allowlist.conf"
@@ -1119,13 +1104,13 @@ if $RUN_LYNIS; then
         exit 1
     fi
     # Can't use exec: pipe through sed to strip non-ASCII block chars (▆ etc.)
-    # that yad text-info renders as [?] boxes. pipefail off so set -e doesn't
+    # for terminal-safety across encodings. pipefail off so set -e doesn't
     # fire on lynis's own exit code before we can capture it.
     set +o pipefail
     lynis audit system --no-colors 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/[^\x09\x0A\x0D\x20-\x7E]//g'
     _lynis_exit="${PIPESTATUS[0]}"
     # Lynis exit 2 = "found suggestions/warnings" — normal for a hardening audit,
-    # not a malware signal. Map to 1 (warnings) so the GUI doesn't show INFECTED.
+    # not a malware signal. Map to 1 (warnings), not 2 (infected).
     [[ "$_lynis_exit" -eq 2 ]] && _lynis_exit=1
     exit "$_lynis_exit"
 fi
@@ -1486,16 +1471,15 @@ fi
 AUR_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/archcanary"
 mkdir -p "$AUR_CONFIG_DIR"
 
-# Persisted settings written by archcanary-gui's "Edit config" > "Network
-# feeds" dialog. Read as plain data (grep), never `source`d as shell — this
-# file resolves into the invoking user's $HOME even during the pkexec-elevated
-# root scan (see lib/archcanary-root-helper), so sourcing it would let any
-# local user run arbitrary code as root.
+# Persisted settings, written via --aur-audit-{enable,disable}. Read as plain
+# data (grep), never `source`d as shell — this file resolves into the
+# invoking user's $HOME even during the pkexec-elevated root scan (see
+# lib/archcanary-root-helper), so sourcing it would let any local user run
+# arbitrary code as root.
 ARCHCANARY_ENV_FILE="${ARCHCANARY_ENV_FILE:-$AUR_CONFIG_DIR/env}"
 # || true twice: grep exits non-zero on no match / missing file, and under
 # `pipefail` that would propagate through tail/cut; under `set -e` a bare
-# `return` would then inherit that non-zero status and kill the whole script
-# (same failure class as the picker bug documented for archcanary-gui.sh).
+# `return` would then inherit that non-zero status and kill the whole script.
 _archcanary_env_get() {
     [[ -f "$ARCHCANARY_ENV_FILE" ]] || return 0
     grep -E "^$1=" "$ARCHCANARY_ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true
@@ -1538,10 +1522,9 @@ AUR_AUDIT_RED_DATE_LINES=()
 AUR_AUDIT_RED_VERSIONS_LIST="${AUR_AUDIT_RED_VERSIONS_LIST:-$AUR_CONFIG_DIR/aur_audit_red_versions.txt}"
 
 # Fetch the aur-audit.wtako.net black/red feed on --refresh. Disable via
-# AUR_AUDIT_ENABLE=false (env), --no-aur-audit (one-off), or the GUI checkbox.
-# Lowercased so a hand-edited env file (TRUE/False/etc.) still matches the
-# exact-string gate below, and so it agrees with the GUI's own case-insensitive
-# grep for the checkbox's current state.
+# AUR_AUDIT_ENABLE=false (env) or --no-aur-audit (one-off). Lowercased so a
+# hand-edited env file (TRUE/False/etc.) still matches the exact-string gate
+# below.
 AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE:-$(_archcanary_env_get AUR_AUDIT_ENABLE)}"
 AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE:-true}"
 AUR_AUDIT_ENABLE="${AUR_AUDIT_ENABLE,,}"
@@ -4399,11 +4382,7 @@ case $EXIT_CODE in
 esac
 if [[ ${#SKIPPED_ROOT[@]} -gt 0 ]]; then
     printf ' INCOMPLETE: %d root check(s) skipped (no root): %s\n' "${#SKIPPED_ROOT[@]}" "${SKIPPED_ROOT[*]}"
-    if [[ -n "${ARCHCANARY_FROM_GUI:-}" ]]; then
-        printf ' Re-run with sudo for the full picture: sudo archcanary-gui --no-gui\n'
-    else
-        printf ' Re-run with sudo for the full picture: sudo %s --full\n' "$0"
-    fi
+    printf ' Re-run with sudo for the full picture: sudo %s --full\n' "$0"
 fi
 if [[ ${#SKIPPED_MISSING[@]} -gt 0 ]]; then
     printf ' INCOMPLETE: %d optional check(s) skipped (tool not installed): %s\n' "${#SKIPPED_MISSING[@]}" "${SKIPPED_MISSING[*]}"

@@ -10,14 +10,12 @@ Full overview of how this tool is deployed and how the pieces connect.
 | Component | Package / Source | Purpose |
 |-----------|-----------------|---------|
 | `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
-| `archcanary-gui` | [musqz/archcanary](https://github.com/musqz/archcanary) | yad GUI — grouped menu with per-session status column (✅/⚠/❌/?), polkit auth for root checks, streaming output window. `--no-gui` bypasses yad and runs a full scan in the terminal with the structured summary. |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an offline layer that runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPostDownload`), and AUR install logging (`PostInstall`) |
-| `yad` | official repos | GTK dialog toolkit used by `archcanary-gui` |
-| `polkit` / `pkexec` | official repos | Graphical privilege escalation for root-requiring checks (eBPF, kmod) in the GUI |
+| `polkit` / `pkexec` | official repos | Privilege escalation for root-only remediation commands (allowlist edits, audit-rules/lynis-config writes) via `lib/archcanary-root-helper` |
 | `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
 | `bpftool` | `bpf` — official repos | Enumerates loaded eBPF programs for `--check-bpftool` |
-| `lynis` | official repos | System hardening auditor; archcanary reads the last report and can trigger a new audit from the GUI |
-| `audit` / auditd | official repos | Kernel audit daemon; archcanary ships a default ruleset covering AUR builds, privilege escalation, and system config changes; editable from the GUI |
+| `lynis` | official repos | System hardening auditor; archcanary reads the last report and can trigger a new audit (`--run-lynis`) |
+| `audit` / auditd | official repos | Kernel audit daemon; archcanary ships a default ruleset covering AUR builds, privilege escalation, and system config changes; editable via `--audit-rules-get`/`--audit-rules-set` |
 
 ## How the pieces connect
 
@@ -42,13 +40,7 @@ systemd SYSTEM timer (weekly + on boot, runs as root)
                             │
    systemd USER path unit watches that file
             └── on "RESULT: INFECTED" → notify-send (libnotify) → critical desktop alert
-                    └── open Archcanary from the app launcher to review
-
-archcanary-gui (on-demand — desktop shortcut or app launcher)
-    └── yad list menu with per-session status column
-            ├── standard checks run as user
-            └── root checks (eBPF, bpftool, kmod) → pkexec → polkit auth → root-helper
-                    └── streams output live, updates status on close
+                    └── review last-scan.log (or: sudo archcanary --full)
 
 yay install/upgrade  (yay -S <pkg>, yay -Syu, bare yay <term>)  — transparent, no alias
     └── yay init.lua hooks fire on every build
@@ -60,12 +52,6 @@ yay install/upgrade  (yay -S <pkg>, yay -Syu, bare yay <term>)  — transparent,
 For the lifecycle map and the what-runs-when table, see
 [overview.md](overview.md). All layers are complementary — none replaces the
 others.
-
-### The yad GUI (`archcanary-gui`)
-
-Grouped menu with a per-session status column, polkit auth for root-requiring checks, and a live streaming output window:
-
-![archcanary-gui yad GUI — status column and grouped checks](../images/gui.png)
 
 ### Headless / SSH
 
@@ -85,10 +71,6 @@ archcanary --check-pkgbuild
 # A single root-requiring check:
 sudo archcanary --check-kmod
 
-# Full scan without the GUI — terminal output with structured summary table.
-# Extra flags pass through (e.g. --refresh).
-archcanary-gui --no-gui
-
 # Setup health check — is every element installed and configured? (no root,
 # no scan; auto-detects distro/AUR helpers and prints a fix command per gap).
 # When something is missing it points to the next step to run.
@@ -106,8 +88,6 @@ archcanary --doctor=user,system
 > `~/.local/bin` instead, which typically isn't on sudo's `secure_path`, so
 > that setup needs the full path: `sudo ~/.local/bin/archcanary --full`.
 
-The GUI is for interactive desktop use; the CLI covers everything else (SSH, cron, systemd, scripting).
-
 ## When each tool runs
 
 See the at-a-glance table in [overview.md](overview.md). The exact systemd
@@ -117,7 +97,6 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 
 ```
 /usr/local/bin/archcanary        # main script (--system; plain install uses ~/.local/bin instead)
-/usr/local/bin/archcanary-gui          # yad GUI script
 
 ~/.config/archcanary/
     ├── package_list.txt                   # refreshed weekly via --refresh
@@ -150,9 +129,9 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── systemd_allowlist.conf        # systemd unit allowlist
     ├── bpftool_allowlist.conf        # bpftool eBPF loader allowlist
     └── autostart_allowlist.conf      # XDG autostart Exec= allowlist
-                                       # (all four: GUI → Manage allowlists, or sudoedit directly)
+                                       # (all four: sudoedit directly, or --allowlist-add/--allowlist-remove)
 /usr/share/polkit-1/actions/
-    └── org.archcanary.policy  # polkit policy allowing GUI to call root-helper
+    └── org.archcanary.policy  # polkit policy authorizing root-helper via pkexec
 
 # automated scan — units installed by ./install.sh --system
 /etc/systemd/system/
@@ -171,9 +150,9 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
 
 ```bash
 # Official repos
-# bpf provides bpftool (--check-bpftool); yad is the GUI toolkit;
-# libnotify provides notify-send for the desktop alert
-sudo pacman -S libnotify bpf yad polkit
+# bpf provides bpftool (--check-bpftool); libnotify provides notify-send
+# for the desktop alert; polkit provides pkexec for privileged remediation
+sudo pacman -S libnotify bpf polkit
 ```
 
 ## yay 13.0 integration
@@ -214,13 +193,14 @@ See [systemd.md](systemd.md) for the full service and timer contents.
 # 1. Clone the fork
 git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 
-# 2. Install dependencies (bpf provides bpftool for --check-bpftool; yad for GUI)
-sudo pacman -S libnotify bpf yad polkit
+# 2. Install dependencies (bpf provides bpftool for --check-bpftool)
+sudo pacman -S libnotify bpf polkit
 
 # 3. Run install script (installs to ~/.local/bin by default)
 bash ~/Github/archcanary/install.sh
 
-# Also install root helper + polkit policy (enables eBPF/kmod checks in the GUI)
+# Also install root helper + polkit policy (enables eBPF/kmod checks +
+# pkexec-based remediation commands)
 bash ~/Github/archcanary/install.sh --system
 
 # 4. Run a first scan with package list refresh

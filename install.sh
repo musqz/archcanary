@@ -25,8 +25,9 @@ for arg in "$@"; do
             echo "  ./install.sh               User install → ~/.local/bin (or ~/bin if that's on PATH instead)"
             echo "  ./install.sh /custom/dir   User install to a specific bin dir"
             echo "  ./install.sh --system      System install → /usr/local/bin (sudo)"
-            echo "                             Adds: root helper + polkit policy, systemd automated"
-            echo "                             scan units, auditd rules (if auditd is installed)"
+            echo "                             Adds: root helper + polkit policy (privileged"
+            echo "                             remediation commands), systemd automated scan"
+            echo "                             units, auditd rules (if auditd is installed)"
             echo
             echo "Uninstall:"
             echo "  ./install.sh uninstall            Remove the user install"
@@ -56,6 +57,15 @@ _ver=$(cat "$REPO_DIR/version.txt" 2>/dev/null || echo "unknown")
 
 run_root() {
     sudo bash "$REPO_DIR/lib/archcanary-root-install.sh" "$@"
+}
+
+# Leftover from a pre-GUI-removal install — clean it up whenever we see it.
+_cleanup_stray_desktop_entry() {
+    local desktop_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications/archcanary.desktop"
+    if [[ -f "$desktop_dst" ]]; then
+        rm -f "$desktop_dst"
+        echo "  removed:   $desktop_dst (GUI removed)"
+    fi
 }
 
 # Determine install dir: prefer the XDG ~/.local/bin, fall back to ~/bin
@@ -94,21 +104,17 @@ if $UNINSTALL; then
     echo
 
     removed=0
-    for f in archcanary archcanary-gui; do
-        [[ -f "$BIN_DIR/$f" ]] && removed=$((removed + 1))
-    done
+    [[ -f "$BIN_DIR/archcanary" ]] && removed=1
 
     if $SYSTEM; then
         run_root uninstall-bins
     else
-        for f in archcanary archcanary-gui; do
-            if [[ -f "$BIN_DIR/$f" ]]; then
-                rm "$BIN_DIR/$f"
-                echo "  removed: $BIN_DIR/$f"
-            else
-                echo "  not found: $BIN_DIR/$f"
-            fi
-        done
+        if [[ -f "$BIN_DIR/archcanary" ]]; then
+            rm "$BIN_DIR/archcanary"
+            echo "  removed: $BIN_DIR/archcanary"
+        else
+            echo "  not found: $BIN_DIR/archcanary"
+        fi
         rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/archcanary.1"
         echo "  removed: ${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/archcanary.1"
         rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/archcanary" \
@@ -116,11 +122,7 @@ if $UNINSTALL; then
         echo "  removed: ${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/{archcanary,canary}"
     fi
 
-    desktop_dst="${XDG_DATA_HOME:-$HOME/.local/share}/applications/archcanary.desktop"
-    if [[ -f "$desktop_dst" ]]; then
-        rm "$desktop_dst"
-        echo "  removed: $desktop_dst"
-    fi
+    _cleanup_stray_desktop_entry
 
     if [[ -d "$CONFIG_DIR" ]]; then
         echo "  kept:    $CONFIG_DIR (user config — remove manually if desired)"
@@ -179,30 +181,20 @@ mkdir -p "$CONFIG_DIR"
 if $SYSTEM; then
     run_root install-bins "$REPO_DIR" "$_ver"
     _removed_user=false
-    for f in archcanary archcanary-gui; do
-        if [[ -f "$USER_BIN/$f" ]]; then
-            rm -f "$USER_BIN/$f"
-            echo "  removed:   $USER_BIN/$f (superseded by system install)"
-            _removed_user=true
-        fi
-    done
+    if [[ -f "$USER_BIN/archcanary" ]]; then
+        rm -f "$USER_BIN/archcanary"
+        echo "  removed:   $USER_BIN/archcanary (superseded by system install)"
+        _removed_user=true
+    fi
 else
     mkdir -p "$USER_BIN"
     install -m 755 "$REPO_DIR/archcanary.sh"    "$USER_BIN/archcanary"
-    install -m 755 "$REPO_DIR/archcanary-gui.sh" "$USER_BIN/archcanary-gui"
     sed -i "s/@VERSION@/$_ver/" "$USER_BIN/archcanary"
     echo "  installed: $USER_BIN/archcanary"
-    echo "  installed: $USER_BIN/archcanary-gui"
     _removed_system=false
-    _stray_system_bins=()
-    for f in archcanary archcanary-gui; do
-        [[ -f "$SYSTEM_BIN/$f" ]] && _stray_system_bins+=("$f")
-    done
-    if [[ ${#_stray_system_bins[@]} -gt 0 ]]; then
+    if [[ -f "$SYSTEM_BIN/archcanary" ]]; then
         run_root cleanup-bins
-        for f in "${_stray_system_bins[@]}"; do
-            echo "  removed:   $SYSTEM_BIN/$f (superseded by user install)"
-        done
+        echo "  removed:   $SYSTEM_BIN/archcanary (superseded by user install)"
         _removed_system=true
     fi
     MAN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/man/man1"
@@ -217,11 +209,7 @@ else
     echo "  installed: $COMPLETION_DIR/{archcanary,canary}"
 fi
 
-# Install desktop entry
-DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-mkdir -p "$DESKTOP_DIR"
-cp "$REPO_DIR/configs/archcanary.desktop" "$DESKTOP_DIR/archcanary.desktop"
-echo "  installed: $DESKTOP_DIR/archcanary.desktop"
+_cleanup_stray_desktop_entry
 
 # Seed config dir (only if files don't already exist)
 for f in package_list.txt malicious_npm_packages.txt; do
@@ -291,7 +279,6 @@ if $SYSTEM; then
     echo "  installed: $USER_UNITS/archcanary-user.{service,timer} + notify.{path,service} (not enabled — see below)"
 
     echo
-    echo "Root-requiring checks are also available in the GUI via pkexec."
     echo "Automated scan: weekly + on boot + after each pacman transaction (see docs/systemd.md)."
     echo
     echo "Enable the automated system scan (runs as root — weekly + on boot + after pacman):"

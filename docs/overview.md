@@ -36,7 +36,7 @@ flowchart TD
         NOT["user .path → notify-send<br/>critical desktop alert"]
         LOG -->|INFECTED| NOT
         SAHLOG -.->|INFECTED| NOT
-        NOT --> GUI["archcanary-gui<br/>review + root checks"]
+        NOT --> REVIEW["you<br/>review last-scan.log"]
     end
 
     OK -.-> PTH
@@ -51,7 +51,7 @@ flowchart TD
 | 2 · After / always | `archcanary` | systemd timer (weekly + boot) + `.path` (after each pacman tx) | ✓ root | Known-bad packages, systemd/eBPF/npm persistence, rootkit traces |
 | 2 · After / always | `archcanary-user` | systemd `--user` timer (weekly + boot) | opt-in, per user | npm/bun/yarn/pnpm/pkgbuild caches, autostart — for whoever enables it |
 | 2 · After / always | `archcanary-scan-all-homes` | systemd timer, weekly | opt-in, off by default | Same as above, for every real local user — not just whoever opted in |
-| 3 · On detection | notifier → GUI | `last-scan.log`/`last-scan-all-homes.log` flips to INFECTED | ✓ | Surfaces a result; review is manual |
+| 3 · On detection | notifier → review | `last-scan.log`/`last-scan-all-homes.log` flips to INFECTED | ✓ | Surfaces a result; review is manual |
 
 ## Read this first
 
