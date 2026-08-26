@@ -36,6 +36,13 @@ package() {
   # Main user-facing binary
   install -Dm755 archcanary.sh    "$pkgdir/usr/bin/archcanary"
 
+  # Interactive terminal menu (replaces the removed yad GUI)
+  install -Dm755 archcanary-tui.sh "$pkgdir/usr/bin/archcanary-tui"
+
+  # Desktop entry launching the interactive menu
+  install -Dm644 configs/archcanary.desktop \
+    "$pkgdir/usr/share/applications/archcanary.desktop"
+
   # Man page
   install -Dm644 man/archcanary.1 "$pkgdir/usr/share/man/man1/archcanary.1"
 

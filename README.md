@@ -40,6 +40,9 @@ archcanary --doctor
 
 # Refresh package lists online, then scan
 archcanary --refresh --full
+
+# Interactive menu — same checks, no flags to remember
+archcanary-tui
 ```
 
 Every scan prints a per-check summary before the final verdict:
