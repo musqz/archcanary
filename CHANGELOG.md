@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.33 (unreleased)
+
+- Fix: `check_pkgbuild_caches`' non-interactive-`pacman` check (`--noconfirm` from a scriptlet) matched commented-out lines, so a trailing `# sudo pacman -U --noconfirm ./...` build reminder — common in hand-written PKGBUILDs — tripped a WARNING. Reported on the EndeavourOS forum against a stale `~/.cache/yay/timeshift/` tree (timeshift is in `extra`; the cached AUR copy was years old). That pattern now skips lines whose first non-whitespace character is `#`. Deliberately scoped to this one check — the Tor/onion-fetch, system-path-download and `aur@aur.archlinux.org` patterns still scan comment text, since a payload staged in a comment there is never a legitimate maintainer note.
+
 ## v0.1.32 (2026-08-30)
 
 - Fix: `check_bpftool` warned (exit 1, failing `archcanary.service` after every pacman transaction) on any non-LSM eBPF hook type — `kprobe`/`kretprobe`/`tracepoint`/`raw_tracepoint`/`perf_event`/`tracing` — held by a non-systemd process, without ever checking whether that process is a pacman-owned package or allowlisted; only the LSM branch did that. Reported on the Arch forum against `ananicy-cpp` (an auto-nice daemon, default on CachyOS), which attaches tracepoints to `sched_process_exec`/`sched_process_fork` to renice new processes. A stealth hook type held only by pacman-owned or allowlisted processes is now `INFO`; an unrecognized holder still warns, now with the loader names and the `--allowlist-add=bpftool:` hint (previously LSM-only). The `perf show` sub-check (kprobes/tracepoints on rootkit target functions) is unchanged. The WARNING's "Unknown loaders" line now lists only the unresolved processes.
