@@ -1154,6 +1154,22 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: bare .onion URL at end-of-line evaded detection, rc=$rc, out: $out"
     fi
+
+    # Sub-test W: Pattern 13's comment exemption. A commented-out `# sudo
+    # pacman -U --noconfirm ./...` build reminder must NOT be flagged
+    # (regression for the EndeavourOS forum false positive against
+    # timeshift's archlinux/PKGBUILD) — but the exemption is Pattern 13
+    # only: a commented Tor/onion fetch in the same fixture must STILL be
+    # flagged, so a payload staged in a comment stays visible.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-commented-out" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" != *"non-interactive pacman call"* \
+          && "$out" == *"WARNING: Tor/SOCKS-proxied fetch in"* ]]; then
+        pass "pkgbuild_obfuscation: commented pacman reminder exempt, commented Tor fetch still flagged"
+    else
+        fail "pkgbuild_obfuscation: comment handling wrong, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------

