@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.32 (2026-08-30)
+
+- Fix: `check_bpftool` warned (exit 1, failing `archcanary.service` after every pacman transaction) on any non-LSM eBPF hook type — `kprobe`/`kretprobe`/`tracepoint`/`raw_tracepoint`/`perf_event`/`tracing` — held by a non-systemd process, without ever checking whether that process is a pacman-owned package or allowlisted; only the LSM branch did that. Reported on the Arch forum against `ananicy-cpp` (an auto-nice daemon, default on CachyOS), which attaches tracepoints to `sched_process_exec`/`sched_process_fork` to renice new processes. A stealth hook type held only by pacman-owned or allowlisted processes is now `INFO`; an unrecognized holder still warns, now with the loader names and the `--allowlist-add=bpftool:` hint (previously LSM-only). The `perf show` sub-check (kprobes/tracepoints on rootkit target functions) is unchanged. The WARNING's "Unknown loaders" line now lists only the unresolved processes.
+- Fix: `check_pkgbuild_caches` flagged archcanary's own `tests/fake_pkgbuilds/` obfuscation-technique fixtures as a real package's malicious PKGBUILD when archcanary was rebuilt from its cached AUR source tree (the bundled `yay-init.lua` template keeps `clean_after=false`). The `find` walk now prunes `*/tests/fake_pkgbuilds` — but only when it sits inside a scanned cache dir, so the test suite (which points `PKGBUILD_CACHE_DIRS` directly at fixture subdirs) is unaffected.
+
 ## v0.1.31 (2026-08-26)
 
 - Removed: the yad GUI (`archcanary-gui.sh`) — its pkexec/yad root-scan window had a recurring, unfixable focus bug. root-helper, the polkit policy, and pkexec stay; they're the CLI's own privileged-remediation mechanism (`--allowlist-add`/`-remove`, `--audit-rules-set`, `--lynis-config-set`), not GUI-exclusive.
