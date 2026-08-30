@@ -1325,7 +1325,8 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Test 14: check_bpftool — unknown LSM loader detection + allowlist
+# Test 14: check_bpftool — unknown loader detection + allowlist (lsm and
+#          non-lsm hook types both resolve via pacman -Qo / the allowlist)
 # ---------------------------------------------------------------------------
 test_check_bpftool_allowlist() {
     local base_args=(
@@ -1390,9 +1391,92 @@ SCRIPT
         fail "check_bpftool: allowlisted lsm loader → expected INFO+exit0, got rc=$rc, out: $out"
     fi
 
-    kill "$loader_pid" 2>/dev/null || true
-    wait "$loader_pid" 2>/dev/null || true
-    rm -f "$fake_bpftool" "$allow_file"
+    # Sub-test C: a non-lsm stealth type (tracepoint) held by a pacman-owned
+    # binary — the ananicy-cpp case — resolves to INFO, exit 0. Uses a real
+    # coreutils `sleep` so `/proc/<pid>/exe` is genuinely pacman-owned.
+    local pac_pid fake_bpftool_tp
+    sleep 30 &
+    pac_pid=$!
+    sleep 0.3
+    fake_bpftool_tp=$(mktemp)
+    cat > "$fake_bpftool_tp" <<SCRIPT
+#!/bin/sh
+if [ "\$1" = "prog" ]; then
+  cat <<PROGS
+7: tracepoint  name watch_exec  tag abcdef1234567890  gpl
+        loaded_at 2026-08-30T12:00:00+0200  uid 0
+        xlated 200B  jited 200B  memlock 4096B
+        pids sleep($pac_pid)
+PROGS
+fi
+SCRIPT
+    chmod +x "$fake_bpftool_tp"
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool_tp" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: eBPF hook types present (tracepoint)"* && "$out" != *"WARNING"* ]]; then
+        pass "check_bpftool: pacman-owned tracepoint loader → INFO only, exit 0"
+    else
+        fail "check_bpftool: pacman-owned tracepoint loader → expected INFO+exit0, got rc=$rc, out: $out"
+    fi
+
+    # Sub-test D: the same tracepoint program held by an unknown (non-pacman)
+    # binary → WARNING naming the hook type, exit 1.
+    local fake_bpftool_tp_unknown
+    fake_bpftool_tp_unknown=$(mktemp)
+    cat > "$fake_bpftool_tp_unknown" <<SCRIPT
+#!/bin/sh
+if [ "\$1" = "prog" ]; then
+  cat <<PROGS
+7: tracepoint  name watch_exec  tag abcdef1234567890  gpl
+        loaded_at 2026-08-30T12:00:00+0200  uid 0
+        xlated 200B  jited 200B  memlock 4096B
+        pids test-loader($loader_pid)
+PROGS
+fi
+SCRIPT
+    chmod +x "$fake_bpftool_tp_unknown"
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool_tp_unknown" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"stealth-associated program types present: tracepoint"* \
+          && "$out" == *"test-loader"* ]]; then
+        pass "check_bpftool: unknown tracepoint loader → WARNING (exit 1)"
+    else
+        fail "check_bpftool: unknown tracepoint loader → expected WARNING+exit1, got rc=$rc, out: $out"
+    fi
+
+    # Sub-test E: a tracepoint prog held by BOTH a pacman-owned and an unknown
+    # process → WARNING, but the "Unknown loaders" line lists only the unresolved
+    # one (regression guard: a resolved pacman-owned loader must not be labelled
+    # unknown).
+    local fake_bpftool_mixed unk_line
+    fake_bpftool_mixed=$(mktemp)
+    cat > "$fake_bpftool_mixed" <<SCRIPT
+#!/bin/sh
+if [ "\$1" = "prog" ]; then
+  cat <<PROGS
+7: tracepoint  name watch_exec  tag abcdef1234567890  gpl
+        loaded_at 2026-08-30T12:00:00+0200  uid 0
+        xlated 200B  jited 200B  memlock 4096B
+        pids sleep($pac_pid),test-loader($loader_pid)
+PROGS
+fi
+SCRIPT
+    chmod +x "$fake_bpftool_mixed"
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool_mixed" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    unk_line=$(grep 'Unknown loaders:' <<<"$out" || true)
+    if [[ $rc -eq 1 && "$unk_line" == *"test-loader"* && "$unk_line" != *"sleep("* ]]; then
+        pass "check_bpftool: WARNING 'Unknown loaders' excludes resolved pacman-owned loaders"
+    else
+        fail "check_bpftool: mixed loaders → expected only the unknown one listed, got rc=$rc line: $unk_line"
+    fi
+
+    kill "$loader_pid" "$pac_pid" 2>/dev/null || true
+    wait "$loader_pid" "$pac_pid" 2>/dev/null || true
+    rm -f "$fake_bpftool" "$allow_file" "$fake_bpftool_tp" "$fake_bpftool_tp_unknown" "$fake_bpftool_mixed"
     rm -rf "$tmpdir"
 }
 

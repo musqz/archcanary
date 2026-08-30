@@ -2358,8 +2358,10 @@ check_ebpf() {
 #
 # prog show — enumerates ALL programs loaded in the kernel, including unpinned
 #   ones an eBPF rootkit keeps alive via an open fd or BPF link (not visible
-#   in /sys/fs/bpf). Warns when stealth-associated hook types are present:
-#   kprobe/kretprobe/tracepoint/raw_tracepoint/perf_event/tracing/lsm.
+#   in /sys/fs/bpf). Stealth-associated hook types (kprobe/kretprobe/tracepoint/
+#   raw_tracepoint/perf_event/tracing/lsm) are INFO when every holding process is
+#   systemd/AppArmor/SELinux, a pacman-owned binary, or an allowlisted loader;
+#   they WARN only when an unrecognized process holds them.
 #
 # perf show — lists every kprobe/kretprobe/tracepoint/uprobe with the owning
 #   PID and the exact kernel function being hooked. Flags hooks on functions
@@ -2419,10 +2421,19 @@ check_bpftool() {
                 else
                     echo "  INFO: eBPF hook types present ($non_lsm_stealth) — all loaded by systemd / AppArmor / SELinux."
                 fi
-            elif [[ -z "$non_lsm_stealth" ]]; then
-                # Resolve each loader: if /proc/<pid>/exe is a pacman-owned binary, it's a known package
-                # (e.g. VPN daemons, security tools written in Python/Go/etc.) — downgrade to INFO.
-                local all_known=true resolved_entries=()
+            else
+                # A non-systemd process holds one or more of these programs. Resolve each
+                # loader: if /proc/<pid>/exe is a pacman-owned binary (VPN daemons, process
+                # schedulers like ananicy-cpp, security tools written in Python/Go/C++) or an
+                # allowlisted basename, it's known-good — downgrade to INFO. This holds
+                # regardless of hook type: a pacman-owned tracepoint/kprobe loader is as
+                # legitimate as a pacman-owned lsm loader. A *compromised* pacman-owned
+                # package is out of scope for this heuristic — the package-list, aur-audit
+                # and pacman.log-history checks cover that; here the loader's identity is
+                # the signal. Note: bpftool prints one "pids" line per program listing its
+                # fd holders; a program kept alive only by a pinned BPF link has none, so
+                # it is not attributed to any process and does not affect this verdict.
+                local all_known=true resolved_entries=() unknown_entries=()
                 while IFS= read -r entry; do
                     entry="${entry//[[:space:]]/}"
                     [[ -z "$entry" ]] && continue
@@ -2436,35 +2447,42 @@ check_bpftool() {
                             resolved_entries+=("$entry (allowlisted)")
                         else
                             resolved_entries+=("$entry")
+                            unknown_entries+=("$entry")
                             all_known=false
                         fi
                     else
                         resolved_entries+=("$entry")
+                        unknown_entries+=("$entry")
                         all_known=false
                     fi
                 done < <(sed 's/^\s*pids\s*//' <<<"$unknown_loaders" | tr ',' '\n')
 
-                local resolved_str
+                local resolved_str unknown_str
                 resolved_str=$(IFS=', '; echo "${resolved_entries[*]}")
+                unknown_str=$(IFS=', '; echo "${unknown_entries[*]}")
 
                 if [[ "$all_known" == true ]]; then
-                    echo "  INFO: lsm eBPF programs loaded by non-systemd process (pacman-owned or allowlisted)."
+                    if [[ -z "$non_lsm_stealth" ]]; then
+                        echo "  INFO: lsm eBPF programs loaded by non-systemd process (pacman-owned or allowlisted)."
+                    else
+                        echo "  INFO: eBPF hook types present ($non_lsm_stealth) — loaded by pacman-owned or allowlisted process."
+                    fi
                     echo "  Loaders: $resolved_str"
                 else
-                    echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
-                    echo "  Unknown loaders: $resolved_str"
+                    if [[ -z "$non_lsm_stealth" ]]; then
+                        echo "  WARNING: lsm eBPF programs loaded by unknown process (expected systemd / AppArmor / SELinux)."
+                    else
+                        echo "  WARNING: stealth-associated program types present: $non_lsm_stealth"
+                        echo "  These hook types are used by eBPF rootkits to hide PIDs/files/processes."
+                        echo "  Review: sudo bpftool prog show ; sudo bpftool link show"
+                        echo "  (Legitimate if you run bpftrace/bcc/sysprof/Falco — confirm the source.)"
+                    fi
+                    echo "  Unknown loaders: $unknown_str"
                     echo "  Recognize this loader? Mark it known-good:"
                     echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=bpftool:<loader-basename>"
                     echo "  If this looks like a false positive, report it at https://github.com/musqz/archcanary/issues"
                     worst_ret=1
                 fi
-            else
-                local warn_types="${non_lsm_stealth:-$stealth}"
-                echo "  WARNING: stealth-associated program types present: $warn_types"
-                echo "  These hook types are used by eBPF rootkits to hide PIDs/files/processes."
-                echo "  Review: sudo bpftool prog show ; sudo bpftool link show"
-                echo "  (Legitimate if you run bpftrace/bcc/sysprof/Falco — confirm the source.)"
-                worst_ret=1
             fi
         else
             echo "  Clean: only non-stealth program types (cgroup/net) loaded."
