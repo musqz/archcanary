@@ -1,0 +1,19 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-mutable-patch
+pkgver=2.13.3
+pkgrel=1
+source=(
+    "https://example.com/${pkgname}-${pkgver}.tar.gz"
+    "fix-build.patch::https://gitlab.example.org/group/project/-/merge_requests/47.patch"
+)
+sha256sums=('SKIP' 'SKIP')
+
+build() {
+    cd "$srcdir"
+    patch -p1 < fix-build.patch
+    make
+}
+
+package() {
+    make DESTDIR="$pkgdir" install
+}

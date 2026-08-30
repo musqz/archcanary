@@ -1,0 +1,16 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-priv-esc
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/pkg-1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    make
+}
+
+package() {
+    # Real-world shape (Andreas's tarah): installs onto the live system,
+    # bypassing fakeroot and $pkgdir entirely.
+    sudo cp target/release/pkg-priv-esc /usr/bin/pkg-priv-esc
+}

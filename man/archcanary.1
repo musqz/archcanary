@@ -54,8 +54,19 @@ Scan the pnpm store, global installs, metadata cache, and dlx cache.
 Scan AUR helper caches for obfuscation patterns in PKGBUILD and
 .I .install
 files (base64 decode-to-shell, eval subshell, printf hex/octal,
-variable-split command reassembly), and for undocumented ELF binaries
-committed directly to a package's own cache/git tree (outside
+variable-split command reassembly, ANSI-C hex/octal, rev/tr pipe-to-shell,
+Tor/onion fetches, downloads into system paths, non-interactive
+.BR pacman ,
+.BR sudo / doas / pkexec
+invoked from a PKGBUILD or scriptlet, patch sources on a mutable
+merge-request/pull-request URL, and a
+.B pkgver
+that appears in no
+.B source=
+URL while every checksum is
+.BR SKIP ),
+and for undocumented ELF binaries committed directly to a package's own
+cache/git tree (outside
 .I src/
 and
 .I pkg/

@@ -146,7 +146,7 @@ run everything at once with `--full`.
 | `--check-bun-cache` | bun cache for malicious package names | No |
 | `--check-yarn-cache` | yarn cache scan | No |
 | `--check-pnpm-cache` | pnpm cache + fnm per-version Node installs | No |
-| `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex, ANSI-C hex/octal, rev/tr pipe-to-shell) and undocumented ELF binaries actually committed to a package's own AUR git tree (not just downloaded by makepkg — a -bin package's own source binary sitting in the build dir is not flagged) | No |
+| `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex, ANSI-C hex/octal, rev/tr pipe-to-shell), Tor/onion fetches, downloads into system paths, `sudo`/`doas`/`pkexec` from a PKGBUILD or `.install`, patch sources on a mutable merge-request/pull-request URL, a `pkgver` that matches no `source=` URL while all checksums are `SKIP`, and undocumented ELF binaries actually committed to a package's own AUR git tree (not just downloaded by makepkg — a -bin package's own source binary sitting in the build dir is not flagged) | No |
 | `--check-bpftool` | Enumerate loaded eBPF programs (stealth types), perf/kprobe attachments with owning PID and hooked function, XDP/TC network attachments | Yes |
 | `--check-ldso` | `/etc/ld.so.preload` injection + recent `/etc/ld.so.conf.d/` changes | No |
 | `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns | No |
