@@ -2,6 +2,7 @@
 
 ## v0.1.33 (unreleased)
 
+- Added: `check_pkgbuild_caches` gained three rules from Andreas Reichel's static-rules scan of all ~111,000 live AUR packages (2026-08-25) — nothing malicious found, but each shape sidesteps a real safety property. (1) `sudo`/`doas`/`pkexec` invoked from a PKGBUILD or `.install` (`tarah` runs `sudo cp … /usr/bin` past fakeroot); (2) a `source=` URL on a forge merge-request/pull-request diff endpoint, whose content can change after review (`freetype2-wps`) — a hash-pinned `/commit/<sha>.patch` is not matched; (3) a literal `pkgver` that appears in no `source=` URL while every checksum is `SKIP` (`power-menu-bin` declares `0.1.2`, fetches `v0.1.1`), heavily gated to keep false positives near zero. Rules 1–2 are also in the yay hook (`configs/yay-init.lua`, marker `(v10)`), both as warnings.
 - Fix: `check_pkgbuild_caches`' non-interactive-`pacman` check (`--noconfirm` from a scriptlet) matched commented-out lines, so a trailing `# sudo pacman -U --noconfirm ./...` build reminder — common in hand-written PKGBUILDs — tripped a WARNING. Reported on the EndeavourOS forum against a stale `~/.cache/yay/timeshift/` tree (timeshift is in `extra`; the cached AUR copy was years old). That pattern now skips lines whose first non-whitespace character is `#`. Deliberately scoped to this one check — the Tor/onion-fetch, system-path-download and `aur@aur.archlinux.org` patterns still scan comment text, since a payload staged in a comment there is never a legitimate maintainer note.
 
 ## v0.1.32 (2026-08-30)

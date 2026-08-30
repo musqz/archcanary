@@ -1,0 +1,13 @@
+# Maintainer: Someone <someone@example.com>
+# Real-world shape (Andreas's power-menu-bin): pkgver says 0.1.2 but the
+# tarball URL fetches v0.1.1, and md5sums=SKIP so the mismatch is unverified.
+pkgname=pkg-pkgver-url-mismatch
+pkgver=0.1.2
+pkgrel=1
+arch=('x86_64')
+source=("https://downloads.example.com/releases/v0.1.1/tool-linux-x86_64.tar.gz")
+md5sums=('SKIP')
+
+package() {
+    install -Dm755 tool "$pkgdir/usr/bin/tool"
+}

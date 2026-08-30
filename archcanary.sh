@@ -1019,7 +1019,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v9)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v10)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -2623,6 +2623,51 @@ check_bun_cache() {
 }
 
 # ---------------------------------------------------------------------------
+# Check 7, Pattern 16 helper: declared pkgver absent from an unverified source
+# URL. Prompted by a full-AUR static-rules scan (Andreas Reichel, 2026-08-25):
+# `power-menu-bin` declares pkgver=0.1.2 but its source= URL fetches v0.1.1
+# with md5sums=SKIP — the download doesn't match the advertised version and
+# nothing verifies it, so a reader trusting `pkgver` can't tell what's
+# actually being built. Deliberately narrow to keep false positives near
+# zero: fires only when the version is a plain literal, the package is not
+# VCS-based, NOTHING in the file carries a real checksum (a single real hash
+# anywhere → bail), a SKIP is present, and no URL in the file contains the
+# version literal or a $pkgver reference. Best-effort heuristic like the rest
+# of this scan, not a parser. Echoes the finding and returns 2 on a hit.
+_pkgbuild_pkgver_url_mismatch() {
+    local f="$1" content pv url
+    content="$(cat -- "$f" 2>/dev/null)" || return 0
+
+    if grep -qE '^[[:space:]]*pkgver[[:space:]]*\([[:space:]]*\)' <<< "$content"; then return 0; fi
+    if grep -qE '(git|svn|hg|bzr)\+[a-z]+://' <<< "$content"; then return 0; fi
+
+    pv="$(grep -m1 -E '^pkgver=' <<< "$content" || true)"
+    [[ -n "$pv" ]] || return 0
+    pv="${pv#pkgver=}"
+    [[ "$pv" == *'$'* ]] && return 0            # substitution, not a literal
+    pv="${pv%%[[:space:]]*}"                    # drop any trailing comment/space
+    pv="${pv//\"/}"; pv="${pv//\'/}"
+    [[ -n "$pv" ]] || return 0
+
+    if grep -qiE '[0-9a-f]{32,}' <<< "$content"; then return 0; fi   # something is verified
+    if ! grep -q 'SKIP' <<< "$content"; then return 0; fi
+
+    local saw_url=false
+    while IFS= read -r url; do
+        saw_url=true
+        # $pkgver in any form -- bare, ${pkgver}, or ${pkgver%%.*} / ${pkgver//./_} etc.
+        [[ "$url" == *"$pv"* || "$url" == *'$pkgver'* || "$url" == *'${pkgver'* ]] && return 0
+    done < <(grep -oE '(https?|ftp)://[^[:space:]"'\''()]+' <<< "$content" || true)
+    $saw_url || return 0   # no remote source at all -> nothing "downloaded" to mismatch
+
+    echo "  WARNING: declared pkgver ($pv) not in any source URL, all checksums SKIP, in $f"
+    echo "    The download doesn't match the version the PKGBUILD advertises and"
+    echo "    nothing verifies it -- diff against a fresh clone and check what tag"
+    echo "    the source= URL actually points at before building."
+    return 2
+}
+
+# ---------------------------------------------------------------------------
 # Check 7: PKGBUILD / install file scan for obfuscated malicious commands
 # Strips single and double quotes from each line before matching, catching
 # obfuscation like 'b''u''n' 'a'"d""d" 'j''s'"-""d""i""g""e""s""t"
@@ -2683,15 +2728,61 @@ check_pkgbuild_caches() {
     # install an unrelated dependency (tor) to stage its backdoor.
     local re_pacman_noninteractive='pacman[[:space:]].*--noconfirm'
 
+    # A privilege-escalation helper (sudo/doas/pkexec) invoked from a
+    # PKGBUILD or .install scriptlet. makepkg runs build()/package() as the
+    # calling user (package() under fakeroot) and a .install scriptlet
+    # already runs as root — none of them has any reason to shell out
+    # through sudo. Doing so writes outside the fakeroot $pkgdir straight
+    # onto the live system, bypassing pacman's own file tracking. Reported
+    # by a full-AUR static-rules scan (Andreas Reichel, 2026-08-25):
+    # `tarah`'s package() runs `sudo cp target/release/tarah /usr/bin`.
+    # Anchored to a command position — start of line, after ; & | , or as
+    # $(...) — and requires an argument after it, so `sudo` inside an
+    # unquoted depends=(sudo ...) array doesn't match. The scan loop
+    # additionally strips quoted spans (so `echo "run: sudo ..."` and
+    # `"step; sudo ..."` don't match) and skips heredoc bodies (a scriptlet
+    # printing setup instructions via `cat <<EOF ... EOF` is normal).
+    local re_priv_esc='(^|[;&|]|\$\()[[:space:]]*(sudo|doas|pkexec)[[:space:]]+[^[:space:]]'
+    # Opening line of a heredoc — capture the delimiter word so the body can
+    # be skipped for Pattern 14. Requires whitespace before `<<` (a real
+    # redirection: `cat <<EOF`, `cmd > x <<EOF`), which keeps a `<<` sitting
+    # inside a quoted string from starting a phantom heredoc. Herestrings
+    # (<<<) don't match — no delimiter word follows the third `<`.
+    local re_heredoc='[[:space:]]<<-?[[:space:]]*["'"'"']?([A-Za-z_][A-Za-z0-9_]*)'
+
+    # A source=/patch URL pointing at a forge's merge-request or
+    # pull-request diff endpoint — GitLab /-/merge_requests/<n>.diff|.patch|
+    # /diffs, GitHub/Gitea /pull(s)/<n>.diff|.patch. That content is
+    # mutable: the MR/PR can be force-pushed or amended after the PKGBUILD
+    # was reviewed, so what makepkg fetches at build time need not be what a
+    # reviewer saw. A hash-pinned /commit/<sha>.patch is immutable and is
+    # deliberately NOT matched. Reported by the same full-AUR scan:
+    # `freetype2-wps` fetches its patch from a live GitLab MR diff URL.
+    local re_mutable_patch='(/-/merge_requests/[0-9]+(\.(diff|patch)|/diffs)|/pulls?/[0-9]+\.(diff|patch))'
+
     while IFS= read -r file; do
         (( scanned++ )) || true
         local lineno=0
         local -A _source_seen=()
         local _dup_source_key=""
         local _is_pkgbuild=false
+        local _hd_delim=""      # current heredoc delimiter, "" when not in one
+        local _saw_skip=false   # a SKIP checksum appeared -> run Pattern 16
         [[ "$(basename "$file")" == "PKGBUILD" ]] && _is_pkgbuild=true
         while IFS= read -r line || [[ -n "$line" ]]; do
             (( lineno++ )) || true
+
+            [[ "$line" == *SKIP* ]] && _saw_skip=true
+
+            # Heredoc-body tracking (consumed by Pattern 14 only). A line is
+            # "inside a heredoc" if a delimiter was open when it started.
+            local _line_in_hd=""
+            if [[ -n "$_hd_delim" ]]; then
+                _line_in_hd=1
+                [[ "$line" =~ ^[[:space:]]*"$_hd_delim"[[:space:]]*$ ]] && _hd_delim=""
+            elif [[ "$line" =~ $re_heredoc ]]; then
+                _hd_delim="${BASH_REMATCH[1]}"
+            fi
 
             # --- Pattern 1: quote-split bun/npm command (original) ---
             local stripped="${line//\'/}"
@@ -2795,6 +2886,38 @@ check_pkgbuild_caches() {
                 found_count=2
             fi
 
+            # --- Pattern 14: sudo/doas/pkexec from a PKGBUILD or scriptlet ---
+            # Skip commented-out lines (a `# sudo make install` note can't
+            # execute) and heredoc bodies (setup instructions written via
+            # `cat <<EOF`). Quoted spans are stripped first so `sudo` inside
+            # an echo/printf string -- or after a `;` inside one -- doesn't
+            # match, while a real `echo x; sudo y` compound still does.
+            if [[ -z "$_line_in_hd" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
+                local _pe_scan="$line"
+                while [[ "$_pe_scan" =~ (\"[^\"]*\"|\'[^\']*\') ]]; do
+                    _pe_scan="${_pe_scan/"${BASH_REMATCH[1]}"/}"
+                done
+                if [[ "$_pe_scan" =~ $re_priv_esc ]]; then
+                    echo "  WARNING: privilege escalation (sudo/doas/pkexec) in $file:$lineno"
+                    echo "    $line"
+                    echo "    build()/package() run as you (package() under fakeroot) and a"
+                    echo "    .install scriptlet already runs as root -- a real PKGBUILD never"
+                    echo "    needs sudo; this writes outside \$pkgdir onto the live system."
+                    found_count=2
+                fi
+            fi
+
+            # --- Pattern 15: source/patch from a mutable MR/PR diff URL ---
+            # Comment lines are skipped: linking the upstream MR/PR a vendored
+            # patch came from is a common, legitimate maintainer note.
+            if [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ $re_mutable_patch ]]; then
+                echo "  WARNING: source/patch from a mutable merge-request/pull-request URL in $file:$lineno"
+                echo "    $line"
+                echo "    An MR/PR diff can change after the PKGBUILD was reviewed -- pin a"
+                echo "    /commit/<sha>.patch or vendor the patch into the AUR repo instead."
+                found_count=2
+            fi
+
             # --- Pattern 9: duplicate source=()/source_$CARCH=() declaration ---
             # makepkg only ever honors the last assignment to a given array
             # name -- an earlier source=() is silently dead code. A legitimate
@@ -2841,6 +2964,16 @@ check_pkgbuild_caches() {
             echo "    makepkg only honors the last one -- the earlier declaration is dead"
             echo "    code, a known trick for staging a file that isn't fetched/used yet."
             found_count=2
+        fi
+
+        # --- Pattern 16: declared pkgver absent from an unverified source URL ---
+        # Only bother for a PKGBUILD that actually has a SKIP somewhere -- the
+        # helper would bail on every other file anyway, and this saves the
+        # cat + greps per cached package.
+        if $_is_pkgbuild && $_saw_skip; then
+            local _cmv_rc=0
+            _pkgbuild_pkgver_url_mismatch "$file" || _cmv_rc=$?
+            [[ $_cmv_rc -eq 2 ]] && found_count=2
         fi
     done < <(
         for dir in "${cache_dirs[@]}"; do

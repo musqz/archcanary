@@ -1170,6 +1170,80 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: comment handling wrong, rc=$rc, out: $out"
     fi
+
+    # Sub-test X: sudo/doas/pkexec invoked from a PKGBUILD → WARNING. From a
+    # full-AUR static-rules scan (Andreas Reichel, 2026-08-25): tarah's
+    # package() runs `sudo cp target/release/tarah /usr/bin`.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: privilege escalation (sudo/doas/pkexec) in"* ]]; then
+        pass "pkgbuild_obfuscation: sudo in PKGBUILD detected"
+    else
+        fail "pkgbuild_obfuscation: sudo in PKGBUILD not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test X2: regression guards for Pattern 14's false-positive surface —
+    # a scriptlet whose only `sudo` mentions are instruction text (echo,
+    # printf, a `cat <<EOF` heredoc body, a comment) must NOT be flagged.
+    # archcanary's own .install prints such instructions.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-echo" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" != *"privilege escalation"* ]]; then
+        pass "pkgbuild_obfuscation: sudo in echo/printf/heredoc/comment instruction text not flagged"
+    else
+        fail "pkgbuild_obfuscation: instruction-text sudo wrongly flagged, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Y: source/patch fetched from a mutable merge-request diff URL
+    # → WARNING. Same scan: freetype2-wps pulls its patch from a live GitLab
+    # MR diff. Regression guard: a hash-pinned /commit/<sha>.patch is
+    # immutable and must NOT trip this (pkg-clean has no such URL; the
+    # negative is covered by the real-cache validation staying clean).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: source/patch from a mutable merge-request/pull-request URL in"* ]]; then
+        pass "pkgbuild_obfuscation: mutable MR/PR patch URL detected"
+    else
+        fail "pkgbuild_obfuscation: mutable MR/PR patch URL not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Y2: regression guard — an MR/PR URL in a *comment* (linking
+    # the upstream source of a vendored patch) must NOT be flagged.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch-comment" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" != *"mutable merge-request"* ]]; then
+        pass "pkgbuild_obfuscation: MR/PR URL in a comment not flagged"
+    else
+        fail "pkgbuild_obfuscation: commented MR/PR URL wrongly flagged, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z: declared pkgver missing from the source URL while every
+    # checksum is SKIP → WARNING. Same scan: power-menu-bin says pkgver=
+    # 0.1.2 but fetches v0.1.1 with md5sums=SKIP.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-mismatch" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (0.1.2) not in any source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL mismatch with SKIP checksums detected"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL mismatch not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z2: regression guards for the pkgver/URL check's false-positive
+    # gates — a source URL carrying the version via a ${pkgver%%.*} parameter
+    # expansion (not a literal), plus a real checksum present, must stay clean.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-ok" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" != *"not in any source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL check does not fire on a \${pkgver} expansion or a real checksum"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL check false-positived, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------

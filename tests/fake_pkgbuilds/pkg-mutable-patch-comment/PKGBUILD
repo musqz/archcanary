@@ -1,0 +1,17 @@
+# Maintainer: Someone <someone@example.com>
+# The build fix is vendored below as 0001-fix.patch; it came from the
+# upstream merge request, linked here for provenance:
+#   https://gitlab.example.org/group/project/-/merge_requests/47.patch
+pkgname=pkg-mutable-patch-comment
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz"
+        "0001-fix.patch")
+sha256sums=('SKIP'
+            'b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    patch -p1 < ../0001-fix.patch
+    make
+}

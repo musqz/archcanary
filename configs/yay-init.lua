@@ -7,7 +7,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v9).
+-- yay 13.0 Lua hooks for the AUR security stack (v10).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -80,6 +80,63 @@ local function _archcanary_has_revtr_pipe_shell(pkgbuild)
     if has_revtr and has_shell then return true end
   end
   return false
+end
+
+-- Pattern port (check_pkgbuild_caches Pattern 14): sudo/doas/pkexec invoked
+-- from a PKGBUILD or .install scriptlet. build()/package() run as the
+-- calling user (package() under fakeroot) and a scriptlet already runs as
+-- root -- a real PKGBUILD never needs it, and using it writes outside
+-- $pkgdir onto the live system. Anchored to a command position (start of
+-- line, or after ";", "&", "|", "$(") with an argument required after it.
+-- Comment lines and heredoc bodies are skipped, and quoted spans stripped,
+-- so setup instructions (`echo "run: sudo ..."`, `cat <<EOF ... EOF`) don't
+-- match. Returns the matched tool name, or nil.
+local function _archcanary_has_priv_esc(pkgbuild)
+  local hd
+  for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
+    local in_hd = hd ~= nil
+    if hd then
+      if line:match("^%s*" .. hd .. "%s*$") then hd = nil end
+    else
+      -- require whitespace before `<<` so a `<<` inside a quoted string
+      -- doesn't start a phantom heredoc (mirrors re_heredoc in archcanary.sh)
+      local d = line:match("%s<<%-?%s*['\"]?([%a_][%w_]*)")
+      if d then hd = d end
+    end
+    if not in_hd and not line:match("^%s*#") then
+      local scan = line:gsub('"[^"]*"', ""):gsub("'[^']*'", "")
+      for _, tool in ipairs({ "sudo", "doas", "pkexec" }) do
+        if scan:match("^%s*" .. tool .. "%s+%S")
+           or scan:match("[;&|]%s*" .. tool .. "%s+%S")
+           or scan:match("%$%(%s*" .. tool .. "%s+%S") then
+          return tool
+        end
+      end
+    end
+  end
+  return nil
+end
+
+-- Pattern port (check_pkgbuild_caches Pattern 15): a source/patch URL
+-- pointing at a forge's merge-request or pull-request diff endpoint. That
+-- content is mutable -- the MR/PR can be amended after the PKGBUILD was
+-- reviewed. A hash-pinned /commit/<sha>.patch is immutable and NOT matched;
+-- comment lines are skipped (linking the upstream MR a vendored patch came
+-- from is a common note). Returns the matched URL fragment, or nil.
+local function _archcanary_mutable_patch_url(pkgbuild)
+  for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
+    if not line:match("^%s*#") then
+      local m = line:match("/%-/merge_requests/%d+%.diff")
+          or line:match("/%-/merge_requests/%d+%.patch")
+          or line:match("/%-/merge_requests/%d+/diffs")
+          or line:match("/pull/%d+%.diff")
+          or line:match("/pull/%d+%.patch")
+          or line:match("/pulls/%d+%.diff")
+          or line:match("/pulls/%d+%.patch")
+      if m then return m end
+    end
+  end
+  return nil
 end
 
 local function _archcanary_config_dir()
@@ -233,6 +290,25 @@ yay.create_autocmd("AURPostDownload", {
     if _archcanary_has_revtr_pipe_shell(pkgbuild) then
       flagged = true
       yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (rev/tr piped to shell)")
+    end
+    -- Warn, don't abort, for these two: both are real risk signals but a
+    -- package tripping them may well be fine, and the line-level heuristics
+    -- have enough false-positive surface (heredocs, unusual quoting) that a
+    -- hard block would be too aggressive. Matches the bash scanner's
+    -- "REVIEW" (not "INFECTED") treatment. `flagged` still suppresses the
+    -- "CHECKS CLEAN" line and keeps the press-Enter checkpoint.
+    local priv_esc = _archcanary_has_priv_esc(pkgbuild)
+    if priv_esc then
+      flagged = true
+      yay.log.warn(_archcanary_banner(pkg, "PRIVILEGE ESCALATION IN PKGBUILD") .. " (" .. priv_esc
+                   .. " — build()/package() run unprivileged; review before continuing)")
+    end
+
+    local mr_url = _archcanary_mutable_patch_url(pkgbuild)
+    if mr_url then
+      flagged = true
+      yay.log.warn(_archcanary_banner(pkg, "MUTABLE PATCH SOURCE") .. " (" .. mr_url
+                   .. ") — an MR/PR diff can change after review; verify before continuing")
     end
 
     local dir          = _archcanary_config_dir()
