@@ -1,0 +1,13 @@
+# Maintainer: Someone <someone@example.com>
+# Regression guard: two integrity arrays. md5sums says SKIP for the tarball
+# but sha256sums carries a real hash for it, so makepkg fully verifies the
+# download -- Pattern 16 must not treat the first array's SKIP as "unverified".
+pkgname=pkg-pkgver-url-multisums
+pkgver=2.0.0
+pkgrel=1
+arch=('x86_64')
+source=("https://downloads.example.com/dl/tool-latest-x86_64.tar.gz")
+md5sums=('SKIP')
+sha256sums=('b1946ac92492d2347c6235b4d2611184a1b2c3d4e5f60718293a4b5c6d7e8f901')
+
+package() { install -Dm755 tool "$pkgdir/usr/bin/tool"; }

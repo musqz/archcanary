@@ -1258,16 +1258,63 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: pkgver/URL check false-positived, rc=$rc, out: $out"
     fi
 
-    # Sub-test Z4: a gpg-signed group (a detached .sig entry present) is
-    # skipped whole, even when the tarball URL hard-codes a version that
-    # isn't a substring of pkgver and its sha256 is SKIP.
+    # Sub-test Z4: an entry whose own detached signature is in the array is
+    # skipped — the tarball URL hard-codes a version that isn't a substring of
+    # pkgver and its sha256 is SKIP, but tool-1.4.tar.xz.sig covers it.
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-signed" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 0 && "$out" != *"not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check skips a gpg-signed source group"
+        pass "pkgbuild_obfuscation: pkgver/URL check skips an entry its own .sig covers"
     else
         fail "pkgbuild_obfuscation: pkgver/URL check fired on a signed package, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z5: two integrity arrays — md5sums=SKIP but sha256sums carries a
+    # real hash for the same tarball, so makepkg verifies it. Must stay clean
+    # (the first array's SKIP is not "unverified").
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-multisums" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" != *"not in an unverified source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL check honours a real hash in a second integrity array"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL check false-positived on md5=SKIP + sha256=real, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z6: partial signature coverage — the .asc signs docs.tar.gz
+    # only; the SKIP main tarball fetches v1.9.0 while pkgver=2.0.0 → WARNING.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-partial-sig" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (2.0.0) not in an unverified source URL"* \
+       && "$out" == *"tool-x86_64.tar.gz"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL check flags a tarball a sibling .asc does not cover"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL check missed the partially-signed case, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z7: a `$` in a trailing comment on the pkgver= line must not
+    # make the check treat pkgver as a substitution and bail (evasion guard).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-comment-dollar" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (2.0.0) not in an unverified source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL check strips a trailing comment before the literal-pkgver test"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL check bailed on a \$ in a pkgver comment, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z8: a remote patch/diff (Pattern 15's territory) is not a
+    # pkgver/URL-mismatch finding — the mutable-patch fixture must trip
+    # Pattern 15 but NOT this check.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"mutable merge-request"* && "$out" != *"not in an unverified source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL check leaves a remote .patch to Pattern 15"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL check fired on a .patch entry, rc=$rc, out: $out"
     fi
 }
 
