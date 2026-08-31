@@ -2623,48 +2623,140 @@ check_bun_cache() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 7, Pattern 16 helper: declared pkgver absent from an unverified source
-# URL. Prompted by a full-AUR static-rules scan (Andreas Reichel, 2026-08-25):
-# `power-menu-bin` declares pkgver=0.1.2 but its source= URL fetches v0.1.1
-# with md5sums=SKIP — the download doesn't match the advertised version and
-# nothing verifies it, so a reader trusting `pkgver` can't tell what's
-# actually being built. Deliberately narrow to keep false positives near
-# zero: fires only when the version is a plain literal, the package is not
-# VCS-based, NOTHING in the file carries a real checksum (a single real hash
-# anywhere → bail), a SKIP is present, and no URL in the file contains the
-# version literal or a $pkgver reference. Best-effort heuristic like the rest
-# of this scan, not a parser. Echoes the finding and returns 2 on a hit.
+# Check 7, Pattern 16: a source entry that nothing checksums, whose URL
+# carries neither the declared pkgver nor a $pkgver reference — nothing ties
+# that download to the version the PKGBUILD advertises. Prompted by a full-AUR
+# static-rules scan (Andreas Reichel, 2026-08-25): `power-menu-bin` declares
+# pkgver=0.1.2 but its source= URL fetches v0.1.1 with md5sums=SKIP.
+#
+# Done positionally, the way aurscan's CHK-005 pairs checksums to sources:
+# each source entry is judged at its own array index (per architecture
+# suffix) rather than bailing whenever *any* real hash appears somewhere in
+# the file — so a real hash on a .desktop/.patch beside a SKIP on the
+# wrong-version tarball is still caught. An entry counts as verified if ANY
+# integrity array (md5sums, sha256sums, b2sums, …) carries a non-SKIP value
+# at its index, since makepkg checks them all.
+#
+# False-positive gates, kept deliberately tight:
+#   - pkgver must be a plain literal (no $) — a computed pkgver() has no fixed
+#     string to compare a URL against;
+#   - the entry must be a remote fetch (contains ://), not a local file;
+#   - VCS entries (git+/svn+/hg+/bzr+/fossil+) are skipped — SKIP is mandatory
+#     there and there is no release tarball version to embed in the URL;
+#   - an entry that is itself a detached signature, or whose own detached
+#     signature (entry.sig/.asc/.sign/.gpg) sits elsewhere in the array, is
+#     skipped — gpg + validpgpkeys is what ties that download to upstream;
+#   - if a source array and an integrity array have unequal entry counts
+#     (brace expansion, a $() entry, an unparsed ')') they did not pair
+#     cleanly, so that group is skipped rather than risk a mispaired finding.
+# Best-effort heuristic like the rest of this scan, not a parser. Echoes the
+# finding and returns 2 on a hit.
+
+# Prints a PKGBUILD array's entries one per line, surrounding quotes stripped.
+# $1 = file content, $2 = exact array name (source, sha256sums_x86_64, ...).
+# Drops `#` comments (whole-line and trailing) and CRs; prints nothing when
+# the body holds a $( ) substitution — not safely splittable on whitespace,
+# and the caller treats "no entries" as "skip this array".
+_pkgb_array_entries() {
+    awk -v want="$2" '
+        BEGIN { open = "^[ \t]*" want "\\+?=\\(" }
+        { gsub(/\r/, "") }
+        !inarr && $0 ~ open { inarr = 1; sub(open, "") }
+        inarr {
+            line = $0
+            sub(/(^|[ \t])#.*$/, "", line)       # a `#` at line-start or after
+            buf = buf " " line                    # whitespace begins a comment
+            if (index(line, ")")) { sub(/\).*/, "", buf); exit }
+        }
+        END {
+            if (!inarr || index(buf, "$(")) exit
+            n = split(buf, a, /[ \t]+/)
+            for (i = 1; i <= n; i++) {
+                t = a[i]
+                gsub(/^["\047]+|["\047]+$/, "", t)
+                if (t != "" && t != "\\") print t
+            }
+        }
+    ' <<< "$1"
+}
+
 _pkgbuild_pkgver_url_mismatch() {
-    local f="$1" content pv url
+    local f="$1" content pv
     content="$(cat -- "$f" 2>/dev/null)" || return 0
 
-    if grep -qE '^[[:space:]]*pkgver[[:space:]]*\([[:space:]]*\)' <<< "$content"; then return 0; fi
-    if grep -qE '(git|svn|hg|bzr)\+[a-z]+://' <<< "$content"; then return 0; fi
+    grep -qE '^[[:space:]]*pkgver[[:space:]]*\([[:space:]]*\)' <<< "$content" && return 0
 
     pv="$(grep -m1 -E '^pkgver=' <<< "$content" || true)"
     [[ -n "$pv" ]] || return 0
     pv="${pv#pkgver=}"
-    [[ "$pv" == *'$'* ]] && return 0            # substitution, not a literal
-    pv="${pv%%[[:space:]]*}"                    # drop any trailing comment/space
-    pv="${pv//\"/}"; pv="${pv//\'/}"
-    [[ -n "$pv" ]] || return 0
+    pv="${pv%%[[:space:]]*}"                    # drop trailing comment/space first,
+    pv="${pv//\"/}"; pv="${pv//\'/}"            # so a `$` in a comment can't
+    [[ -n "$pv" ]] || return 0                  # masquerade as a substitution
+    [[ "$pv" == *'$'* ]] && return 0            # a real substitution, not a literal
 
-    if grep -qiE '[0-9a-f]{32,}' <<< "$content"; then return 0; fi   # something is verified
-    if ! grep -q 'SKIP' <<< "$content"; then return 0; fi
+    local src_name suffix entry i _algo _sig _base _have_sums _parse_ok _covered
+    local -a srcs _sums
+    local -A verified
+    while IFS= read -r src_name; do
+        suffix="${src_name#source}"
+        mapfile -t srcs < <(_pkgb_array_entries "$content" "$src_name")
+        [[ ${#srcs[@]} -gt 0 ]] || continue
 
-    local saw_url=false
-    while IFS= read -r url; do
-        saw_url=true
-        # $pkgver in any form -- bare, ${pkgver}, or ${pkgver%%.*} / ${pkgver//./_} etc.
-        [[ "$url" == *"$pv"* || "$url" == *'$pkgver'* || "$url" == *'${pkgver'* ]] && return 0
-    done < <(grep -oE '(https?|ftp)://[^[:space:]"'\''()]+' <<< "$content" || true)
-    $saw_url || return 0   # no remote source at all -> nothing "downloaded" to mismatch
+        # An entry is verified if ANY integrity array holds a real hash at its
+        # index -- makepkg checks every declared array, so the first one that
+        # happens to say SKIP does not make the entry "unverified".
+        verified=()
+        _have_sums=false
+        _parse_ok=true
+        for _algo in b2 md5 sha1 sha224 sha256 sha384 sha512 ck; do
+            grep -qE "^[[:space:]]*${_algo}sums${suffix}\+?=\(" <<< "$content" || continue
+            _have_sums=true
+            mapfile -t _sums < <(_pkgb_array_entries "$content" "${_algo}sums${suffix}")
+            if [[ ${#_sums[@]} -ne ${#srcs[@]} ]]; then
+                _parse_ok=false            # arrays didn't pair -- don't guess
+                break
+            fi
+            for i in "${!_sums[@]}"; do
+                [[ "${_sums[$i]}" != SKIP ]] && verified[$i]=1
+            done
+        done
+        if ! $_have_sums || ! $_parse_ok; then continue; fi
 
-    echo "  WARNING: declared pkgver ($pv) not in any source URL, all checksums SKIP, in $f"
-    echo "    The download doesn't match the version the PKGBUILD advertises and"
-    echo "    nothing verifies it -- diff against a fresh clone and check what tag"
-    echo "    the source= URL actually points at before building."
-    return 2
+        for i in "${!srcs[@]}"; do
+            [[ -n "${verified[$i]:-}" ]] && continue          # checksum-verified
+            entry="${srcs[$i]}"
+            [[ "$entry" == *://* ]] || continue               # a local file, not a fetch
+            [[ "$entry" =~ (git|svn|hg|bzr|fossil)\+ ]] && continue   # VCS: SKIP is mandatory
+            [[ "$entry" =~ \.(sig|asc|sign|gpg)($|\?) ]] && continue  # entry is a detached sig
+            # a patch/diff carries no package version and is not "the build" --
+            # a mutable one is a real risk but that is Pattern 15's job, not this
+            _base="${entry##*::}"; _base="${_base##*/}"; _base="${_base%%\?*}"
+            [[ "${entry%%::*}" == *.patch || "${entry%%::*}" == *.diff \
+               || "$_base" == *.patch || "$_base" == *.diff ]] && continue
+            # entry's own detached signature elsewhere in the array is what
+            # verifies it (gpg + validpgpkeys), not a checksum
+            _covered=false
+            for _sig in "${srcs[@]}"; do
+                if [[ "$_sig" == "$entry.sig" || "$_sig" == "$entry.asc" \
+                   || "$_sig" == "$entry.sign" || "$_sig" == "$entry.gpg" ]]; then
+                    _covered=true
+                    break
+                fi
+            done
+            $_covered && continue
+            [[ "$entry" == *"$pv"* || "$entry" == *'$pkgver'* || "$entry" == *'${pkgver'* ]] && continue
+
+            echo "  WARNING: declared pkgver ($pv) not in an unverified source URL, in $f"
+            echo "    $entry"
+            echo "    No integrity array carries a real checksum for this source and its"
+            echo "    URL references neither the version the PKGBUILD advertises nor a"
+            echo "    \$pkgver -- nothing ties the download to the declared version. Diff"
+            echo "    against a fresh clone and check what the URL points at before building."
+            return 2
+        done
+    done < <(grep -oE '^[[:space:]]*source(_[a-z0-9_]+)?\+?=\(' <<< "$content" \
+                 | sed -E 's/^[[:space:]]*//; s/\+?=\($//' | sort -u)
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -2968,8 +3060,8 @@ check_pkgbuild_caches() {
 
         # --- Pattern 16: declared pkgver absent from an unverified source URL ---
         # Only bother for a PKGBUILD that actually has a SKIP somewhere -- the
-        # helper would bail on every other file anyway, and this saves the
-        # cat + greps per cached package.
+        # helper pairs checksums to sources positionally and needs a SKIP to
+        # have anything to flag, so this skips the cat + greps otherwise.
         if $_is_pkgbuild && $_saw_skip; then
             local _cmv_rc=0
             _pkgbuild_pkgver_url_mismatch "$file" || _cmv_rc=$?

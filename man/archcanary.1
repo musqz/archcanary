@@ -60,11 +60,14 @@ Tor/onion fetches, downloads into system paths, non-interactive
 .BR sudo / doas / pkexec
 invoked from a PKGBUILD or scriptlet, patch sources on a mutable
 merge-request/pull-request URL, and a
-.B pkgver
-that appears in no
 .B source=
-URL while every checksum is
-.BR SKIP ),
+entry whose checksum is
+.B SKIP
+and whose URL carries neither the declared
+.B pkgver
+nor a
+.B $pkgver
+reference),
 and for undocumented ELF binaries committed directly to a package's own
 cache/git tree (outside
 .I src/
