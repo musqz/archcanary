@@ -1,0 +1,17 @@
+# Maintainer: Example <nobody@example.com>
+# Publish by pushing this + the generated .SRCINFO to
+#   ssh://aur@aur.archlinux.org/pkg-aur-ssh-comment.git
+# (regression guard: 21 packages in the full-AUR scan carry exactly this
+# kind of boilerplate note in a comment — Pattern 12 must skip comments,
+# same as Patterns 13/14/15. A real `ssh aur@aur.archlinux.org` in code
+# still flags — see pkg-aur-ssh.)
+pkgname=pkg-aur-ssh-comment
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/pkg-1.0.tar.gz")
+build() {
+    make
+}
+package() {
+    make DESTDIR="$pkgdir" install
+}

@@ -7,7 +7,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v10).
+-- yay 13.0 Lua hooks for the AUR security stack (v11).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -67,6 +67,37 @@ local function _archcanary_has_chained_ansi_c(pkgbuild)
     end
     pos = e + 1
   end
+end
+
+-- Pattern port (check_pkgbuild_caches Pattern 4): printf spelling a command
+-- out a byte at a time. A single \xHH/\NNN escape that decodes to a letter
+-- or digit is the signal -- ESC and the CSI bytes of a `printf '\033[1m'`
+-- colour code decode to neither, and '\x3d\x3d\x3e' = "==>" doesn't either,
+-- so coloured build/scriptlet output is exempt (was 246 false positives in
+-- a full-AUR scan). Also flags a printf carrying any escape whose output is
+-- piped to a shell / eval'd (letters left plain, only punctuation encoded).
+local function _archcanary_has_printf_hex(pkgbuild)
+  for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
+    if line:find("printf", 1, true)
+       and (line:match("\\x%x") or line:match("\\[0-7]")) then
+      if line:match("\\x3[0-9]") or line:match("\\x4[1-9a-fA-F]")
+         or line:match("\\x5[0-9aA]") or line:match("\\x6[1-9a-fA-F]")
+         or line:match("\\x7[0-9aA]")
+         or line:match("\\0?6[0-7]") or line:match("\\0?7[01]")
+         or line:match("\\0?10[1-7]") or line:match("\\0?1[12][0-7]")
+         or line:match("\\0?13[0-2]") or line:match("\\0?14[1-7]")
+         or line:match("\\0?1[56][0-7]") or line:match("\\0?17[0-2]") then
+        return true
+      end
+      local scan = line:gsub('"[^"]*"', ""):gsub("'[^']*'", "")
+      if scan:match("|%s*sh") or scan:match("|%s*bash") or scan:match("|%s*zsh")
+         or scan:match("|%s*dash") or scan:match("|%s*eval")
+         or scan:match("^%s*eval%s") or scan:match("[;&|]%s*eval%s") then
+        return true
+      end
+    end
+  end
+  return false
 end
 
 -- Pattern port: rev/tr piped to a shell — two independent per-line
@@ -259,9 +290,7 @@ yay.create_autocmd("AURPostDownload", {
       "eval%s+%$%(",
       "eval%s+`",
 
-      -- printf hex/octal obfuscation
-      "printf[^\n]*\\x",
-      "printf[^\n]*\\0",
+      -- printf hex/octal obfuscation -> _archcanary_has_printf_hex below
 
       -- variable-split command reassembly (a=bu; b=n; $a$b)
       "[%l_]+=%a+;%s*[%l_]+=%a+;%s*%$",
@@ -283,6 +312,10 @@ yay.create_autocmd("AURPostDownload", {
       end
     end
 
+    if _archcanary_has_printf_hex(pkgbuild) then
+      flagged = true
+      yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (printf hex/octal obfuscation)")
+    end
     if _archcanary_has_chained_ansi_c(pkgbuild) then
       flagged = true
       yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (ANSI-C chained hex/octal escapes)")

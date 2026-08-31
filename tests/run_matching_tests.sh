@@ -863,6 +863,18 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: printf pattern missed, rc=$rc"
     fi
 
+    # Sub-test C2: octal / leading-zero / quote-split printf obfuscation
+    # variants, incl. a quote-split run used as a command with no pipe
+    # (code review 2026-08-31) — all four lines must be caught.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-printf-octal" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$(grep -c 'printf hex/octal' <<<"$out")" -eq 4 ]]; then
+        pass "pkgbuild_obfuscation: octal/leading-zero/quote-split printf variants detected"
+    else
+        fail "pkgbuild_obfuscation: printf obfuscation variant missed, rc=$rc, out: $out"
+    fi
+
     # Sub-test D: variable-split reassembly → WARNING
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-varsplit" \
@@ -873,10 +885,11 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: varsplit pattern missed, rc=$rc"
     fi
 
-    # Sub-test E: clean PKGBUILD → no WARNING (includes a standard
-    # `read -d $'\0'` NUL-delimited find -print0 loop — regression guard for
-    # a real false positive reported live: a single ANSI-C-quoted delimiter
-    # byte must not be flagged as hex/octal obfuscation)
+    # Sub-test E: clean PKGBUILD → no WARNING. Regression guards baked into
+    # the fixture: a `read -d $'\0'` NUL-delimited find -print0 loop (a lone
+    # ANSI-C delimiter byte), and `printf '\033[..m'` / `printf '\x1b[..m'`
+    # coloured build output (Pattern 4 must not read ANSI escapes as a
+    # byte-by-byte command — 246 packages flagged for this in the full scan).
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-clean" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
@@ -1093,6 +1106,18 @@ test_pkgbuild_obfuscation() {
         pass "pkgbuild_obfuscation: AUR git SSH remote reference detected"
     else
         fail "pkgbuild_obfuscation: AUR git SSH remote reference not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test R2: a commented "# push to ssh://aur@aur.archlinux.org/..." note
+    # must NOT flag — standard maintainer boilerplate, 21 packages in the
+    # full-AUR scan carry it. Pattern 12 skips comments (like 13/14/15).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-aur-ssh-comment" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"AUR git SSH remote"* ]]; then
+        pass "pkgbuild_obfuscation: commented AUR SSH remote note not flagged"
+    else
+        fail "pkgbuild_obfuscation: commented AUR SSH remote note wrongly flagged, rc=$rc, out: $out"
     fi
 
     # Sub-test S: pacman -S --noconfirm invoked from a scriptlet → WARNING.
@@ -1892,6 +1917,42 @@ test_doctor_stale_yay_init() {
         fail "doctor: expected OPT for missing yay init.lua, out: $out"
     fi
     rm -rf "$fake_home"
+}
+
+# ---------------------------------------------------------------------------
+# test_yay_hook_printf_hex — configs/yay-init.lua's _archcanary_has_printf_hex
+# is a Lua port of check_pkgbuild_caches Pattern 4 and hard-aborts the yay
+# install on a match, so its false-positive surface matters more than the
+# bash side's. Regression guard: a coloured `printf '\033[1m...'` (246 real
+# AUR packages) must not trip it; byte-assembly obfuscation still must.
+# ---------------------------------------------------------------------------
+test_yay_hook_printf_hex() {
+    local lua
+    lua=$(command -v lua5.4 || command -v lua || command -v luajit) || {
+        pass "yay_hook_printf_hex: no Lua interpreter, skipped"
+        return
+    }
+    local drv
+    drv=$(mktemp)
+    {
+        sed -n '/^local function _archcanary_has_printf_hex/,/^end$/p' \
+            "$REPO_DIR/configs/yay-init.lua"
+        echo 'print(_archcanary_has_printf_hex(arg[1]) and "FLAG" or "clean")'
+    } > "$drv"
+    local ok=1
+    #                                                       want    PKGBUILD fragment
+    [[ "$("$lua" "$drv" 'printf "\033[1;34m==>\033[0m x\n"')"       == clean ]] || ok=0
+    [[ "$("$lua" "$drv" 'printf "\x1b[32m ok \x1b[0m\n"')"          == clean ]] || ok=0
+    [[ "$("$lua" "$drv" 'printf "\x3d\x3d\x3e done\n"')"            == clean ]] || ok=0
+    [[ "$("$lua" "$drv" 'printf "\x62\x75\x6e" | bash')"           == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" 'printf "\142\165\156" | bash')"          == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" '"$(printf "\x62""\x75""\x6e")" -V')"      == FLAG  ]] || ok=0
+    rm -f "$drv"
+    if [[ $ok -eq 1 ]]; then
+        pass "yay_hook_printf_hex: ANSI colour output clean, byte-assembly flagged"
+    else
+        fail "yay_hook_printf_hex: Lua Pattern 4 port misbehaved"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -3451,6 +3512,9 @@ test_doctor_stale_completion
 
 $VERBOSE && msg "--- Test 19: doctor stale yay init.lua detection ---"
 test_doctor_stale_yay_init
+
+$VERBOSE && msg "--- Test 19b: yay hook printf hex/octal Lua port ---"
+test_yay_hook_printf_hex
 
 $VERBOSE && msg "--- Test 20: check_logs pre-campaign date correlation ---"
 test_check_logs

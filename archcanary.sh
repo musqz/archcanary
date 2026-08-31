@@ -1019,7 +1019,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v10)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v11)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -2782,6 +2782,18 @@ check_pkgbuild_caches() {
     local re_ansi_c
     re_ansi_c='\$'"'"'(\\x[0-9a-fA-F]{2}|\\[0-7]{1,3}){3,}'
 
+    # Pattern 4: printf spelling a command out a byte at a time. A single
+    # \xHH/\NNN escape that decodes to a letter or digit is the signal --
+    # `printf '\x63''\x75''\x72''\x6c'` even with the run quote-split. ESC
+    # and the CSI bytes of a `printf '\033[1m...'` colour code decode to
+    # neither ('\x3d\x3d\x3e' = "==>" also doesn't), so coloured output is
+    # exempt. re_printf_byte ranges: 0-9 / A-Z / a-z, hex then octal.
+    # re_printf_exec additionally catches partial obfuscation piped to a
+    # shell (letters left plain, only punctuation encoded).
+    local re_printf_esc='\\(x[0-9a-fA-F]|[0-7])'
+    local re_printf_byte='\\x(3[0-9]|4[1-9a-fA-F]|5[0-9aA]|6[1-9a-fA-F]|7[0-9aA])|\\0?(6[0-7]|7[01]|10[1-7]|1[12][0-7]|13[0-2]|14[1-7]|1[56][0-7]|17[0-2])'
+    local re_printf_exec='\|[[:space:]]*(ba|z|da)?sh([[:space:]]|$)|(^|[;&|[:space:]])eval[[:space:]]'
+
     # Tor/SOCKS-proxied fetch (curl -x socks5h://..., torsocks, proxychains,
     # or a bare .onion URL) — a real 2026-08-23 AUR incident (xsnow/xsnow-bin,
     # reported on aur-general) used exactly this to pull a payload binary
@@ -2876,6 +2888,12 @@ check_pkgbuild_caches() {
                 _hd_delim="${BASH_REMATCH[1]}"
             fi
 
+            # A fully commented-out line — exempt from Patterns 12/13/14/15
+            # (a `#` note can't execute). The fetch/obfuscation patterns keep
+            # scanning comment text so a payload staged there stays visible.
+            local _line_is_comment=""
+            [[ "$line" =~ ^[[:space:]]*# ]] && _line_is_comment=1
+
             # --- Pattern 1: quote-split bun/npm command (original) ---
             local stripped="${line//\'/}"
             stripped="${stripped//\"/}"
@@ -2905,10 +2923,18 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 4: printf hex/octal obfuscation ---
-            if [[ "$line" == *'printf'* ]] && [[ "$line" == *'\x'* || "$line" == *'\0'* ]]; then
-                echo "  WARNING: printf hex/octal obfuscation in $file:$lineno"
-                echo "    $line"
-                found_count=2
+            if [[ "$line" == *'printf'* ]] && [[ "$line" =~ $re_printf_esc ]]; then
+                # re_printf_exec is checked with quoted spans removed, so a
+                # `| sh` or `eval` printed as help text doesn't count.
+                local _p4="$line"
+                while [[ "$_p4" =~ (\"[^\"]*\"|\'[^\']*\') ]]; do
+                    _p4="${_p4/"${BASH_REMATCH[1]}"/}"
+                done
+                if [[ "$line" =~ $re_printf_byte ]] || [[ "$_p4" =~ $re_printf_exec ]]; then
+                    echo "  WARNING: printf hex/octal obfuscation in $file:$lineno"
+                    echo "    $line"
+                    found_count=2
+                fi
             fi
 
             # --- Pattern 5: variable-split command reassembly (a=bu; b=n; $a$b) ---
@@ -2949,7 +2975,9 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 12: reference to the AUR's own git SSH remote ---
-            if [[ "$line" =~ $re_aur_ssh ]]; then
+            # ("# push this + .SRCINFO to ssh://aur@..." is boilerplate:
+            # autodock4, noetica-bin, + 19 more in the full-AUR scan)
+            if [[ -z "$_line_is_comment" ]] && [[ "$line" =~ $re_aur_ssh ]]; then
                 echo "  WARNING: reference to the AUR git SSH remote in $file:$lineno"
                 echo "    $line"
                 echo "    A PKGBUILD/.install has no legitimate reason to touch its own AUR"
@@ -2960,16 +2988,10 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 13: pacman invoked non-interactively from a scriptlet ---
-            # Skip a fully commented-out line here: `# makepkg && sudo pacman
-            # -U --noconfirm ./${pkgname}-...pkg.tar.zst` is a common, harmless
-            # build reminder maintainers leave at the end of a PKGBUILD
-            # (reported as a false positive on the EndeavourOS forum against
-            # timeshift's archlinux/PKGBUILD). Only this pattern gets the
-            # exemption -- a commented Tor/onion fetch, system-path download or
-            # aur@aur.archlinux.org reference is never a legitimate note, so
-            # the other patterns keep scanning comment text so a payload
-            # staged in a comment stays visible.
-            if [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ $re_pacman_noninteractive ]]; then
+            # (a commented `# makepkg && sudo pacman -U --noconfirm ./*.pkg.
+            # tar.zst` build reminder is a known FP -- timeshift, reported on
+            # the EndeavourOS forum)
+            if [[ -z "$_line_is_comment" ]] && [[ "$line" =~ $re_pacman_noninteractive ]]; then
                 echo "  WARNING: non-interactive pacman call in $file:$lineno"
                 echo "    $line"
                 echo "    pacman can't safely re-enter itself mid-transaction -- a real"
@@ -2979,12 +3001,11 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 14: sudo/doas/pkexec from a PKGBUILD or scriptlet ---
-            # Skip commented-out lines (a `# sudo make install` note can't
-            # execute) and heredoc bodies (setup instructions written via
-            # `cat <<EOF`). Quoted spans are stripped first so `sudo` inside
-            # an echo/printf string -- or after a `;` inside one -- doesn't
-            # match, while a real `echo x; sudo y` compound still does.
-            if [[ -z "$_line_in_hd" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
+            # Also skips heredoc bodies (setup instructions via `cat <<EOF`).
+            # Quoted spans are stripped first so `sudo` inside an echo/printf
+            # string -- or after a `;` inside one -- doesn't match, while a
+            # real `echo x; sudo y` compound still does.
+            if [[ -z "$_line_in_hd" ]] && [[ -z "$_line_is_comment" ]]; then
                 local _pe_scan="$line"
                 while [[ "$_pe_scan" =~ (\"[^\"]*\"|\'[^\']*\') ]]; do
                     _pe_scan="${_pe_scan/"${BASH_REMATCH[1]}"/}"
@@ -3000,9 +3021,9 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 15: source/patch from a mutable MR/PR diff URL ---
-            # Comment lines are skipped: linking the upstream MR/PR a vendored
-            # patch came from is a common, legitimate maintainer note.
-            if [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ "$line" =~ $re_mutable_patch ]]; then
+            # (a comment linking the upstream MR/PR a vendored patch came
+            # from is a legitimate maintainer note)
+            if [[ -z "$_line_is_comment" ]] && [[ "$line" =~ $re_mutable_patch ]]; then
                 echo "  WARNING: source/patch from a mutable merge-request/pull-request URL in $file:$lineno"
                 echo "    $line"
                 echo "    An MR/PR diff can change after the PKGBUILD was reviewed -- pin a"
