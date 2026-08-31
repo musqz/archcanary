@@ -1196,9 +1196,9 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: comment handling wrong, rc=$rc, out: $out"
     fi
 
-    # Sub-test X: sudo/doas/pkexec invoked from a PKGBUILD → WARNING. From a
-    # full-AUR static-rules scan (Andreas Reichel, 2026-08-25): tarah's
-    # package() runs `sudo cp target/release/tarah /usr/bin`.
+    # Sub-test X: sudo in a PKGBUILD build function → WARNING. From a full-AUR
+    # static-rules scan (Andreas Reichel, 2026-08-25): tarah's package() runs
+    # `sudo cp target/release/tarah /usr/bin`, past fakeroot onto the system.
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
@@ -1208,35 +1208,79 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: sudo in PKGBUILD not detected, rc=$rc, out: $out"
     fi
 
-    # Sub-test X2: regression guards for Pattern 14's false-positive surface —
-    # a scriptlet whose only `sudo` mentions are instruction text (echo,
-    # printf, a `cat <<EOF` heredoc body, a comment) must NOT be flagged.
-    # archcanary's own .install prints such instructions.
+    # Sub-test X2: Pattern 14 false-positive surface — `sudo` as instruction
+    # text (echo/printf/heredoc/comment) in build(), and `sudo -u <user>`
+    # (run a step AS another user, not a fakeroot escape), must NOT flag.
     rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-echo" \
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-fp" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 0 && "$out" != *"privilege escalation"* ]]; then
-        pass "pkgbuild_obfuscation: sudo in echo/printf/heredoc/comment instruction text not flagged"
+        pass "pkgbuild_obfuscation: instruction-text sudo and 'sudo -u' not flagged"
     else
-        fail "pkgbuild_obfuscation: instruction-text sudo wrongly flagged, rc=$rc, out: $out"
+        fail "pkgbuild_obfuscation: Pattern 14 FP-surface case wrongly flagged, rc=$rc, out: $out"
     fi
 
-    # Sub-test Y: source/patch fetched from a mutable merge-request diff URL
-    # → WARNING. Same scan: freetype2-wps pulls its patch from a live GitLab
-    # MR diff. Regression guard: a hash-pinned /commit/<sha>.patch is
-    # immutable and must NOT trip this (pkg-clean has no such URL; the
-    # negative is covered by the real-cache validation staying clean).
+    # Sub-test X3: Pattern 14 is PKGBUILD-only — a .install scriptlet already
+    # runs as root, so `sudo systemctl enable` there is a common packaging
+    # mistake, not a fakeroot escape (full-AUR scan: ~250 such packages).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-install" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" != *"privilege escalation"* ]]; then
+        pass "pkgbuild_obfuscation: sudo in a .install scriptlet not flagged (PKGBUILD-only)"
+    else
+        fail "pkgbuild_obfuscation: .install sudo wrongly flagged, rc=$rc, out: $out"
+    fi
+
+    # Sub-test X4: `sudo -u root` / `-u 0` is not de-escalation — it runs as
+    # root, the escape Pattern 14 targets. The `sudo -u <user>` carve-out
+    # must not swallow it (evasion guard, incl. a quoted `-u "root"`).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-runas-root" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: privilege escalation (sudo/doas/pkexec) in"* ]]; then
+        pass "pkgbuild_obfuscation: sudo -u root still flagged (not de-escalation)"
+    else
+        fail "pkgbuild_obfuscation: sudo -u root evaded Pattern 14, rc=$rc, out: $out"
+    fi
+
+    # Sub-test X5: a decoy `sudo -u nobody` earlier on a compound line must
+    # not shield a real `; sudo cp` later on it — Pattern 14 splits the line
+    # into commands and judges each.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-decoy" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: privilege escalation (sudo/doas/pkexec) in"* ]]; then
+        pass "pkgbuild_obfuscation: decoy 'sudo -u' does not shield a later 'sudo cp' on the same line"
+    else
+        fail "pkgbuild_obfuscation: compound-line decoy evaded Pattern 14, rc=$rc, out: $out"
+    fi
+
+    # Sub-test X6: `sudo tar -u` — `-u` is tar's flag, not sudo's option, so
+    # this is a real escape. The run-as carve-out must only fire when `-u` is
+    # sudo's own option.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-tar-u" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: privilege escalation (sudo/doas/pkexec) in"* ]]; then
+        pass "pkgbuild_obfuscation: 'sudo tar -u' flagged (-u is not sudo's option here)"
+    else
+        fail "pkgbuild_obfuscation: 'sudo tar -u' evaded Pattern 14, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Y: an unchecksummed MR/PR patch diff URL → WARNING. Same scan:
+    # freetype2-wps pulls its patch from a live GitLab MR diff, sha256=SKIP.
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
     if [[ $rc -eq 2 && "$out" == *"WARNING: source/patch from a mutable merge-request/pull-request URL in"* ]]; then
-        pass "pkgbuild_obfuscation: mutable MR/PR patch URL detected"
+        pass "pkgbuild_obfuscation: unchecksummed mutable MR/PR patch URL detected"
     else
         fail "pkgbuild_obfuscation: mutable MR/PR patch URL not detected, rc=$rc, out: $out"
     fi
 
-    # Sub-test Y2: regression guard — an MR/PR URL in a *comment* (linking
-    # the upstream source of a vendored patch) must NOT be flagged.
+    # Sub-test Y2: an MR/PR URL that appears only in a *comment* (provenance
+    # note for a vendored patch) must NOT be flagged.
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch-comment" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
@@ -1246,100 +1290,50 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: commented MR/PR URL wrongly flagged, rc=$rc, out: $out"
     fi
 
-    # Sub-test Z: declared pkgver missing from the source URL of a SKIP-
-    # checksummed entry → WARNING. power-menu-bin says pkgver=0.1.2 but
-    # fetches v0.1.1 with md5sums=SKIP.
+    # Sub-test Y3: the calibration fix — an MR/PR patch URL WITH a real
+    # sha256sum is pinned (makepkg verification fails loudly on a force-push)
+    # → NOT flagged. 154 of 249 full-AUR hits were pinned like this.
     rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-mismatch" \
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch-pinned" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (0.1.2) not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL mismatch with SKIP checksum detected"
+    if [[ $rc -eq 0 && "$out" != *"mutable merge-request"* ]]; then
+        pass "pkgbuild_obfuscation: checksum-pinned MR/PR patch not flagged"
     else
-        fail "pkgbuild_obfuscation: pkgver/URL mismatch not detected, rc=$rc, out: $out"
+        fail "pkgbuild_obfuscation: pinned MR/PR patch wrongly flagged, rc=$rc, out: $out"
     fi
 
-    # Sub-test Z2: the positional-pairing rework — a real checksum elsewhere
-    # in the array (here on the local .desktop) no longer suppresses the
-    # finding on the SKIP-checksummed wrong-version tarball. pkgver=2.0.0,
-    # source URL fetches v1.9.0, sha256sums=('SKIP' '<realhash>').
+    # Sub-test Y4: positional pairing — a real hash on one entry does not pin
+    # a SKIP MR-patch entry at another index → still flagged.
     rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-mismatch-mixed" \
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch-mixed" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (2.0.0) not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL mismatch caught despite a real checksum on another entry"
+    if [[ $rc -eq 2 && "$out" == *"mutable merge-request"* ]]; then
+        pass "pkgbuild_obfuscation: MR/PR patch flagged despite a real hash on another entry"
     else
-        fail "pkgbuild_obfuscation: pkgver/URL positional check missed the mixed case, rc=$rc, out: $out"
+        fail "pkgbuild_obfuscation: positional check missed the mixed case, rc=$rc, out: $out"
     fi
 
-    # Sub-test Z3: false-positive gates must stay clean — a source URL carrying
-    # the version via a ${pkgver%%.*} parameter expansion (not a literal), plus
-    # a real checksum on its own entry.
+    # Sub-test Y5: a real hash in a SECOND integrity array (md5sums=SKIP,
+    # sha256sums=real) pins the entry → NOT flagged.
     rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-ok" \
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch-multisums" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 0 && "$out" != *"not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check does not fire on a \${pkgver} expansion"
+    if [[ $rc -eq 0 && "$out" != *"mutable merge-request"* ]]; then
+        pass "pkgbuild_obfuscation: MR/PR patch pinned via a second integrity array not flagged"
     else
-        fail "pkgbuild_obfuscation: pkgver/URL check false-positived, rc=$rc, out: $out"
+        fail "pkgbuild_obfuscation: second-array hash not honoured, rc=$rc, out: $out"
     fi
 
-    # Sub-test Z4: an entry whose own detached signature is in the array is
-    # skipped — the tarball URL hard-codes a version that isn't a substring of
-    # pkgver and its sha256 is SKIP, but tool-1.4.tar.xz.sig covers it.
+    # Sub-test Y6: an MR/PR patch added via source+=() and pinned via
+    # sha256sums+=() — makepkg concatenates the += arrays, so it is pinned
+    # and must NOT be flagged (the array parser accumulates += continuations).
     rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-signed" \
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch-append" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 0 && "$out" != *"not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check skips an entry its own .sig covers"
+    if [[ $rc -eq 0 && "$out" != *"mutable merge-request"* ]]; then
+        pass "pkgbuild_obfuscation: source+=() MR patch pinned via sha256sums+=() not flagged"
     else
-        fail "pkgbuild_obfuscation: pkgver/URL check fired on a signed package, rc=$rc, out: $out"
-    fi
-
-    # Sub-test Z5: two integrity arrays — md5sums=SKIP but sha256sums carries a
-    # real hash for the same tarball, so makepkg verifies it. Must stay clean
-    # (the first array's SKIP is not "unverified").
-    rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-multisums" \
-        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 0 && "$out" != *"not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check honours a real hash in a second integrity array"
-    else
-        fail "pkgbuild_obfuscation: pkgver/URL check false-positived on md5=SKIP + sha256=real, rc=$rc, out: $out"
-    fi
-
-    # Sub-test Z6: partial signature coverage — the .asc signs docs.tar.gz
-    # only; the SKIP main tarball fetches v1.9.0 while pkgver=2.0.0 → WARNING.
-    rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-partial-sig" \
-        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (2.0.0) not in an unverified source URL"* \
-       && "$out" == *"tool-x86_64.tar.gz"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check flags a tarball a sibling .asc does not cover"
-    else
-        fail "pkgbuild_obfuscation: pkgver/URL check missed the partially-signed case, rc=$rc, out: $out"
-    fi
-
-    # Sub-test Z7: a `$` in a trailing comment on the pkgver= line must not
-    # make the check treat pkgver as a substitution and bail (evasion guard).
-    rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-comment-dollar" \
-        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (2.0.0) not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check strips a trailing comment before the literal-pkgver test"
-    else
-        fail "pkgbuild_obfuscation: pkgver/URL check bailed on a \$ in a pkgver comment, rc=$rc, out: $out"
-    fi
-
-    # Sub-test Z8: a remote patch/diff (Pattern 15's territory) is not a
-    # pkgver/URL-mismatch finding — the mutable-patch fixture must trip
-    # Pattern 15 but NOT this check.
-    rc=0
-    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-mutable-patch" \
-        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ "$out" == *"mutable merge-request"* && "$out" != *"not in an unverified source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check leaves a remote .patch to Pattern 15"
-    else
-        fail "pkgbuild_obfuscation: pkgver/URL check fired on a .patch entry, rc=$rc, out: $out"
+        fail "pkgbuild_obfuscation: source+=() checksum not honoured, rc=$rc, out: $out"
     fi
 }
 
@@ -1947,11 +1941,56 @@ test_yay_hook_printf_hex() {
     [[ "$("$lua" "$drv" 'printf "\x62\x75\x6e" | bash')"           == FLAG  ]] || ok=0
     [[ "$("$lua" "$drv" 'printf "\142\165\156" | bash')"          == FLAG  ]] || ok=0
     [[ "$("$lua" "$drv" '"$(printf "\x62""\x75""\x6e")" -V')"      == FLAG  ]] || ok=0
+    # `| sh` word-anchored: piping to sha256sum/shred/shuf is not a shell
+    [[ "$("$lua" "$drv" 'printf "\xde\xad\xbe\xef" | sha256sum')"   == clean ]] || ok=0
+    [[ "$("$lua" "$drv" 'printf "\xde\xad" | shred -n1 /dev/stdin')" == clean ]] || ok=0
     rm -f "$drv"
     if [[ $ok -eq 1 ]]; then
         pass "yay_hook_printf_hex: ANSI colour output clean, byte-assembly flagged"
     else
         fail "yay_hook_printf_hex: Lua Pattern 4 port misbehaved"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# test_yay_hook_priv_esc_mutable — the Lua ports of Pattern 14 (sudo in a
+# build function) and Pattern 15 (unpinned MR/PR patch URL) must match the
+# calibrated bash behaviour: `sudo -u <user>` is not an escape, and a
+# checksum-pinned MR patch is not flagged (positional, per source index).
+# ---------------------------------------------------------------------------
+test_yay_hook_priv_esc_mutable() {
+    local lua
+    lua=$(command -v lua5.4 || command -v lua || command -v luajit) || {
+        pass "yay_hook_priv_esc_mutable: no Lua interpreter, skipped"
+        return
+    }
+    local drv h='b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184'
+    drv=$(mktemp)
+    {
+        # _archcanary_runas .. _archcanary_has_priv_esc is one contiguous block
+        sed -n '/^local function _archcanary_runas/,/^local function _archcanary_pkgb_array/p' \
+            "$REPO_DIR/configs/yay-init.lua" | sed '$d'
+        sed -n '/^local function _archcanary_pkgb_array/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_mutable_patch_url/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
+        echo 'local w = arg[1]'
+        echo 'if w == "pe" then print(_archcanary_has_priv_esc(arg[2]) and "FLAG" or "clean")'
+        echo 'else print(_archcanary_mutable_patch_url(arg[2]) and "FLAG" or "clean") end'
+    } > "$drv"
+    local ok=1 nl=$'\n'
+    [[ "$("$lua" "$drv" pe "package(){${nl}  sudo cp x /usr/bin/x${nl}}")"           == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" pe "build(){${nl}  sudo -u builder ./configure${nl}}")"      == clean ]] || ok=0
+    [[ "$("$lua" "$drv" pe "package(){${nl}  sudo -u root cp p /usr/bin/x${nl}}")"   == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" pe "package(){${nl}  sudo -u nobody true; sudo cp p /usr/bin/x${nl}}")" == FLAG ]] || ok=0
+    [[ "$("$lua" "$drv" pe "build(){${nl}  echo \"run: sudo systemctl enable x\"${nl}}")" == clean ]] || ok=0
+    [[ "$("$lua" "$drv" mp "source=('a.patch::https://x/y/pull/5.patch')${nl}sha256sums=('SKIP')")" == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" mp "source=('a.patch::https://x/y/pull/5.patch')${nl}sha256sums=('$h')")"   == clean ]] || ok=0
+    [[ "$("$lua" "$drv" mp "# https://x/y/pull/5.patch${nl}source=('a.tar.gz')${nl}sha256sums=('SKIP')")" == clean ]] || ok=0
+    [[ "$("$lua" "$drv" mp "source=('https://x/y/pull/5.patch')${nl}md5sums=('SKIP')${nl}sha256sums=('$h')")" == clean ]] || ok=0
+    rm -f "$drv"
+    if [[ $ok -eq 1 ]]; then
+        pass "yay_hook_priv_esc_mutable: sudo -u exempt, checksum-pinned MR patch not flagged"
+    else
+        fail "yay_hook_priv_esc_mutable: Lua Pattern 14/15 port misbehaved"
     fi
 }
 
@@ -3515,6 +3554,9 @@ test_doctor_stale_yay_init
 
 $VERBOSE && msg "--- Test 19b: yay hook printf hex/octal Lua port ---"
 test_yay_hook_printf_hex
+
+$VERBOSE && msg "--- Test 19c: yay hook Pattern 14/15 Lua ports ---"
+test_yay_hook_priv_esc_mutable
 
 $VERBOSE && msg "--- Test 20: check_logs pre-campaign date correlation ---"
 test_check_logs

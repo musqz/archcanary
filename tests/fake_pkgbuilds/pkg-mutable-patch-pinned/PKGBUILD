@@ -1,0 +1,22 @@
+# Maintainer: Someone <someone@example.com>
+# A PR patch fetched by URL, but pinned with a real sha256sum: if the PR is
+# force-pushed, makepkg's own verification fails loudly. Not a finding.
+pkgname=pkg-mutable-patch-pinned
+pkgver=2.13.3
+pkgrel=1
+source=(
+    "https://example.com/${pkgname}-${pkgver}.tar.gz"
+    "fix-build.patch::https://gitlab.example.org/group/project/-/merge_requests/47.patch"
+)
+sha256sums=('SKIP'
+            'b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184')
+
+build() {
+    cd "$srcdir"
+    patch -p1 < fix-build.patch
+    make
+}
+
+package() {
+    make DESTDIR="$pkgdir" install
+}

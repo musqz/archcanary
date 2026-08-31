@@ -1,0 +1,11 @@
+post_install() {
+    # A .install scriptlet already runs as root under pacman. `sudo` here is
+    # a common packaging mistake (it will hang on the password prompt), but
+    # it is not a fakeroot escape -- Pattern 14 must not flag it.
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now pkg-priv-esc-install.timer
+}
+
+post_upgrade() {
+    post_install
+}

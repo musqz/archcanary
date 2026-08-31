@@ -1,0 +1,18 @@
+# Maintainer: Someone <someone@example.com>
+# The MR-diff patch is added via source+=() and pinned via sha256sums+=().
+# makepkg concatenates the += arrays, so the entry IS checksum-pinned and
+# must not be flagged.
+pkgname=pkg-mutable-patch-append
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz")
+sha256sums=('b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184')
+
+source+=("fix.patch::https://gitlab.example.org/g/p/-/merge_requests/5.patch")
+sha256sums+=('b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184')
+
+build() {
+    cd "$srcdir"
+    patch -p1 < fix.patch
+    make
+}

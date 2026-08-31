@@ -1,0 +1,13 @@
+# Maintainer: Someone <someone@example.com>
+# Real escapes that must NOT be swallowed by the `sudo -u <user>` carve-out:
+#   - `sudo -u root` / `-u "root"` / `-u 0` -- runs as root
+#   - `sudo tar -u ...` -- `-u` is tar's flag, not sudo's option
+pkgname=pkg-priv-esc-runas-root
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    sudo -u "root" install -Dm755 payload /usr/bin/payload
+}
