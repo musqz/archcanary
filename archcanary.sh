@@ -1019,7 +1019,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v11)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v12)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -2623,53 +2623,25 @@ check_bun_cache() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 7, Pattern 16: a source entry that nothing checksums, whose URL
-# carries neither the declared pkgver nor a $pkgver reference — nothing ties
-# that download to the version the PKGBUILD advertises. Prompted by a full-AUR
-# static-rules scan (Andreas Reichel, 2026-08-25): `power-menu-bin` declares
-# pkgver=0.1.2 but its source= URL fetches v0.1.1 with md5sums=SKIP.
-#
-# Done positionally, the way aurscan's CHK-005 pairs checksums to sources:
-# each source entry is judged at its own array index (per architecture
-# suffix) rather than bailing whenever *any* real hash appears somewhere in
-# the file — so a real hash on a .desktop/.patch beside a SKIP on the
-# wrong-version tarball is still caught. An entry counts as verified if ANY
-# integrity array (md5sums, sha256sums, b2sums, …) carries a non-SKIP value
-# at its index, since makepkg checks them all.
-#
-# False-positive gates, kept deliberately tight:
-#   - pkgver must be a plain literal (no $) — a computed pkgver() has no fixed
-#     string to compare a URL against;
-#   - the entry must be a remote fetch (contains ://), not a local file;
-#   - VCS entries (git+/svn+/hg+/bzr+/fossil+) are skipped — SKIP is mandatory
-#     there and there is no release tarball version to embed in the URL;
-#   - an entry that is itself a detached signature, or whose own detached
-#     signature (entry.sig/.asc/.sign/.gpg) sits elsewhere in the array, is
-#     skipped — gpg + validpgpkeys is what ties that download to upstream;
-#   - if a source array and an integrity array have unequal entry counts
-#     (brace expansion, a $() entry, an unparsed ')') they did not pair
-#     cleanly, so that group is skipped rather than risk a mispaired finding.
-# Best-effort heuristic like the rest of this scan, not a parser. Echoes the
-# finding and returns 2 on a hit.
-
 # Prints a PKGBUILD array's entries one per line, surrounding quotes stripped.
 # $1 = file content, $2 = exact array name (source, sha256sums_x86_64, ...).
-# Drops `#` comments (whole-line and trailing) and CRs; prints nothing when
-# the body holds a $( ) substitution — not safely splittable on whitespace,
-# and the caller treats "no entries" as "skip this array".
+# Accumulates a bare `name=(...)` and every later `name+=(...)` (makepkg
+# concatenates them). Drops `#` comments (whole-line and trailing) and CRs;
+# prints nothing when a body holds a $( ) substitution — not safely
+# splittable, and the caller treats "no entries" as "skip this array".
 _pkgb_array_entries() {
     awk -v want="$2" '
-        BEGIN { open = "^[ \t]*" want "\\+?=\\(" }
+        BEGIN { open = "^[ \t]*" want "\\+?=\\(" ; seen = 0 }
         { gsub(/\r/, "") }
-        !inarr && $0 ~ open { inarr = 1; sub(open, "") }
+        !inarr && $0 ~ open { inarr = 1; seen = 1; sub(open, "") }
         inarr {
             line = $0
             sub(/(^|[ \t])#.*$/, "", line)       # a `#` at line-start or after
-            buf = buf " " line                    # whitespace begins a comment
-            if (index(line, ")")) { sub(/\).*/, "", buf); exit }
+            if (index(line, ")")) { sub(/\).*/, "", line); inarr = 0 }
+            buf = buf " " line
         }
         END {
-            if (!inarr || index(buf, "$(")) exit
+            if (!seen || index(buf, "$(")) exit
             n = split(buf, a, /[ \t]+/)
             for (i = 1; i <= n; i++) {
                 t = a[i]
@@ -2680,82 +2652,79 @@ _pkgb_array_entries() {
     ' <<< "$1"
 }
 
-_pkgbuild_pkgver_url_mismatch() {
-    local f="$1" content pv
-    content="$(cat -- "$f" 2>/dev/null)" || return 0
-
-    grep -qE '^[[:space:]]*pkgver[[:space:]]*\([[:space:]]*\)' <<< "$content" && return 0
-
-    pv="$(grep -m1 -E '^pkgver=' <<< "$content" || true)"
-    [[ -n "$pv" ]] || return 0
-    pv="${pv#pkgver=}"
-    pv="${pv%%[[:space:]]*}"                    # drop trailing comment/space first,
-    pv="${pv//\"/}"; pv="${pv//\'/}"            # so a `$` in a comment can't
-    [[ -n "$pv" ]] || return 0                  # masquerade as a substitution
-    [[ "$pv" == *'$'* ]] && return 0            # a real substitution, not a literal
-
-    local src_name suffix entry i _algo _sig _base _have_sums _parse_ok _covered
-    local -a srcs _sums
-    local -A verified
-    while IFS= read -r src_name; do
-        suffix="${src_name#source}"
-        mapfile -t srcs < <(_pkgb_array_entries "$content" "$src_name")
-        [[ ${#srcs[@]} -gt 0 ]] || continue
-
-        # An entry is verified if ANY integrity array holds a real hash at its
-        # index -- makepkg checks every declared array, so the first one that
-        # happens to say SKIP does not make the entry "unverified".
-        verified=()
-        _have_sums=false
-        _parse_ok=true
-        for _algo in b2 md5 sha1 sha224 sha256 sha384 sha512 ck; do
-            grep -qE "^[[:space:]]*${_algo}sums${suffix}\+?=\(" <<< "$content" || continue
-            _have_sums=true
-            mapfile -t _sums < <(_pkgb_array_entries "$content" "${_algo}sums${suffix}")
-            if [[ ${#_sums[@]} -ne ${#srcs[@]} ]]; then
-                _parse_ok=false            # arrays didn't pair -- don't guess
-                break
-            fi
-            for i in "${!_sums[@]}"; do
-                [[ "${_sums[$i]}" != SKIP ]] && verified[$i]=1
-            done
+# Prints the source-array indices ($2) that carry a real (non-SKIP) checksum
+# in ANY integrity array — makepkg verifies every declared *sums array, so
+# one real hash pins the entry. An integrity array that doesn't pair 1:1
+# with the source array (brace expansion, a $() entry, a malformed line) is
+# skipped, not trusted and not fatal — a differently-shaped array elsewhere
+# may still pin the entry. Empty output = nothing is pinned.
+# $1 = file content, $2 = source array name (source, source_x86_64, ...).
+_pkgb_verified_idx() {
+    local content="$1" sname="$2" suffix="${2#source}" algo i
+    local -a srcs sums
+    local -A v=()
+    mapfile -t srcs < <(_pkgb_array_entries "$content" "$sname")
+    for algo in b2 md5 sha1 sha224 sha256 sha384 sha512 ck; do
+        grep -qE "^[[:space:]]*${algo}sums${suffix}\+?=\(" <<< "$content" || continue
+        mapfile -t sums < <(_pkgb_array_entries "$content" "${algo}sums${suffix}")
+        [[ ${#sums[@]} -eq ${#srcs[@]} ]] || continue
+        for i in "${!sums[@]}"; do
+            [[ -n "${sums[$i]}" && "${sums[$i]}" != SKIP ]] && v[$i]=1
         done
-        if ! $_have_sums || ! $_parse_ok; then continue; fi
+    done
+    for i in "${!v[@]}"; do echo "$i"; done
+}
 
+# Check 7, Pattern 15: a source= entry whose URL is a forge merge-request /
+# pull-request diff endpoint (GitLab /-/merge_requests/<n>.diff|.patch|/diffs,
+# GitHub/Gitea /pull(s)/<n>.diff|.patch) AND that entry carries no checksum.
+# That diff is mutable — an MR/PR can be force-pushed after the PKGBUILD was
+# reviewed — so an unpinned one means makepkg may fetch something no reviewer
+# saw. A checksummed entry is safe (makepkg's own verification fails loudly
+# if the diff changed) and a /commit/<sha>.patch is immutable; neither is
+# matched. Reported by Andreas Reichel's full-AUR scan: freetype2-wps fetched
+# its patch from a live GitLab MR diff. Echoes the finding, returns 2 on a hit.
+_mp_warn() {
+    echo "  WARNING: source/patch from a mutable merge-request/pull-request URL in $1"
+    echo "    $2"
+    echo "    An MR/PR diff can change after the PKGBUILD was reviewed and is not"
+    echo "    checksum-pinned here -- pin it with a sha256sum, a /commit/<sha>.patch,"
+    echo "    or vendor the patch into the AUR repo."
+}
+_pkgbuild_mutable_patch() {
+    local f="$1" content sname i _vraw _mr_seen=false
+    local re_mr='(/-/merge_requests/[0-9]+(\.(diff|patch)|/diffs)|/pulls?/[0-9]+\.(diff|patch))'
+    content=$(<"$f") || return 0
+    [[ "$content" == *merge_requests/* || "$content" == *pull/* || "$content" == *pulls/* ]] || return 0
+    [[ "$content" =~ $re_mr ]] || return 0
+    local -a srcs
+    local -A vidx
+    while IFS= read -r sname; do
+        mapfile -t srcs < <(_pkgb_array_entries "$content" "$sname")
+        [[ ${#srcs[@]} -gt 0 ]] || continue
+        vidx=()
+        _vraw=$(_pkgb_verified_idx "$content" "$sname") || true
+        while IFS= read -r i; do [[ -n "$i" ]] && vidx[$i]=1; done <<< "$_vraw"
         for i in "${!srcs[@]}"; do
-            [[ -n "${verified[$i]:-}" ]] && continue          # checksum-verified
-            entry="${srcs[$i]}"
-            [[ "$entry" == *://* ]] || continue               # a local file, not a fetch
-            [[ "$entry" =~ (git|svn|hg|bzr|fossil)\+ ]] && continue   # VCS: SKIP is mandatory
-            [[ "$entry" =~ \.(sig|asc|sign|gpg)($|\?) ]] && continue  # entry is a detached sig
-            # a patch/diff carries no package version and is not "the build" --
-            # a mutable one is a real risk but that is Pattern 15's job, not this
-            _base="${entry##*::}"; _base="${_base##*/}"; _base="${_base%%\?*}"
-            [[ "${entry%%::*}" == *.patch || "${entry%%::*}" == *.diff \
-               || "$_base" == *.patch || "$_base" == *.diff ]] && continue
-            # entry's own detached signature elsewhere in the array is what
-            # verifies it (gpg + validpgpkeys), not a checksum
-            _covered=false
-            for _sig in "${srcs[@]}"; do
-                if [[ "$_sig" == "$entry.sig" || "$_sig" == "$entry.asc" \
-                   || "$_sig" == "$entry.sign" || "$_sig" == "$entry.gpg" ]]; then
-                    _covered=true
-                    break
-                fi
-            done
-            $_covered && continue
-            [[ "$entry" == *"$pv"* || "$entry" == *'$pkgver'* || "$entry" == *'${pkgver'* ]] && continue
-
-            echo "  WARNING: declared pkgver ($pv) not in an unverified source URL, in $f"
-            echo "    $entry"
-            echo "    No integrity array carries a real checksum for this source and its"
-            echo "    URL references neither the version the PKGBUILD advertises nor a"
-            echo "    \$pkgver -- nothing ties the download to the declared version. Diff"
-            echo "    against a fresh clone and check what the URL points at before building."
+            [[ "${srcs[$i]}" =~ $re_mr ]] || continue
+            _mr_seen=true
+            [[ -n "${vidx[$i]:-}" ]] && continue        # checksum-pinned
+            _mp_warn "$f" "${srcs[$i]}"
             return 2
         done
     done < <(grep -oE '^[[:space:]]*source(_[a-z0-9_]+)?\+?=\(' <<< "$content" \
                  | sed -E 's/^[[:space:]]*//; s/\+?=\($//' | sort -u)
+    # Every MR/PR entry a source array held was checksum-pinned -> fine.
+    $_mr_seen && return 0
+    # The URL is in the file but not in any parsed source entry: a comment
+    # (skipped -- a provenance note), or an unparseable array (a $() entry).
+    # Surface the first non-comment occurrence rather than miss it.
+    while IFS= read -r i; do
+        [[ "$i" =~ ^[[:space:]]*# ]] && continue
+        [[ "$i" =~ $re_mr ]] || continue
+        _mp_warn "$f" "${i#"${i%%[![:space:]]*}"}"
+        return 2
+    done <<< "$content"
     return 0
 }
 
@@ -2833,36 +2802,32 @@ check_pkgbuild_caches() {
     local re_pacman_noninteractive='pacman[[:space:]].*--noconfirm'
 
     # A privilege-escalation helper (sudo/doas/pkexec) invoked from a
-    # PKGBUILD or .install scriptlet. makepkg runs build()/package() as the
-    # calling user (package() under fakeroot) and a .install scriptlet
-    # already runs as root — none of them has any reason to shell out
-    # through sudo. Doing so writes outside the fakeroot $pkgdir straight
-    # onto the live system, bypassing pacman's own file tracking. Reported
-    # by a full-AUR static-rules scan (Andreas Reichel, 2026-08-25):
-    # `tarah`'s package() runs `sudo cp target/release/tarah /usr/bin`.
+    # PKGBUILD's build()/package(). makepkg runs those as the calling user
+    # (package() under fakeroot), so shelling through sudo writes outside the
+    # fakeroot $pkgdir straight onto the live system, bypassing pacman's file
+    # tracking. Reported by a full-AUR static-rules scan (Andreas Reichel,
+    # 2026-08-25): `tarah`'s package() runs `sudo cp .../tarah /usr/bin`.
     # Anchored to a command position — start of line, after ; & | , or as
     # $(...) — and requires an argument after it, so `sudo` inside an
-    # unquoted depends=(sudo ...) array doesn't match. The scan loop
-    # additionally strips quoted spans (so `echo "run: sudo ..."` and
-    # `"step; sudo ..."` don't match) and skips heredoc bodies (a scriptlet
-    # printing setup instructions via `cat <<EOF ... EOF` is normal).
-    local re_priv_esc='(^|[;&|]|\$\()[[:space:]]*(sudo|doas|pkexec)[[:space:]]+[^[:space:]]'
+    # unquoted depends=(sudo ...) array doesn't match. re_runas carves out
+    # `sudo -u <user>` / `--user`: running a command AS another user is
+    # de-escalation, not a fakeroot escape (a full-AUR scan found ~130 of
+    # these, mostly `sudo -u "$service_user"` in build helpers) -- but
+    # `-u root` / `-u 0` IS the escape, so re_runas_root un-exempts it.
+    # Pattern 14 is PKGBUILD-only (a .install scriptlet already runs as
+    # root). The scan loop strips quoted spans and a trailing comment, then
+    # splits the line into commands, so these anchor at fragment start.
+    local re_priv_esc='^[[:space:]]*(sudo|doas|pkexec)[[:space:]]+[^[:space:]]'
+    # -u/--user as sudo's own option: any run of -x / --long / --long=val
+    # flags may sit between (--preserve-env=PATH, -E, -H, ...).
+    local re_runas='^[[:space:]]*(sudo|doas)([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+(-u([[:space:]]|$)|--user)'
+    local re_runas_root='(-u|--user)[[:space:]="]*(root|0)([^[:alnum:]_]|$)'
     # Opening line of a heredoc — capture the delimiter word so the body can
     # be skipped for Pattern 14. Requires whitespace before `<<` (a real
     # redirection: `cat <<EOF`, `cmd > x <<EOF`), which keeps a `<<` sitting
     # inside a quoted string from starting a phantom heredoc. Herestrings
     # (<<<) don't match — no delimiter word follows the third `<`.
     local re_heredoc='[[:space:]]<<-?[[:space:]]*["'"'"']?([A-Za-z_][A-Za-z0-9_]*)'
-
-    # A source=/patch URL pointing at a forge's merge-request or
-    # pull-request diff endpoint — GitLab /-/merge_requests/<n>.diff|.patch|
-    # /diffs, GitHub/Gitea /pull(s)/<n>.diff|.patch. That content is
-    # mutable: the MR/PR can be force-pushed or amended after the PKGBUILD
-    # was reviewed, so what makepkg fetches at build time need not be what a
-    # reviewer saw. A hash-pinned /commit/<sha>.patch is immutable and is
-    # deliberately NOT matched. Reported by the same full-AUR scan:
-    # `freetype2-wps` fetches its patch from a live GitLab MR diff URL.
-    local re_mutable_patch='(/-/merge_requests/[0-9]+(\.(diff|patch)|/diffs)|/pulls?/[0-9]+\.(diff|patch))'
 
     while IFS= read -r file; do
         (( scanned++ )) || true
@@ -2871,12 +2836,9 @@ check_pkgbuild_caches() {
         local _dup_source_key=""
         local _is_pkgbuild=false
         local _hd_delim=""      # current heredoc delimiter, "" when not in one
-        local _saw_skip=false   # a SKIP checksum appeared -> run Pattern 16
         [[ "$(basename "$file")" == "PKGBUILD" ]] && _is_pkgbuild=true
         while IFS= read -r line || [[ -n "$line" ]]; do
             (( lineno++ )) || true
-
-            [[ "$line" == *SKIP* ]] && _saw_skip=true
 
             # Heredoc-body tracking (consumed by Pattern 14 only). A line is
             # "inside a heredoc" if a delimiter was open when it started.
@@ -3000,35 +2962,42 @@ check_pkgbuild_caches() {
                 found_count=2
             fi
 
-            # --- Pattern 14: sudo/doas/pkexec from a PKGBUILD or scriptlet ---
-            # Also skips heredoc bodies (setup instructions via `cat <<EOF`).
-            # Quoted spans are stripped first so `sudo` inside an echo/printf
-            # string -- or after a `;` inside one -- doesn't match, while a
-            # real `echo x; sudo y` compound still does.
-            if [[ -z "$_line_in_hd" ]] && [[ -z "$_line_is_comment" ]]; then
-                local _pe_scan="$line"
+            # --- Pattern 14: sudo/doas/pkexec from a PKGBUILD build function ---
+            # PKGBUILD only (a .install scriptlet is already root). Heredoc
+            # bodies and comments are skipped; quoted spans and a trailing
+            # `#` comment are stripped, then the line is split on ; & | ( {
+            # so each command is judged on its own -- a decoy `sudo -u
+            # nobody :` can't shield a `; sudo cp`, nor `pkg(){ sudo cp; }`
+            # the brace.
+            # re_runas exempts `sudo -u <user>` (run-as), re_runas_root
+            # un-exempts `-u root` / `-u 0` (that IS the escape).
+            if $_is_pkgbuild && [[ -z "$_line_in_hd" ]] && [[ -z "$_line_is_comment" ]] \
+               && [[ "$line" == *sudo* || "$line" == *doas* || "$line" == *pkexec* ]]; then
+                local _pe_scan="$line" _frag
                 while [[ "$_pe_scan" =~ (\"[^\"]*\"|\'[^\']*\') ]]; do
                     _pe_scan="${_pe_scan/"${BASH_REMATCH[1]}"/}"
                 done
-                if [[ "$_pe_scan" =~ $re_priv_esc ]]; then
+                _pe_scan="${_pe_scan%% #*}"; _pe_scan="${_pe_scan%%$'\t'#*}"
+                # for the -u root check: keep the target's text (drop only the
+                # quote chars) so `sudo -u "root"` can't hide, but drop a
+                # trailing comment so `# ... -u root` note doesn't un-exempt.
+                local _rl="${line%% #*}"; _rl="${_rl%%$'\t'#*}"; _rl="${_rl//[\"\']/}"
+                # split into commands with no subprocess (per-line hot path)
+                _pe_scan="${_pe_scan//[;&|({]/$'\n'}"
+                local _p14=false
+                while IFS= read -r _frag || [[ -n "$_frag" ]]; do
+                    [[ "$_frag" =~ $re_priv_esc ]] || continue
+                    [[ "$_frag" =~ $re_runas && ! "$_rl" =~ $re_runas_root ]] && continue
+                    _p14=true; break
+                done <<< "$_pe_scan"
+                if $_p14; then
                     echo "  WARNING: privilege escalation (sudo/doas/pkexec) in $file:$lineno"
                     echo "    $line"
-                    echo "    build()/package() run as you (package() under fakeroot) and a"
-                    echo "    .install scriptlet already runs as root -- a real PKGBUILD never"
-                    echo "    needs sudo; this writes outside \$pkgdir onto the live system."
+                    echo "    build()/package() run as you (package() under fakeroot) -- a"
+                    echo "    real PKGBUILD never needs sudo; this writes outside \$pkgdir"
+                    echo "    onto the live system, bypassing pacman's file tracking."
                     found_count=2
                 fi
-            fi
-
-            # --- Pattern 15: source/patch from a mutable MR/PR diff URL ---
-            # (a comment linking the upstream MR/PR a vendored patch came
-            # from is a legitimate maintainer note)
-            if [[ -z "$_line_is_comment" ]] && [[ "$line" =~ $re_mutable_patch ]]; then
-                echo "  WARNING: source/patch from a mutable merge-request/pull-request URL in $file:$lineno"
-                echo "    $line"
-                echo "    An MR/PR diff can change after the PKGBUILD was reviewed -- pin a"
-                echo "    /commit/<sha>.patch or vendor the patch into the AUR repo instead."
-                found_count=2
             fi
 
             # --- Pattern 9: duplicate source=()/source_$CARCH=() declaration ---
@@ -3079,14 +3048,15 @@ check_pkgbuild_caches() {
             found_count=2
         fi
 
-        # --- Pattern 16: declared pkgver absent from an unverified source URL ---
-        # Only bother for a PKGBUILD that actually has a SKIP somewhere -- the
-        # helper pairs checksums to sources positionally and needs a SKIP to
-        # have anything to flag, so this skips the cat + greps otherwise.
-        if $_is_pkgbuild && $_saw_skip; then
-            local _cmv_rc=0
-            _pkgbuild_pkgver_url_mismatch "$file" || _cmv_rc=$?
-            [[ $_cmv_rc -eq 2 ]] && found_count=2
+        # --- Pattern 15: source/patch from a mutable MR/PR diff URL ---
+        # Per-file: the helper pairs each source entry to its checksum
+        # positionally and flags only an MR/PR patch URL that no integrity
+        # array pins. Comment lines never reach it (arrays are parsed, not
+        # grepped). Its own $re_mr early-out skips the parse otherwise.
+        if $_is_pkgbuild; then
+            local _mp_rc=0
+            _pkgbuild_mutable_patch "$file" || _mp_rc=$?
+            [[ $_mp_rc -eq 2 ]] && found_count=2
         fi
     done < <(
         for dir in "${cache_dirs[@]}"; do

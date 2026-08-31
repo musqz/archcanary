@@ -1,0 +1,13 @@
+# Maintainer: Someone <someone@example.com>
+# `sudo tar -u` -- the `-u` is tar's "update" flag, not sudo's -u/--user, so
+# this is a real fakeroot escape and must be flagged (Pattern 14 only
+# exempts -u when it is sudo's own option).
+pkgname=pkg-priv-esc-tar-u
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    sudo tar -u -f /usr/lib/${pkgname}.a obj.o
+}

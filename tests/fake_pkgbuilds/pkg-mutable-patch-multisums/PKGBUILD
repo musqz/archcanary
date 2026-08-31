@@ -1,0 +1,15 @@
+# Maintainer: Someone <someone@example.com>
+# md5sums says SKIP but sha256sums carries a real hash for the same entry.
+# makepkg verifies every declared integrity array, so the patch is pinned.
+pkgname=pkg-mutable-patch-multisums
+pkgver=1.0
+pkgrel=1
+source=("https://github.com/example/project/pull/33.patch")
+md5sums=('SKIP')
+sha256sums=('b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184')
+
+build() {
+    cd "$srcdir"
+    patch -p1 < 33.patch
+    make
+}

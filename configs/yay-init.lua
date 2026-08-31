@@ -7,7 +7,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v11).
+-- yay 13.0 Lua hooks for the AUR security stack (v12).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -89,9 +89,13 @@ local function _archcanary_has_printf_hex(pkgbuild)
          or line:match("\\0?1[56][0-7]") or line:match("\\0?17[0-2]") then
         return true
       end
+      -- output piped to a shell / eval'd. Word-anchor the shell name so
+      -- `| sha256sum`, `| shred`, `| shuf` don't count (matches the bash
+      -- re_printf_exec, which does the same via ([[:space:]]|$)).
       local scan = line:gsub('"[^"]*"', ""):gsub("'[^']*'", "")
-      if scan:match("|%s*sh") or scan:match("|%s*bash") or scan:match("|%s*zsh")
-         or scan:match("|%s*dash") or scan:match("|%s*eval")
+      if scan:match("|%s*sh%f[^%w]") or scan:match("|%s*bash%f[^%w]")
+         or scan:match("|%s*zsh%f[^%w]") or scan:match("|%s*dash%f[^%w]")
+         or scan:match("|%s*eval%f[^%w]")
          or scan:match("^%s*eval%s") or scan:match("[;&|]%s*eval%s") then
         return true
       end
@@ -114,14 +118,36 @@ local function _archcanary_has_revtr_pipe_shell(pkgbuild)
 end
 
 -- Pattern port (check_pkgbuild_caches Pattern 14): sudo/doas/pkexec invoked
--- from a PKGBUILD or .install scriptlet. build()/package() run as the
--- calling user (package() under fakeroot) and a scriptlet already runs as
--- root -- a real PKGBUILD never needs it, and using it writes outside
--- $pkgdir onto the live system. Anchored to a command position (start of
--- line, or after ";", "&", "|", "$(") with an argument required after it.
--- Comment lines and heredoc bodies are skipped, and quoted spans stripped,
--- so setup instructions (`echo "run: sudo ..."`, `cat <<EOF ... EOF`) don't
--- match. Returns the matched tool name, or nil.
+-- from a PKGBUILD build()/package(), which makepkg runs as the calling user
+-- (package() under fakeroot) -- shelling through sudo writes outside $pkgdir
+-- onto the live system. PKGBUILD only (the hook never sees the .install).
+-- Comment lines (whole-line and trailing) and heredoc bodies are skipped,
+-- quoted spans stripped, then the line is split into commands on ; & | ( so
+-- a decoy `sudo -u nobody :` can't shield a real `; sudo cp` on the same
+-- line. `sudo -u <user>` / `--user` is de-escalation (run a step as another
+-- user), not matched -- except `-u root` / `-u 0`, which IS the escape.
+-- Returns the tool, or nil.
+
+-- Is this command fragment `sudo -u <user>` / `--user` (run a step AS
+-- another user -- de-escalation)? True only when -u is sudo's own option:
+-- walk the tokens after `sudo`, skipping leading -flags, and see if -u is
+-- the first non-flag (so `sudo tar -u ...` -- tar's -u -- is NOT run-as).
+local function _archcanary_runas(frag)
+  local rest = frag:match("^%s*sudo%s+(.*)") or frag:match("^%s*doas%s+(.*)")
+  if not rest then return false end
+  for tok in rest:gmatch("%S+") do
+    if tok == "-u" or tok:match("^%-u.") or tok == "--user" or tok:match("^%-%-user=") then
+      return true
+    elseif not tok:match("^%-") then
+      return false
+    end
+  end
+  return false
+end
+local function _archcanary_runas_root(s)
+  return s:match("%-u[%s=]*root%f[^%w]") or s:match("%-u[%s=]*0%f[^%w]")
+      or s:match("%-%-user[%s=]*root%f[^%w]") or s:match("%-%-user[%s=]*0%f[^%w]")
+end
 local function _archcanary_has_priv_esc(pkgbuild)
   local hd
   for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
@@ -136,11 +162,18 @@ local function _archcanary_has_priv_esc(pkgbuild)
     end
     if not in_hd and not line:match("^%s*#") then
       local scan = line:gsub('"[^"]*"', ""):gsub("'[^']*'", "")
-      for _, tool in ipairs({ "sudo", "doas", "pkexec" }) do
-        if scan:match("^%s*" .. tool .. "%s+%S")
-           or scan:match("[;&|]%s*" .. tool .. "%s+%S")
-           or scan:match("%$%(%s*" .. tool .. "%s+%S") then
-          return tool
+                       :gsub("%s#.*", ""):gsub("\t#.*", "")
+      -- quote chars (not spans) removed + trailing comment gone: the -u
+      -- target survives so `sudo -u "root"` can't hide, but a `# ... -u
+      -- root` note can't un-exempt a real `sudo -u builder`.
+      local dq = line:gsub("%s#.*", ""):gsub("\t#.*", ""):gsub("[\"']", "")
+      local root_ua = _archcanary_runas_root(dq)
+      for frag in (scan .. "("):gmatch("([^;&|({]*)[;&|({]") do
+        for _, tool in ipairs({ "sudo", "doas", "pkexec" }) do
+          if frag:match("^%s*" .. tool .. "%s+%S")
+             and not (_archcanary_runas(frag) and not root_ua) then
+            return tool
+          end
         end
       end
     end
@@ -148,22 +181,86 @@ local function _archcanary_has_priv_esc(pkgbuild)
   return nil
 end
 
--- Pattern port (check_pkgbuild_caches Pattern 15): a source/patch URL
--- pointing at a forge's merge-request or pull-request diff endpoint. That
--- content is mutable -- the MR/PR can be amended after the PKGBUILD was
--- reviewed. A hash-pinned /commit/<sha>.patch is immutable and NOT matched;
--- comment lines are skipped (linking the upstream MR a vendored patch came
--- from is a common note). Returns the matched URL fragment, or nil.
+-- Pattern port (check_pkgbuild_caches Pattern 15): a source/patch URL on a
+-- forge's merge-request or pull-request diff endpoint AND that source entry
+-- carries no checksum. That diff is mutable -- an MR/PR can be force-pushed
+-- after review -- so an unpinned one means makepkg may fetch something no
+-- reviewer saw. A checksummed entry is safe (verification fails loudly) and
+-- a /commit/<sha>.patch is immutable; neither is matched. Pairs checksums to
+-- sources positionally, the way check_pkgbuild_caches does. Returns the
+-- matched URL fragment, or nil.
+
+-- Split a PKGBUILD array body into entries (quotes stripped). Accumulates a
+-- bare `name=(...)` and every later `name+=(...)` (makepkg concatenates
+-- them). Returns nil on a $() substitution or an absent array -- caller
+-- treats either as "can't parse". Comments and CRs are dropped. Line-based,
+-- not a shell parser: an entry with a literal ")" would truncate it, same
+-- as the bash side's awk.
+local function _archcanary_pkgb_array(pkgbuild, name)
+  local body, grab = nil, false
+  for l in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
+    l = l:gsub("\r", ""):gsub("%s#.*", ""):gsub("^#.*", "")
+    if not grab and l:match("^%s*" .. name .. "%+?=%(") then
+      grab = true
+      l = l:gsub("^%s*" .. name .. "%+?=%(", "")
+    end
+    if grab then
+      local close = l:find(")", 1, true)
+      body = (body or "") .. " " .. (close and l:sub(1, close - 1) or l)
+      if close then grab = false end
+    end
+  end
+  if not body or body:find("%$%(") then return nil end
+  local out = {}
+  for tok in body:gmatch("%S+") do
+    tok = tok:gsub("^['\"]+", ""):gsub("['\"]+$", "")
+    if tok ~= "" and tok ~= "\\" then out[#out + 1] = tok end
+  end
+  return out
+end
+
 local function _archcanary_mutable_patch_url(pkgbuild)
+  local re_mr = {
+    "/%-/merge_requests/%d+%.diff", "/%-/merge_requests/%d+%.patch",
+    "/%-/merge_requests/%d+/diffs", "/pull/%d+%.diff", "/pull/%d+%.patch",
+    "/pulls/%d+%.diff", "/pulls/%d+%.patch",
+  }
+  local function mr_match(s)
+    for _, p in ipairs(re_mr) do local m = s:match(p); if m then return m end end
+  end
+  if not mr_match(pkgbuild) then return nil end
+  local seen, mr_seen = {}, false
+  for sname in ("\n" .. pkgbuild):gmatch("\n%s*(source[%w_]*)%+?=%(") do
+    local srcs = (not seen[sname]) and _archcanary_pkgb_array(pkgbuild, sname)
+    seen[sname] = true
+    if srcs then
+      -- verified[i] only where an integrity array pins index i. If a *sums
+      -- array doesn't pair 1:1, leave every entry unpinned (the cautious
+      -- call -- a real hash never coincides with an MR-patch URL anyway).
+      local suffix, verified = sname:sub(7), {}
+      for _, algo in ipairs({ "b2", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "ck" }) do
+        local sums = _archcanary_pkgb_array(pkgbuild, algo .. "sums" .. suffix)
+        if sums and #sums == #srcs then
+          for i, v in ipairs(sums) do
+            if v ~= "SKIP" and v ~= "" then verified[i] = true end
+          end
+        end
+      end
+      for i, e in ipairs(srcs) do
+        if mr_match(e) then
+          mr_seen = true
+          if not verified[i] then return mr_match(e) end
+        end
+      end
+    end
+  end
+  if mr_seen then return nil end            -- every MR entry was pinned
+  -- The URL is in the file but not in any parsed source entry: a comment
+  -- (skipped below), or an unparseable array (a $() entry). Line-scan so an
+  -- unpinned one still surfaces.
   for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
     if not line:match("^%s*#") then
-      local m = line:match("/%-/merge_requests/%d+%.diff")
-          or line:match("/%-/merge_requests/%d+%.patch")
-          or line:match("/%-/merge_requests/%d+/diffs")
-          or line:match("/pull/%d+%.diff")
-          or line:match("/pull/%d+%.patch")
-          or line:match("/pulls/%d+%.diff")
-          or line:match("/pulls/%d+%.patch")
+      local m = mr_match(line)
       if m then return m end
     end
   end

@@ -1,0 +1,24 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-priv-esc-fp
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    # sudo only as instruction text -- never executed.
+    echo "After install, run: sudo systemctl enable ${pkgname}.service"
+    printf 'or: sudo pacman -U ./*.pkg.tar.zst\n'
+    cat <<'EOF'
+Manual setup:
+    sudo cp helper /usr/local/bin/helper
+EOF
+    # A real call, but 'sudo -u' runs the step AS the build user: that is
+    # de-escalation, not a fakeroot escape -- even with flags before -u.
+    sudo --preserve-env=PATH -u builder ./configure --prefix=/usr
+    make  # build first, then; sudo make install  <- ';'+sudo in a comment
+}
+
+package() {
+    make DESTDIR="$pkgdir" install
+}

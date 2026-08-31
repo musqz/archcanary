@@ -1,0 +1,12 @@
+# Maintainer: Someone <someone@example.com>
+# A decoy `sudo -u nobody` earlier on a compound line must not shield the
+# real `sudo cp` that follows it -- Pattern 14 splits the line into commands.
+pkgname=pkg-priv-esc-decoy
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    sudo -u nobody true; sudo cp payload /usr/bin/payload
+}

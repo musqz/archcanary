@@ -1,0 +1,19 @@
+# Maintainer: Someone <someone@example.com>
+# The real hash is on the *local* patch (index 1); the MR-diff patch
+# (index 0) is SKIP, so it stays unpinned and must still be flagged.
+pkgname=pkg-mutable-patch-mixed
+pkgver=1.0
+pkgrel=1
+source=(
+    "https://github.com/example/project/pull/33.patch"
+    "local-fix.patch"
+)
+sha256sums=('SKIP'
+            'b1946ac92492d2347c6235b4d2611184b1946ac92492d2347c6235b4d2611184')
+
+build() {
+    cd "$srcdir"
+    patch -p1 < 33.patch
+    patch -p1 < local-fix.patch
+    make
+}

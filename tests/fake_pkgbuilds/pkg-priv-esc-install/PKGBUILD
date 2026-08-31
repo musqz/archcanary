@@ -1,0 +1,11 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-priv-esc-install
+pkgver=1.0
+pkgrel=1
+install=pkg-priv-esc-install.install
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    make DESTDIR="$pkgdir" install
+}
