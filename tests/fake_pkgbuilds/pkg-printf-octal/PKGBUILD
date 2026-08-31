@@ -1,0 +1,13 @@
+pkgname=pkg-printf-octal
+pkgver=1.0
+pkgrel=1
+# printf byte-assembly variants the plain substring check used to catch and
+# Pattern 4's regex rework must still catch (code review, 2026-08-31):
+# bare octal, leading-zero octal, quote-split runs, and a quote-split run
+# used as a command with no pipe at all.
+build() {
+    printf '\142\165\156' | bash
+    printf '\0142\0165\0156' | bash
+    printf '\x62''\x75''\x6e' | bash
+    "$(printf '\x62''\x75''\x6e')" --version
+}

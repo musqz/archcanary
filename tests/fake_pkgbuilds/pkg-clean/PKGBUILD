@@ -3,6 +3,11 @@ pkgver=1.0
 pkgrel=1
 source=("https://example.com/pkg-1.0.tar.gz")
 build() {
+    # Coloured status output — \033[ / \x1b[ ANSI escapes in a printf are
+    # not hex/octal obfuscation (regression guard for a full-AUR-scan false
+    # positive: 246 packages flagged for exactly this).
+    printf '\033[1;34m==>\033[0m building %s\n' "$pkgname"
+    printf '\x1b[32m  -> configure\x1b[0m\n'
     ./configure --prefix=/usr
     make
 }
