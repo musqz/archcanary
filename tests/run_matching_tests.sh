@@ -1221,28 +1221,53 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: commented MR/PR URL wrongly flagged, rc=$rc, out: $out"
     fi
 
-    # Sub-test Z: declared pkgver missing from the source URL while every
-    # checksum is SKIP → WARNING. Same scan: power-menu-bin says pkgver=
-    # 0.1.2 but fetches v0.1.1 with md5sums=SKIP.
+    # Sub-test Z: declared pkgver missing from the source URL of a SKIP-
+    # checksummed entry → WARNING. power-menu-bin says pkgver=0.1.2 but
+    # fetches v0.1.1 with md5sums=SKIP.
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-mismatch" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (0.1.2) not in any source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL mismatch with SKIP checksums detected"
+    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (0.1.2) not in an unverified source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL mismatch with SKIP checksum detected"
     else
         fail "pkgbuild_obfuscation: pkgver/URL mismatch not detected, rc=$rc, out: $out"
     fi
 
-    # Sub-test Z2: regression guards for the pkgver/URL check's false-positive
-    # gates — a source URL carrying the version via a ${pkgver%%.*} parameter
-    # expansion (not a literal), plus a real checksum present, must stay clean.
+    # Sub-test Z2: the positional-pairing rework — a real checksum elsewhere
+    # in the array (here on the local .desktop) no longer suppresses the
+    # finding on the SKIP-checksummed wrong-version tarball. pkgver=2.0.0,
+    # source URL fetches v1.9.0, sha256sums=('SKIP' '<realhash>').
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-mismatch-mixed" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: declared pkgver (2.0.0) not in an unverified source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL mismatch caught despite a real checksum on another entry"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL positional check missed the mixed case, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z3: false-positive gates must stay clean — a source URL carrying
+    # the version via a ${pkgver%%.*} parameter expansion (not a literal), plus
+    # a real checksum on its own entry.
     rc=0
     out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-ok" \
         "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
-    if [[ $rc -eq 0 && "$out" != *"not in any source URL"* ]]; then
-        pass "pkgbuild_obfuscation: pkgver/URL check does not fire on a \${pkgver} expansion or a real checksum"
+    if [[ $rc -eq 0 && "$out" != *"not in an unverified source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL check does not fire on a \${pkgver} expansion"
     else
         fail "pkgbuild_obfuscation: pkgver/URL check false-positived, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z4: a gpg-signed group (a detached .sig entry present) is
+    # skipped whole, even when the tarball URL hard-codes a version that
+    # isn't a substring of pkgver and its sha256 is SKIP.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-pkgver-url-signed" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" != *"not in an unverified source URL"* ]]; then
+        pass "pkgbuild_obfuscation: pkgver/URL check skips a gpg-signed source group"
+    else
+        fail "pkgbuild_obfuscation: pkgver/URL check fired on a signed package, rc=$rc, out: $out"
     fi
 }
 
