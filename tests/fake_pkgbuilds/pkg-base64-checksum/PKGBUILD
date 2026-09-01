@@ -1,0 +1,23 @@
+# Maintainer: Someone <someone@example.com>
+# `| sha256sum` / `| sha512sum` after base64 -d or rev/tr must NOT match the
+# `| sh` pipe-to-shell patterns (Patterns 2 and 7). The extension-id idiom
+# below is in dozens of browser-extension -bin packages on the AUR.
+pkgname=pkg-base64-checksum
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+_pubkey='MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A'
+
+prepare() {
+    # Chrome/Chromium extension ID from the public key
+    export _id="$(echo "$_pubkey" | base64 -d | sha256sum | head -c32 | tr '0-9a-f' 'a-p')"
+    # checksum-verify line
+    grep "release.tar.gz" 'SHA256SUMS.asc' | tr -d '\r' | sha256sum -c -
+    # a shell name as a plain command's last argument, not off the pipe
+    cat "$srcdir/deps" | tr -d '\r' | grep -c bash
+    # base64 decode written to a file, not piped onward -- a later
+    # unrelated `| sh` on the line must not make this "base64-decode-to-shell"
+    echo "$_icon" | base64 -d > icon.png && gen_config | sh -s -- --quiet
+}

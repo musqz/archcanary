@@ -836,11 +836,40 @@ test_pkgbuild_obfuscation() {
     # Sub-test A2: cleanup hint present, exactly once (it's printed once after
     # the whole scan loop, not per-pattern-match or per-file)
     local hint_count
-    hint_count=$(grep -c "diff what's flagged above against a fresh clone" <<< "$out")
+    hint_count=$(grep -c "diff what's flagged above against a fresh clone" <<< "$out") || true
     if [[ "$out" == *"don't delete this cache first"* && "$hint_count" -eq 1 ]]; then
         pass "pkgbuild_obfuscation: cleanup hint present exactly once"
     else
         fail "pkgbuild_obfuscation: cleanup hint missing/duplicated, hint_count=$hint_count, out: $out"
+    fi
+
+    # Sub-test A3: `| sha256sum` / `| sha512sum` after `base64 -d` or `tr`
+    # must NOT match `| sh` (Patterns 2 and 7). The extension-id idiom
+    # (`echo $key | base64 -d | sha256sum | head -c32 | tr 0-9a-f a-p`) is
+    # in dozens of browser-extension -bin packages — 33 full-AUR FPs.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-base64-checksum" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" != *"base64-decode-to-shell"* && "$out" != *"rev/tr pipe-to-shell"* ]]; then
+        pass "pkgbuild_obfuscation: '| sha256sum' after base64/tr not flagged as '| sh'"
+    else
+        fail "pkgbuild_obfuscation: sha256sum pipe wrongly matched pipe-to-shell, rc=$rc, out: $out"
+    fi
+
+    # Sub-test A4: `base64 -di` (bundled flag), `| env -i bash` (wrapper), a
+    # shell name closed by a backtick (`| sh\``), and a decode with an
+    # operand + `2>…` between the flag and the pipe are all still caught by
+    # Pattern 2 — the pkg-base64 fixture carries one line of each, plus the
+    # canonical `base64 -d | bash`, so five base64-decode-to-shell hits.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-base64" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    local b64_hits
+    b64_hits=$(grep -c "base64-decode-to-shell" <<< "$out") || true
+    if [[ $rc -eq 2 && "$b64_hits" -eq 5 ]]; then
+        pass "pkgbuild_obfuscation: bundled flag, wrapper, backtick, and operand+redirect all flagged"
+    else
+        fail "pkgbuild_obfuscation: a base64-decode-to-shell variant missed, rc=$rc, hits=$b64_hits, out: $out"
     fi
 
     # Sub-test B: eval $(...) → WARNING
@@ -1929,6 +1958,8 @@ test_yay_hook_printf_hex() {
     local drv
     drv=$(mktemp)
     {
+        sed -n '/^local _ARCHCANARY_PIPE_SHELLS/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_pipe_to_shell/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
         sed -n '/^local function _archcanary_has_printf_hex/,/^end$/p' \
             "$REPO_DIR/configs/yay-init.lua"
         echo 'print(_archcanary_has_printf_hex(arg[1]) and "FLAG" or "clean")'
@@ -1949,6 +1980,100 @@ test_yay_hook_printf_hex() {
         pass "yay_hook_printf_hex: ANSI colour output clean, byte-assembly flagged"
     else
         fail "yay_hook_printf_hex: Lua Pattern 4 port misbehaved"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# test_yay_hook_no_frontier — yay 13 runs the hook under gopher-lua (v1.1.2),
+# whose pattern engine has NO `%f` frontier pattern: it parses `%f` as a
+# literal `f`, so any `%f[...]` anchor silently never matches in production
+# while passing under the system lua5.4/luajit the suite uses. Guard: the
+# file must contain no `%f[` in a pattern. `%f` is the only Lua 5.2+ pattern
+# feature gopher-lua lacks — the idioms that replaced it here (`%W`, `%a`,
+# bracket classes like `[%s;|&)<>]`, the `?` quantifier) are all Lua 5.1
+# core and match identically under gopher-lua and PUC-Lua.
+# ---------------------------------------------------------------------------
+test_yay_hook_no_frontier() {
+    local hits
+    hits=$(grep -nE '%f\[' "$REPO_DIR/configs/yay-init.lua" || true)
+    if [[ -z "$hits" ]]; then
+        pass "yay_hook_no_frontier: no %f[ frontier pattern (unsupported by gopher-lua)"
+    else
+        fail "yay_hook_no_frontier: %f[ found in yay-init.lua (gopher-lua parses it as literal f): $hits"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# test_yay_hook_pipe_anchor — the yay hook's rev/tr and curl/wget/base64
+# pipe-to-shell checks must word-anchor the shell name, so a pipe into
+# `sha256sum` doesn't match `| sh` and hard-abort the install.
+# ---------------------------------------------------------------------------
+test_yay_hook_pipe_anchor() {
+    local lua
+    lua=$(command -v lua5.4 || command -v lua || command -v luajit) || {
+        pass "yay_hook_pipe_anchor: no Lua interpreter, skipped"
+        return
+    }
+    local drv
+    drv=$(mktemp)
+    {
+        sed -n '/^local _ARCHCANARY_PIPE_SHELLS/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_pipe_to_shell/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_has_revtr_pipe_shell/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_has_dl_pipe_shell/,/^end$/p' "$REPO_DIR/configs/yay-init.lua"
+        echo 'if arg[1] == "rt" then print(_archcanary_has_revtr_pipe_shell(arg[2]) and "FLAG" or "clean")'
+        echo 'else print(_archcanary_has_dl_pipe_shell(arg[2]) and "FLAG" or "clean") end'
+    } > "$drv"
+    local ok=1
+    # clean: shell name is a checksum tool, or a plain command's last arg
+    [[ "$("$lua" "$drv" rt 'echo $k | base64 -d | sha256sum | tr 0-9a-f a-p')" == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -sL $u | sha256sum | cut -d" " -f1')"         == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'echo $k | base64 -d | sha256sum | head -c32')"     == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'x | tee bash.log')"                                == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -s $u/tags | jq -r .name | grep bash | head -1')" == clean ]] || ok=0
+    [[ "$("$lua" "$drv" rt 'cat p | tr -d "\r" | grep -c bash')"               == clean ]] || ok=0
+    # clean: through a wrapper, but the shell name is another command's arg
+    [[ "$("$lua" "$drv" dl 'curl $u | sudo pacman -S bash')"                   == clean ]] || ok=0
+    [[ "$("$lua" "$drv" rt 'cat l | tr -d "\r" | env FOO=1 grep -rl bash')"    == clean ]] || ok=0
+    # clean: xargs / a detached wrapper operand are out of scope
+    [[ "$("$lua" "$drv" dl 'curl -sL $u | xargs -I{} bash -c {}')"             == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -sL $u | sudo -u root bash')"                 == clean ]] || ok=0
+    # clean: shell runs after a `&&`/`;` boundary, not off the pipe
+    [[ "$("$lua" "$drv" dl 'curl -sL $u | tar xz -C $srcdir && sh ./autogen.sh')" == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'wget -qO- $u | bsdtar -xf - ; bash ./bootstrap')"  == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -sL $u | tar xz || bash ./fallback.sh')"      == clean ]] || ok=0
+    # clean: a `# curl … | sh` upstream-install note in a comment (dl hard-aborts)
+    [[ "$("$lua" "$drv" dl '  # install: curl -fsSL https://get.example.com | sh')" == clean ]] || ok=0
+    # clean: base64 decode not piped onward, and curl/wget only as a substring
+    [[ "$("$lua" "$drv" dl 'echo "$_i" | base64 -d > icon.png && gen_config | sh -s')" == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'echo "$curl_result" | sh')"                        == clean ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'install -Dm755 libcurl.so "$pkgdir"/x && cfg | sh')" == clean ]] || ok=0
+    # flag: shell directly off the pipe, through `|&`, a wrapper, or a backtick
+    [[ "$("$lua" "$drv" dl 'key=`curl -sL $u | sh`')"                          == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" rt 'v=`cat p | rev | bash`')"                          == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'x="$(curl $u | bash)"')"                           == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl $u | sudo true | sudo bash')"                 == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" rt 'cat p | rev | bash')"                              == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" rt 'cat p | rev | sudo sh')"                           == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -sL https://x/install.sh | bash')"            == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -fsSL $u | sudo bash')"                       == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -fsSL $u | env -i bash')"                     == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -fsSL $u | env -i HOME=/r sh')"               == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'curl -fsSL $u |& bash')"                           == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'wget -qO- $u | sh')"                               == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'echo $x | base64 -w0 -d | sh')"                    == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'echo $x | base64 -di | sh')"                       == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'echo $k | base64 -d | tr a b | bash')"             == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl '/usr/bin/curl -sL $u | bash')"                     == FLAG  ]] || ok=0
+    # flag: an operand / redirect between the decode flag and the pipe is fine
+    [[ "$("$lua" "$drv" dl 'echo x | base64 -d file.b64 | bash')"              == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'base64 --decode "$f" 2>/dev/null | sh')"           == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" dl 'base64 -d -w0 | sh')"                              == FLAG  ]] || ok=0
+    rm -f "$drv"
+    if [[ $ok -eq 1 ]]; then
+        pass "yay_hook_pipe_anchor: '| sha256sum' clean, real '| sh'/'| bash' flagged"
+    else
+        fail "yay_hook_pipe_anchor: Lua pipe-to-shell anchor misbehaved"
     fi
 }
 
@@ -1979,6 +2104,7 @@ test_yay_hook_priv_esc_mutable() {
     local ok=1 nl=$'\n'
     [[ "$("$lua" "$drv" pe "package(){${nl}  sudo cp x /usr/bin/x${nl}}")"           == FLAG  ]] || ok=0
     [[ "$("$lua" "$drv" pe "build(){${nl}  sudo -u builder ./configure${nl}}")"      == clean ]] || ok=0
+    [[ "$("$lua" "$drv" pe "package(){${nl}  sudo -u root_svc cp p /usr/bin/x${nl}}")" == clean ]] || ok=0
     [[ "$("$lua" "$drv" pe "package(){${nl}  sudo -u root cp p /usr/bin/x${nl}}")"   == FLAG  ]] || ok=0
     [[ "$("$lua" "$drv" pe "package(){${nl}  sudo -u nobody true; sudo cp p /usr/bin/x${nl}}")" == FLAG ]] || ok=0
     [[ "$("$lua" "$drv" pe "build(){${nl}  echo \"run: sudo systemctl enable x\"${nl}}")" == clean ]] || ok=0
@@ -3557,6 +3683,12 @@ test_yay_hook_printf_hex
 
 $VERBOSE && msg "--- Test 19c: yay hook Pattern 14/15 Lua ports ---"
 test_yay_hook_priv_esc_mutable
+
+$VERBOSE && msg "--- Test 19d: yay hook pipe-to-shell anchor ---"
+test_yay_hook_pipe_anchor
+
+$VERBOSE && msg "--- Test 19e: yay hook has no %f frontier pattern ---"
+test_yay_hook_no_frontier
 
 $VERBOSE && msg "--- Test 20: check_logs pre-campaign date correlation ---"
 test_check_logs

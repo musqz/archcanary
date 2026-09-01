@@ -7,7 +7,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v12).
+-- yay 13.0 Lua hooks for the AUR security stack (v13).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -41,6 +41,62 @@ yay.create_autocmd("UpgradeSelect", {
     return { exclude = {}, skip_menu = false }
   end,
 })
+
+-- `| <shell>` with the shell name word-anchored -- not followed by another
+-- alphanumeric char -- so `| sha256sum` / `| sha512sum` (Chrome extension-id
+-- and checksum-verify idioms) is not read as `| sh`. gopher-lua (yay 13's
+-- Lua engine, v1.1.2) has NO `%f` frontier pattern, so a "\n" is appended
+-- and the anchor is a plain non-alphanumeric class. Do not use `%f` in
+-- this file -- it silently parses as a literal `f` under gopher-lua.
+local _ARCHCANARY_PIPE_SHELLS = { "bash", "sh", "zsh", "dash", "eval" }
+-- wrappers that hand their stdin straight to the shell that follows, so
+-- `| sudo bash` / `| env -i sh` is still a pipe-to-shell. A bare command
+-- before the shell name (`| grep bash`, `| command -v sh`) is NOT.
+local _ARCHCANARY_PIPE_WRAPPERS = { "sudo", "doas", "pkexec", "env", "exec" }
+-- one pipe stage's text, taken right after `<wrapper> ` -- true only if it
+-- is the wrapper's own glued flags (`-E`, `-i`) or `VAR=val` assignments
+-- and then a shell, NOT a whole command whose argument is a shell name
+-- (`sudo pacman -S bash`). A detached flag operand (`sudo -u root bash`)
+-- also stops the match -- `sudo bash` still hits, and _archcanary_has_priv_esc
+-- flags a `sudo -u root` in a build function regardless.
+local function _archcanary_wrapped_shell(seg)
+  for tok in seg:gmatch("%S+") do
+    for _, name in ipairs(_ARCHCANARY_PIPE_SHELLS) do
+      if tok == name or tok:match("^" .. name .. "[;|&)<>`]") then
+        return true
+      end
+    end
+    if not (tok:match("^%-") or tok:match("^[%a_][%w_]*=")) then
+      return false
+    end
+  end
+  return false
+end
+-- true if a single `|` or `|&` (not the `||` of a fallback) feeds a shell
+-- -- directly (`| sh`) or through one privilege/env wrapper (`| sudo sh`),
+-- but NOT across a `;`/`&&`/`||` boundary and NOT as a plain command's last
+-- argument. Terminator class: space ; | & ) < > backtick, or the appended
+-- `\n`. `.`/`/` are excluded so `bash.log` / a path stays out, and
+-- `sha256sum` never starts with the word `sh`.
+local function _archcanary_pipe_to_shell(s)
+  -- blank out `||` (fallback, not a pipe) so a plain `|` scan is safe and
+  -- every `|` -- including a second one later on the line -- is checked
+  -- (gmatch on a `[^|&]|` anchor would skip an adjacent match).
+  s = " " .. s:gsub("||", "  ") .. "\n"
+  for _, name in ipairs(_ARCHCANARY_PIPE_SHELLS) do
+    if s:find("|&?%s*" .. name .. "[%s;|&)<>`]") then
+      return true
+    end
+  end
+  for _, w in ipairs(_ARCHCANARY_PIPE_WRAPPERS) do
+    for seg in s:gmatch("|&?%s*" .. w .. "%s+([^|;&]*)") do
+      if _archcanary_wrapped_shell(seg) then
+        return true
+      end
+    end
+  end
+  return false
+end
 
 -- Pattern port (check_pkgbuild_caches, archcanary.sh): ANSI-C hex/octal
 -- quoting with 3+ chained \xHH/\NNN escapes spelling out a command
@@ -89,13 +145,10 @@ local function _archcanary_has_printf_hex(pkgbuild)
          or line:match("\\0?1[56][0-7]") or line:match("\\0?17[0-2]") then
         return true
       end
-      -- output piped to a shell / eval'd. Word-anchor the shell name so
-      -- `| sha256sum`, `| shred`, `| shuf` don't count (matches the bash
-      -- re_printf_exec, which does the same via ([[:space:]]|$)).
+      -- output piped to a shell / eval'd. Word-anchored (see
+      -- _archcanary_pipe_to_shell) so `| sha256sum` / `| shred` don't count.
       local scan = line:gsub('"[^"]*"', ""):gsub("'[^']*'", "")
-      if scan:match("|%s*sh%f[^%w]") or scan:match("|%s*bash%f[^%w]")
-         or scan:match("|%s*zsh%f[^%w]") or scan:match("|%s*dash%f[^%w]")
-         or scan:match("|%s*eval%f[^%w]")
+      if _archcanary_pipe_to_shell(scan)
          or scan:match("^%s*eval%s") or scan:match("[;&|]%s*eval%s") then
         return true
       end
@@ -111,8 +164,35 @@ end
 local function _archcanary_has_revtr_pipe_shell(pkgbuild)
   for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
     local has_revtr = line:find("|%s*rev%s") or line:find("|%s*tr%s")
-    local has_shell = line:find("|%s*bash") or line:find("|%s*sh") or line:find("|%s*eval")
-    if has_revtr and has_shell then return true end
+    -- `| tr … | sha256sum -c` is a checksum-verify line, not `| sh`
+    if has_revtr and _archcanary_pipe_to_shell(line) then return true end
+  end
+  return false
+end
+
+-- Pattern port: a downloader (curl/wget) at a command position, or a
+-- `base64 -d`/`--decode` whose output is piped onward, on a line that then
+-- pipes into a shell -- the Atomic Arch campaign's `curl | bash` and the
+-- base64-decode-to-shell shape. `| sha256sum` is not matched, nor is a
+-- `$curl_result` / `libcurl` substring, nor `base64 -d > f && x | sh`.
+-- The decode flag is space-delimited on its left and `d` may sit in a
+-- short-flag group (`-d`, `-di`, `-w0 -d`). Whole-line comments are
+-- skipped (like _archcanary_has_priv_esc): a `# install: curl … | sh`
+-- note copied from an upstream README is common and this hook hard-aborts.
+local function _archcanary_has_dl_pipe_shell(pkgbuild)
+  for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
+    if not line:match("^%s*#") then
+      local sl = " " .. line
+      local dl_cmd = sl:match("[^%w$]curl[%s|]") or sl:match("[^%w$]wget[%s|]")
+      -- a decode flag whose output is piped onward -- a `|` before any
+      -- `;`/`&`, with a file/herestring operand or `2>…` allowed between
+      local b64 = line:match("base64%s+%-%a*d%a*[^;&|]*|")
+               or line:match("base64%s[^;&|]*%s%-%a*d%a*[^;&|]*|")
+               or line:match("base64%s[^;&|]*%-%-decode[^;&|]*|")
+      if (dl_cmd or b64) and _archcanary_pipe_to_shell(line) then
+        return true
+      end
+    end
   end
   return false
 end
@@ -145,8 +225,12 @@ local function _archcanary_runas(frag)
   return false
 end
 local function _archcanary_runas_root(s)
-  return s:match("%-u[%s=]*root%f[^%w]") or s:match("%-u[%s=]*0%f[^%w]")
-      or s:match("%-%-user[%s=]*root%f[^%w]") or s:match("%-%-user[%s=]*0%f[^%w]")
+  s = s .. " "   -- so a trailing `-u root` gets a boundary char (no %f here)
+  -- `[^%w_]` (not `%W`) mirrors the bash re_runas_root anchor `[^[:alnum:]_]`
+  -- -- Lua's `%w` excludes `_`, so `%W` would match it and mis-flag a
+  -- de-escalation to a `root_svc`-style account.
+  return s:match("%-u[%s=]*root[^%w_]") or s:match("%-u[%s=]*0[^%w_]")
+      or s:match("%-%-user[%s=]*root[^%w_]") or s:match("%-%-user[%s=]*0[^%w_]")
 end
 local function _archcanary_has_priv_esc(pkgbuild)
   local hd
@@ -378,10 +462,8 @@ yay.create_autocmd("AURPostDownload", {
     local patterns = {
       "npm install atomic%-lockfile",   -- Atomic Arch campaign wave 1
       "bun install js%-digest",         -- wave 2
-      "curl[^\n]*|[^\n]*bash",
-      "curl[^\n]*|[^\n]*sh",
-      "wget[^\n]*|[^\n]*bash",
-      "wget[^\n]*|[^\n]*sh",
+
+      -- curl/wget/base64-decode piped to a shell -> _archcanary_has_dl_pipe_shell
 
       -- eval + command substitution
       "eval%s+%$%(",
@@ -391,15 +473,6 @@ yay.create_autocmd("AURPostDownload", {
 
       -- variable-split command reassembly (a=bu; b=n; $a$b)
       "[%l_]+=%a+;%s*[%l_]+=%a+;%s*%$",
-
-      -- base64 decode piped to shell — no alternation in Lua patterns, so
-      -- flag/target combos are flattened, same as the curl/wget entries above
-      "base64[^\n]*%-%-decode[^\n]*|[^\n]*bash",
-      "base64[^\n]*%-%-decode[^\n]*|[^\n]*sh",
-      "base64[^\n]*%-%-decode[^\n]*|[^\n]*eval",
-      "base64[^\n]*%-d[^\n]*|[^\n]*bash",
-      "base64[^\n]*%-d[^\n]*|[^\n]*sh",
-      "base64[^\n]*%-d[^\n]*|[^\n]*eval",
     }
 
     for _, pattern in ipairs(patterns) do
@@ -409,6 +482,10 @@ yay.create_autocmd("AURPostDownload", {
       end
     end
 
+    if _archcanary_has_dl_pipe_shell(pkgbuild) then
+      flagged = true
+      yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (curl/wget/base64-decode piped to a shell)")
+    end
     if _archcanary_has_printf_hex(pkgbuild) then
       flagged = true
       yay.abort(_archcanary_banner(pkg, "BLOCKED: SUSPICIOUS PATTERN") .. " (printf hex/octal obfuscation)")

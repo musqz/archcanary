@@ -1019,7 +1019,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v12)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v13)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -2751,17 +2751,35 @@ check_pkgbuild_caches() {
     local re_ansi_c
     re_ansi_c='\$'"'"'(\\x[0-9a-fA-F]{2}|\\[0-7]{1,3}){3,}'
 
+    # A `|` or `|&` (not the `||` of a fallback) that feeds a shell --
+    # directly (`| sh`) or through one privilege/env wrapper (`| sudo sh`,
+    # `| env -i bash`), but NOT across a `;`/`&&`/`||` boundary and NOT as a
+    # plain command's last argument (`| grep bash`, `| command -v sh`). The
+    # shell name is a word (terminator: space ; | & ) < > backtick, or end
+    # of line), so `| sha256sum` / `| sha512sum` (Chrome extension-id and
+    # checksum idioms) stay clean while `| sh`, `|sh>x`, `` |sh` ``,
+    # `| sudo bash` match. Between the wrapper and the shell only the
+    # wrapper's own glued flags or `VAR=val` assignments are allowed -- not
+    # a whole command (`| sudo pacman -S bash`) and not a detached flag
+    # operand (`| sudo -u root bash` -- `| sudo bash` still hits, and
+    # Pattern 14 flags a `sudo -u root` in a build function regardless).
+    # Used by Patterns 2, 4 and 7.
+    local _sh='(bash|sh|zsh|dash|eval)([[:space:]);|&<>`]|$)'
+    local _pipe_wrap='(sudo|doas|pkexec|env|exec)[[:space:]]+'
+    local _wrapopt='((-[^[:space:]|;&]*|[[:alpha:]_][[:alnum:]_]*=[^[:space:]|;&]*)[[:space:]]+)*'
+    local re_pipe_sh="(^|[^|&])\\|&?[[:space:]]*$_sh|(^|[^|&])\\|&?[[:space:]]*$_pipe_wrap$_wrapopt$_sh"
+
     # Pattern 4: printf spelling a command out a byte at a time. A single
     # \xHH/\NNN escape that decodes to a letter or digit is the signal --
     # `printf '\x63''\x75''\x72''\x6c'` even with the run quote-split. ESC
     # and the CSI bytes of a `printf '\033[1m...'` colour code decode to
     # neither ('\x3d\x3d\x3e' = "==>" also doesn't), so coloured output is
     # exempt. re_printf_byte ranges: 0-9 / A-Z / a-z, hex then octal.
-    # re_printf_exec additionally catches partial obfuscation piped to a
-    # shell (letters left plain, only punctuation encoded).
+    # printf piped to a shell (re_pipe_sh) or its output eval'd catches
+    # partial obfuscation (letters left plain, only punctuation encoded).
     local re_printf_esc='\\(x[0-9a-fA-F]|[0-7])'
     local re_printf_byte='\\x(3[0-9]|4[1-9a-fA-F]|5[0-9aA]|6[1-9a-fA-F]|7[0-9aA])|\\0?(6[0-7]|7[01]|10[1-7]|1[12][0-7]|13[0-2]|14[1-7]|1[56][0-7]|17[0-2])'
-    local re_printf_exec='\|[[:space:]]*(ba|z|da)?sh([[:space:]]|$)|(^|[;&|[:space:]])eval[[:space:]]'
+    local re_printf_eval='(^|[;&|[:space:]])eval[[:space:]]'
 
     # Tor/SOCKS-proxied fetch (curl -x socks5h://..., torsocks, proxychains,
     # or a bare .onion URL) — a real 2026-08-23 AUR incident (xsnow/xsnow-bin,
@@ -2850,9 +2868,12 @@ check_pkgbuild_caches() {
                 _hd_delim="${BASH_REMATCH[1]}"
             fi
 
-            # A fully commented-out line — exempt from Patterns 12/13/14/15
-            # (a `#` note can't execute). The fetch/obfuscation patterns keep
-            # scanning comment text so a payload staged there stays visible.
+            # A fully commented-out line — exempt from Patterns 2 and 12/13/
+            # 14/15 (a `#` note can't execute, and `# base64 -d | sh` / an
+            # `aur@` push note / a `sudo -u` example are things maintainers
+            # do write). Patterns 4/7/10/11 keep scanning comment text: a
+            # byte-assembled payload, a `| rev | sh`, a Tor URL or a
+            # download-to-/usr path staged there is never a legit note.
             local _line_is_comment=""
             [[ "$line" =~ ^[[:space:]]*# ]] && _line_is_comment=1
 
@@ -2871,7 +2892,17 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 2: base64 decode piped to shell ---
-            if [[ "$line" =~ base64[[:space:]]+(--decode|-d)[[:space:]]*\|[[:space:]]*(bash|sh|eval) ]]; then
+            # a decode flag -- `--decode`, or a `d` in a short-flag group
+            # (`-d`, `-di`, `-w0 -d`) -- whose output is piped onward (a `|`
+            # before any `;`/`&&` boundary, so a file/herestring operand or
+            # `2>/dev/null` between the flag and the `|` is fine, but
+            # `base64 -d > f && x | sh` -- decode redirected to a file -- is
+            # not), and somewhere down that pipeline a shell (re_pipe_sh, so
+            # `base64 -d | tr a b | bash` counts). Options gaps stop at `|`
+            # so `base64 | grep -d x` isn't read as a decode flag.
+            if [[ -z "$_line_is_comment" ]] \
+               && [[ "$line" =~ base64([[:space:]][^\;\&\|]*)?[[:space:]](-[A-Za-z]*d[A-Za-z]*|--decode)[^\;\&\|]*\| ]] \
+               && [[ "$line" =~ $re_pipe_sh ]]; then
                 echo "  WARNING: base64-decode-to-shell in $file:$lineno"
                 echo "    $line"
                 found_count=2
@@ -2886,13 +2917,14 @@ check_pkgbuild_caches() {
 
             # --- Pattern 4: printf hex/octal obfuscation ---
             if [[ "$line" == *'printf'* ]] && [[ "$line" =~ $re_printf_esc ]]; then
-                # re_printf_exec is checked with quoted spans removed, so a
+                # the pipe/eval check runs with quoted spans removed, so a
                 # `| sh` or `eval` printed as help text doesn't count.
                 local _p4="$line"
                 while [[ "$_p4" =~ (\"[^\"]*\"|\'[^\']*\') ]]; do
                     _p4="${_p4/"${BASH_REMATCH[1]}"/}"
                 done
-                if [[ "$line" =~ $re_printf_byte ]] || [[ "$_p4" =~ $re_printf_exec ]]; then
+                if [[ "$line" =~ $re_printf_byte ]] \
+                   || [[ "$_p4" =~ $re_pipe_sh ]] || [[ "$_p4" =~ $re_printf_eval ]]; then
                     echo "  WARNING: printf hex/octal obfuscation in $file:$lineno"
                     echo "    $line"
                     found_count=2
@@ -2914,8 +2946,7 @@ check_pkgbuild_caches() {
             fi
 
             # --- Pattern 7: rev/tr pipe-to-shell obfuscation ---
-            if [[ "$line" =~ \|[[:space:]]*(rev|tr)[[:space:]] ]] && \
-               [[ "$line" =~ \|[[:space:]]*(bash|sh|eval) ]]; then
+            if [[ "$line" =~ \|[[:space:]]*(rev|tr)[[:space:]] ]] && [[ "$line" =~ $re_pipe_sh ]]; then
                 echo "  WARNING: rev/tr pipe-to-shell obfuscation in $file:$lineno"
                 echo "    $line"
                 found_count=2
