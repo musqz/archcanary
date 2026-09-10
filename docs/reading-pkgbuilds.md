@@ -88,6 +88,15 @@ legitimate packaging use.
 If a command has clearly gone out of its way to not just say what it is,
 that's the tell — not the specific trick used.
 
+**Look-alike or hidden characters in a URL host** — a Cyrillic `а` or Greek `ο`
+in the host of a `url=` or `source=` URL looks exactly like the Latin letter
+but resolves to a host the attacker registered; a zero-width or right-to-left
+character can hide or visually rearrange part of the hostname. A hostname is
+machine-readable ASCII — there is no reason for a non-Latin or invisible
+character in one. (Non-Latin text in a `pkgdesc`, a comment, or a URL *path* —
+`.../wiki/Программа` — is normal and expected; it's the host that never needs
+it.) `archcanary --check-pkgbuild` flags this.
+
 **Unexpected or unrelated new dependencies** — the `bun add js-digest` example
 above *is* this: a package unrelated to Node/npm has no reason to be
 installing an npm package as a build step. If a PKGBUILD suddenly depends on

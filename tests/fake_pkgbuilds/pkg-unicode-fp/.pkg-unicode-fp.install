@@ -1,0 +1,10 @@
+post_install() {
+  # A scriptlet local with a look-alike host -- Pattern 16 is PKGBUILD-only
+  # (metadata url=/source=), so this must NOT flag.
+  local url="https://mirror.оrg/pkg"
+  echo "installed from $url"
+}
+
+post_upgrade() {
+  post_install
+}

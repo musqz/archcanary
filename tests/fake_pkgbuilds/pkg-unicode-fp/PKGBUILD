@@ -1,0 +1,20 @@
+# Maintainer: José 👨‍💻 Example‎ <jose@example.com>
+pkgname=pkg-unicode-fp
+pkgver=1.0
+pkgrel=1
+_ver() { echo "$pkgver"; }
+pkgdesc="‌Программа — a café browser — useful"
+url="https://ru.wikipedia.org/wiki/Программа"
+optdepends=(
+  'tesseract-data-fas: ‌تشخیص OCR'
+)
+source=("https://example.com/foo-$pkgver.tar.gz"
+        "https://gitlab.com/grp/проект/-/archive/v$pkgver/x-$pkgver.tar.gz"
+        "Программа.desktop")
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+build() {
+  cd "$srcdir"
+  echo "Сборка..."
+  make
+}

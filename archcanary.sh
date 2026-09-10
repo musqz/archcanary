@@ -1019,7 +1019,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v14)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v15)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -2728,6 +2728,105 @@ _pkgbuild_mutable_patch() {
     return 0
 }
 
+# Check 7, Pattern 16: a deceptive character in the HOST of a top-level
+# (column-0) `url=` value or a top-level `source=`/`source_$CARCH=()` URL
+# entry -- a host that reads like an ASCII name a reviewer trusts but
+# isn't. Only the authority (between `://` and the next `/ ? #`, minus any
+# `name::` rename prefix and `user@`) is checked; a non-ASCII byte in a
+# URL path, query or fragment is left alone (`.../wiki/Программа`, a
+# Cyrillic-named repo path). Two kinds:
+#
+#   - a confusable letter -- Cyrillic / Cyrillic Supplement / Greek /
+#     Armenian / fullwidth Latin (U+0370-03FF, U+0400-058F, U+FF00-FF5F) --
+#     that renders like an ASCII letter ('a' vs Cyrillic U+0430) but
+#     resolves to a host the attacker registered. (The confusables list is
+#     longer -- Cherokee, Canadian syllabics, Latin Extended -- but these
+#     four cover the practical cases without the FP surface of the rest.)
+#   - an invisible or reordering character -- a zero-width / hidden char
+#     (U+200B-200D, U+2060-2065, U+FEFF, U+00AD, U+180E, U+E00xx Tags) or a
+#     direction control (LRM/RLM U+200E/200F, ALM U+061C, the bidi
+#     overrides / isolates U+202A-202E, U+2066-2069) -- that conceals or
+#     visually rearranges part of the host.
+#
+# All matched on raw bytes under LC_ALL=C with `grep -E` (a UTF-8 locale
+# folds the \xHH escapes into code points -- the v0.1.31 Lynis-filter trap;
+# -E, not -P, so a grep without PCRE still runs it). Source arrays are
+# parsed with _pkgb_array_entries (like Pattern 15) so a trailing comment
+# and a multi-line array are handled and a local (non-URL) source filename
+# is skipped.
+#
+# Deliberately NOT scanned: pkgdesc / optdepends / comments (a non-Latin
+# description or a Persian ZWNJ is legitimate) and, via the column-0
+# anchor, an indented in-function `url=` local or a `source+=(...)` in a
+# PKGBUILD that has no column-0 `source=` at all. Known limitations, all
+# accepted as "best-effort heuristic, not a parser": a host built from a
+# separate variable (`_repo=<cyrillic>`); a `url=` line inside a heredoc
+# body a build function emits; and -- when a column-0 `source=` does exist
+# -- an in-function `source+=(...)` append to it is folded into the array
+# and checked, which is the intended behaviour (a non-ASCII host there is
+# worth the look) but not something the column-0 wording promises.
+# Modeled on NeoArch's security_scan.py homograph check. Echoes findings,
+# returns 2 on any hit (like _pkgbuild_mutable_patch).
+
+# A URL string -> its authority: drop a `name::` rename prefix, the
+# scheme, any `user@`, and everything from the first `/ ? #`. Leaves
+# `host[:port]`, the part a homoglyph check cares about.
+_pkgb_url_authority() {
+    local u=${1##*::}
+    u=${u#*://}
+    u=${u%%[/?#]*}
+    printf '%s' "${u##*@}"
+}
+_pkgbuild_unicode_spoof() {
+    local f="$1" rc=0 content sname val host b
+    local re_bad
+    re_bad=$'[\xd0-\xd4][\x80-\xbf]|\xd5[\x80-\xbf]|\xd6[\x80-\x8f]|\xcd[\xb0-\xbf]|[\xce\xcf][\x80-\xbf]'
+    re_bad+=$'|\xef\xbc[\x80-\xbf]|\xef\xbd[\x80-\x9f]'
+    # \xe2\x80[\x8b-\x8f]: U+200B-200F (zero-width + LRM/RLM); [\xaa-\xae]:
+    # U+202A-202E bidi overrides. \xd8\x9c: U+061C Arabic letter mark.
+    re_bad+=$'|\xe2\x80[\x8b-\x8f\xaa-\xae]|\xe2\x81[\xa0-\xa9]|\xd8\x9c|\xef\xbb\xbf|\xc2\xad|\xe1\xa0\x8e|\xf3\xa0[\x80-\x87][\x80-\xbf]'
+
+    content=$(<"$f") || return 0
+    local -a bad=()
+    # url= scalar (column-0 only -- an indented url= is an in-function
+    # local): RHS, quotes stripped, first whitespace-delimited token (drops
+    # a trailing `# comment`).
+    while IFS= read -r val; do
+        val=${val#*=}; val=${val//[\"\']/}
+        val=${val#"${val%%[![:space:]]*}"}; val=${val%%[[:space:]]*}
+        host=$(_pkgb_url_authority "$val")
+        if [[ -n "$host" ]] && LC_ALL=C grep -qaE "$re_bad" <<< "$host"; then
+            bad+=("url= $val")
+        fi
+    done < <(grep -aE '^url[[:space:]]*=' <<< "$content")
+    # source arrays: only entries that are URLs (a local filename is not a
+    # fetch and may legitimately be non-Latin), host checked, not the path.
+    while IFS= read -r sname; do
+        while IFS= read -r val; do
+            [[ "$val" == *://* ]] || continue
+            host=$(_pkgb_url_authority "$val")
+            if [[ -n "$host" ]] && LC_ALL=C grep -qaE "$re_bad" <<< "$host"; then
+                bad+=("$sname: $val")
+            fi
+        done < <(_pkgb_array_entries "$content" "$sname")
+    done < <(grep -oE '^source(_[a-z0-9_]+)?\+?=\(' <<< "$content" \
+                 | sed -E 's/\+?=\($//' | sort -u)
+
+    if (( ${#bad[@]} )); then
+        echo "  WARNING: deceptive character in a url=/source= host in $f"
+        # LC_ALL=C printf %q makes the offending byte visible as $'\NNN'.
+        for b in "${bad[@]}"; do
+            echo "    $(LC_ALL=C printf '%q' "$b")"
+        done
+        echo "    A look-alike letter (Cyrillic 'a'), a hidden character or a"
+        echo "    reversed span in the host means the address isn't the one it"
+        echo "    appears to be. Compare it byte-for-byte against upstream."
+        rc=2
+    fi
+
+    return $rc
+}
+
 # ---------------------------------------------------------------------------
 # Check 7: PKGBUILD / install file scan for obfuscated malicious commands
 # Strips single and double quotes from each line before matching, catching
@@ -3088,6 +3187,17 @@ check_pkgbuild_caches() {
             local _mp_rc=0
             _pkgbuild_mutable_patch "$file" || _mp_rc=$?
             [[ $_mp_rc -eq 2 ]] && found_count=2
+        fi
+
+        # --- Pattern 16: a look-alike or hidden character in a url=/source=
+        # URL value. PKGBUILD only (like Pattern 15) -- a .install scriptlet
+        # has no metadata `url=`/`source=`, and a `url=` local var inside a
+        # function body is code this text scan can't reliably tell from
+        # metadata (the reason the earlier Pattern 16 was held back).
+        if $_is_pkgbuild; then
+            local _us_rc=0
+            _pkgbuild_unicode_spoof "$file" || _us_rc=$?
+            [[ $_us_rc -eq 2 ]] && found_count=2
         fi
     done < <(
         for dir in "${cache_dirs[@]}"; do

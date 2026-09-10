@@ -1364,6 +1364,55 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: source+=() checksum not honoured, rc=$rc, out: $out"
     fi
+
+    # Sub-test Z1: Pattern 16 — a Cyrillic letter in the url= host and a
+    # Greek letter in the host of a *multi-line* source=() URL entry (on a
+    # continuation line, not the `source=(` line) → WARNING. Regression
+    # guard for the array-parse path.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-unicode-homograph" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 \
+          && "$out" == *"WARNING: deceptive character in a url=/source= host in"* \
+          && "$out" == *"url= https"* && "$out" == *"source: foo-"* ]]; then
+        pass "pkgbuild_obfuscation: look-alike letter in url= and a multi-line source=() URL host detected"
+    else
+        fail "pkgbuild_obfuscation: homograph url/source not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z2: Pattern 16 — a bidi override in the url= host and a
+    # zero-width space hidden in a source=() URL host → WARNING, with the
+    # offending bytes rendered visibly ($'\NNN').
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-unicode-hidden" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 \
+          && "$out" == *"WARNING: deceptive character in a url=/source= host in"* \
+          && "$out" == *'\342\200\256'* && "$out" == *'\342\200\213'* ]]; then
+        pass "pkgbuild_obfuscation: bidi override / hidden zero-width in a url=/source= URL detected"
+    else
+        fail "pkgbuild_obfuscation: hidden url/source char not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z3: Pattern 16 false-positive guard — a Cyrillic path in the
+    # url= value and in a source=() URL entry (only the HOST is checked, not
+    # the path), a Persian pkgdesc and a multi-line Persian optdepends array
+    # (U+200C ZWNJ is mandatory orthography), an emoji ZWJ + LRM in the
+    # maintainer comment, a one-line helper function followed by more
+    # metadata, a Cyrillic-named *local* source file (no ://), a Latin-1
+    # accent, an em-dash, and a Cyrillic echo string inside build() must all
+    # stay clean. The fixture also ships a .install scriptlet with a
+    # look-alike host in a `local url=` — Pattern 16 is PKGBUILD-metadata-
+    # only (column-0 url=/source=), so neither the .install file nor an
+    # indented in-function url= is scanned.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-unicode-fp" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "pkgbuild_obfuscation: Persian pkgdesc/optdepends / emoji ZWJ / one-line fn / local non-Latin source / .install url= → no false positive"
+    else
+        fail "pkgbuild_obfuscation: Pattern 16 false positive on legitimate non-ASCII, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -2117,6 +2166,72 @@ test_yay_hook_priv_esc_mutable() {
         pass "yay_hook_priv_esc_mutable: sudo -u exempt, checksum-pinned MR patch not flagged"
     else
         fail "yay_hook_priv_esc_mutable: Lua Pattern 14/15 port misbehaved"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# test_yay_hook_deceptive_unicode — the Lua port of Pattern 16 must match
+# the bash check on raw bytes: a look-alike (Cyrillic/Greek/Armenian/
+# fullwidth) or hidden (zero-width / bidi) character flags only in the
+# url= value or a source=() URL entry; a non-Latin pkgdesc / optdepends /
+# comment / build-function line / local source filename is legitimate and
+# must stay clean (U+200C is mandatory Persian orthography, U+200D emoji).
+# ---------------------------------------------------------------------------
+test_yay_hook_deceptive_unicode() {
+    local lua
+    lua=$(command -v lua5.4 || command -v lua || command -v luajit) || {
+        pass "yay_hook_deceptive_unicode: no Lua interpreter, skipped"
+        return
+    }
+    local drv
+    drv=$(mktemp)
+    {
+        sed -n '/^local function _archcanary_pkgb_array/,/^end$/p' \
+            "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_url_authority/,/^end$/p' \
+            "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_has_deceptive_unicode/,/^end$/p' \
+            "$REPO_DIR/configs/yay-init.lua"
+        echo 'print(_archcanary_has_deceptive_unicode(arg[1]) or "clean")'
+    } > "$drv"
+    local ok=1
+    g() { "$lua" "$drv" "$1"; }
+    # flag: look-alike / hidden char in the HOST of url= or a source=() URL
+    [[ "$(g $'url="https://g\xd1\x96thub.com/x"')"                 == *"look-alike"* ]] || ok=0
+    [[ "$(g $'url="https://\xd5\x85x.example/x"')"                 == *"look-alike"* ]] || ok=0
+    [[ "$(g $'url="https://\xef\xbd\x81pp.example/x"')"            == *"look-alike"* ]] || ok=0
+    [[ "$(g $'url="https://exa\xe2\x80\x8bmple.com/x"')"           == *"look-alike"* ]] || ok=0
+    [[ "$(g $'url="https://exa\xe2\x80\xaemple.com/x"')"           == *"look-alike"* ]] || ok=0
+    [[ "$(g $'url="https://exa\xe2\x80\x8emple.com/x"')"           == *"look-alike"* ]] || ok=0
+    [[ "$(g $'source=("https://exa\xd8\x9cmple.com/x.tar.gz")')"   == *"look-alike"* ]] || ok=0
+    [[ "$(g $'source=(\n  "x::https://c\xce\xbfde.example/x"\n  "y.desktop"\n)')" == *"look-alike"* ]] || ok=0
+    # clean: the bad bytes are in the URL PATH, not the host
+    [[ "$(g $'url="https://ru.wikipedia.org/wiki/\xd0\x9f\xd1\x80\xd0\xbe"')"            == clean ]] || ok=0
+    [[ "$(g $'source=("https://gitlab.com/g/\xd0\xbf\xd1\x80\xd0\xbe/-/v1.tar.gz")')"    == clean ]] || ok=0
+    [[ "$(g $'source=("\xd0\x9f\xd1\x80\xd0\xbe-src::https://github.com/o/r/v1.tar.gz")')" == clean ]] || ok=0
+    # clean: source2= is a scratch var, not a makepkg source array
+    [[ "$(g $'source2=("https://g\xd1\x96thub.com/x/y.tar.gz")')"                        == clean ]] || ok=0
+    # clean: same bytes in metadata / comments / a build-function line
+    [[ "$(g $'pkgdesc="\xe2\x80\x8c\xd9\x85\xd8\xb1\xd9\x88\xd8\xb1\xda\xaf\xd8\xb1"')" == clean ]] || ok=0
+    [[ "$(g $'optdepends=(\n  \x27x: \xe2\x80\x8cOCR\x27\n)')"                          == clean ]] || ok=0
+    [[ "$(g $'# maintainer \xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x92\xbb note')"          == clean ]] || ok=0
+    [[ "$(g $'_ver() { echo x; }\npkgdesc="a\xe2\x80\x8cb"')"                            == clean ]] || ok=0
+    [[ "$(g $'build() {\n  make DEST\xe2\x80\x8bDIR=x\n}')"                              == clean ]] || ok=0
+    [[ "$(g $'build() {\n  echo "\xd0\xa1\xd0\xb1"\n}')"                                 == clean ]] || ok=0
+    # clean: an indented url=/source= is an in-function local, not metadata
+    [[ "$(g $'package() {\n  local url="https://g\xd1\x96thub.com/x"\n}')"               == clean ]] || ok=0
+    [[ "$(g $'build() {\n  source=("https://c\xce\xbfde.example/x")\n}')"                == clean ]] || ok=0
+    # clean: local non-Latin source filename (no ://), trailing comment, Latin-1
+    [[ "$(g $'source=(\n  "https://x/a.tar.gz"\n  "\xd0\x9f\xd1\x80\xd0\xbe.desktop"\n)')" == clean ]] || ok=0
+    [[ "$(g $'url="https://example.com/"  # \xd0\xbe\xd1\x84 note')"                       == clean ]] || ok=0
+    [[ "$(g $'# Maintainer: Jos\xc3\xa9 X')"                                              == clean ]] || ok=0
+    [[ "$(g $'url="https://github.com/x"\nsource=("a.tar.gz")')"                          == clean ]] || ok=0
+    unset -f g
+    rm -f "$drv"
+    if [[ $ok -eq 1 ]]; then
+        pass "yay_hook_deceptive_unicode: look-alike/hidden char in a url=/source= host flagged; path/metadata/comment/function/local-file non-ASCII clean"
+    else
+        fail "yay_hook_deceptive_unicode: Lua Pattern 16 port misbehaved"
     fi
 }
 
@@ -3689,6 +3804,9 @@ test_yay_hook_pipe_anchor
 
 $VERBOSE && msg "--- Test 19e: yay hook has no %f frontier pattern ---"
 test_yay_hook_no_frontier
+
+$VERBOSE && msg "--- Test 19f: yay hook Pattern 16 (deceptive Unicode) Lua port ---"
+test_yay_hook_deceptive_unicode
 
 $VERBOSE && msg "--- Test 20: check_logs pre-campaign date correlation ---"
 test_check_logs

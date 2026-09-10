@@ -59,15 +59,13 @@ Tor/onion fetches, downloads into system paths, non-interactive
 .BR pacman ,
 .BR sudo / doas / pkexec
 invoked from a PKGBUILD or scriptlet, patch sources on a mutable
-merge-request/pull-request URL, and a
+merge-request/pull-request URL, a Cyrillic / Greek / Armenian /
+fullwidth look-alike letter or an invisible / bidirectional character
+in the host of a
+.B url=
+or
 .B source=
-entry whose checksum is
-.B SKIP
-and whose URL carries neither the declared
-.B pkgver
-nor a
-.B $pkgver
-reference),
+URL),
 and for undocumented ELF binaries committed directly to a package's own
 cache/git tree (outside
 .I src/

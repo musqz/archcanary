@@ -1,0 +1,15 @@
+pkgname=pkg-unicode-homograph
+pkgver=1.0
+pkgrel=1
+# url points at a Cyrillic look-alike host
+url="https://gіthub.com/example/foo"
+source=(
+  "foo-$pkgver.tar.gz::https://cοdeforge.example/foo/archive/$pkgver.tar.gz"
+  "foo.desktop"
+)
+sha256sums=('SKIP' 'SKIP')
+
+build() {
+  cd "$srcdir"
+  make
+}
