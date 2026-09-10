@@ -7,7 +7,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v13).
+-- yay 13.0 Lua hooks for the AUR security stack (v14).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -25,6 +25,14 @@ yay.opt.clean_menu  = true
 yay.opt.clean_after = false
 yay.opt.sort_by     = "votes"
 yay.opt.bottom_up   = false
+
+-- Pause after a CLEAN PKGBUILD scan too? Default false: a clean verdict
+-- prints its banner and the build proceeds; a warn verdict stops with a
+-- "press Enter to continue" checkpoint (a block aborts the install
+-- outright). Set true to pause on every scan -- useful for big builds
+-- where even the clean banner scrolls off under compile spam before you
+-- can read it.
+local ARCHCANARY_PAUSE_ON_CLEAN = false
 
 -- Warn about AUR packages with PKGBUILD modified < 3 days ago
 yay.create_autocmd("UpgradeSelect", {
@@ -427,11 +435,13 @@ local function _archcanary_banner(pkg, verdict)
   return "ARCHCANARY: " .. pkg .. " # " .. pad .. " " .. verdict .. " " .. pad .. " #"
 end
 
--- Blocks on the real terminal until Enter is pressed, so the verdict above
--- is an explicit checkpoint instead of a line that scrolls off under
+-- Blocks on the real terminal until Enter is pressed, so a warn verdict is
+-- an explicit checkpoint instead of a line that scrolls off under
 -- makepkg/cargo build spam (verified empirically: os.execute's child
 -- inherits yay's real stdin/stdout/stderr, so `read` genuinely blocks on
--- the terminal here). Not called on yay.abort() paths -- those already
+-- the terminal here). Called only when the scan flagged something (or when
+-- ARCHCANARY_PAUSE_ON_CLEAN is set) -- a clean scan just prints its banner
+-- and proceeds. Not called on yay.abort() paths -- those already
 -- unwind the whole callback, cancelling the operation outright, so there
 -- is nothing left to pause. `[ -t 0 ] &&` skips the read entirely whenever
 -- stdin isn't an interactive terminal -- piped/redirected stdin (scripted
@@ -553,7 +563,9 @@ yay.create_autocmd("AURPostDownload", {
       yay.log.info(_archcanary_banner(pkg, "PKGBUILD CHECKS CLEAN"))
     end
 
-    _archcanary_pause()
+    if flagged or ARCHCANARY_PAUSE_ON_CLEAN then
+      _archcanary_pause()
+    end
   end,
 })
 
