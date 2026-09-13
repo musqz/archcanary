@@ -128,8 +128,9 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── dkms_allowlist.conf           # DKMS allowlist
     ├── systemd_allowlist.conf        # systemd unit allowlist
     ├── bpftool_allowlist.conf        # bpftool eBPF loader allowlist
-    └── autostart_allowlist.conf      # XDG autostart Exec= allowlist
-                                       # (all four: sudoedit directly, or --allowlist-add/--allowlist-remove)
+    ├── autostart_allowlist.conf      # XDG autostart Exec= allowlist
+    └── package_allowlist.conf        # checks [1]/[2] package-name allowlist
+                                       # (all five: sudoedit directly, or --allowlist-add/--allowlist-remove)
 /usr/share/polkit-1/actions/
     └── org.archcanary.policy  # polkit policy authorizing root-helper via pkexec
 

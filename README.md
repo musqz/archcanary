@@ -177,7 +177,7 @@ run everything at once with `--full`.
 | `--format=text\|json` | Output a JSON summary instead of the human-readable report | — |
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
 | `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `paru`/`bpftool` also map to a section) | — |
-| `--allowlist-list=NAME` | List entries in an allowlist and exit (`NAME`: `dkms`, `systemd`, `bpftool`, `autostart`) | No |
+| `--allowlist-list=NAME` | List entries in an allowlist and exit (`NAME`: `dkms`, `systemd`, `bpftool`, `autostart`, `package`) | No |
 | `--allowlist-add=NAME:VALUE` | Add `VALUE` to an allowlist and exit | Yes |
 | `--allowlist-remove=NAME:VALUE` | Remove `VALUE` from an allowlist and exit | Yes |
 | `--extra-lists-list` | List `~/.config/archcanary/extra_lists.conf` entries and exit | No |

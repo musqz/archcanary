@@ -40,7 +40,7 @@ if [[ $# -eq 1 ]]; then
             _name="${_spec%%:*}"
             _value="${_spec#*:}"
             case "$_name" in
-                dkms|systemd|bpftool|autostart) ;;
+                dkms|systemd|bpftool|autostart|package) ;;
                 *)
                     echo "Error: invalid allowlist name '$_name'" >&2
                     exit 1

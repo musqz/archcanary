@@ -169,6 +169,25 @@ EOF
 EOF
         chmod 644 /etc/archcanary/autostart_allowlist.conf
     fi
+    # package allowlist — same rationale and seeding rules as the DKMS/
+    # systemd/bpftool/autostart allowlists above (mode 644, never clobber an
+    # existing /etc copy).
+    if [[ ! -f /etc/archcanary/package_allowlist.conf ]]; then
+        tee /etc/archcanary/package_allowlist.conf >/dev/null << 'EOF'
+# Package names to skip during checks [1]/[2] (currently-installed foreign
+# packages and pacman.log history), system-wide allowlist. One package name
+# per line. Everything after # is a comment.
+# Add a name that matches an official compromised-package list purely by
+# name but has been manually verified clean — e.g. the AUR git history and
+# your locally cached PKGBUILD both show no trace of the campaign's
+# malicious commit. The underlying lists themselves are untouched, so
+# --search-packages still reports true list membership.
+#
+# Example:
+# chipmunk  # name-match against the June 2026 AUR incident list; verified clean
+EOF
+        chmod 644 /etc/archcanary/package_allowlist.conf
+    fi
 
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
@@ -179,6 +198,7 @@ EOF
     echo "  installed: /etc/archcanary/systemd_allowlist.conf (system-wide systemd allowlist for the persistence check)"
     echo "  installed: /etc/archcanary/bpftool_allowlist.conf (system-wide bpftool allowlist for the eBPF loader check)"
     echo "  installed: /etc/archcanary/autostart_allowlist.conf (system-wide autostart allowlist for the XDG persistence check)"
+    echo "  installed: /etc/archcanary/package_allowlist.conf (system-wide package allowlist for checks [1]/[2])"
     echo "  installed: /usr/share/polkit-1/actions/org.archcanary.policy"
 
     # Seed Lynis custom profile (only if lynis is installed and file not yet present)

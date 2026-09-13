@@ -3647,6 +3647,95 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Package allowlist (checks [1]/[2]) — regression coverage for the real
+# false-positive report: package_list.txt is a pure name-match list from the
+# June 2026 AUR incident, with no way to tell a genuine hit apart from a
+# name-only collision the maintainer has manually verified clean (AUR git
+# history + locally cached PKGBUILD both show no trace of the malicious
+# commit). --allowlist-add=package:NAME lets that verification stick across
+# every future --refresh, unlike editing the upstream-sourced list file
+# directly (which --refresh clobbers).
+# ---------------------------------------------------------------------------
+test_package_allowlist() {
+    local tmpdir log_file pkglist allow_file out rc
+
+    tmpdir=$(mktemp -d)
+    log_file="$tmpdir/pacman.log"
+    pkglist="$tmpdir/package_list.txt"
+    allow_file="$tmpdir/package_allowlist.conf"
+    printf 'zzz-test-allow-pkg\nzzz-test-other-pkg\n' > "$pkglist"
+    printf 'zzz-test-allow-pkg  # verified clean, name-only collision\n' > "$allow_file"
+
+    cat > "$log_file" <<'EOF'
+[2026-07-01T10:00:00-0600] [ALPM] installed zzz-test-allow-pkg (1.0-1)
+[2026-07-01T10:00:00-0600] [ALPM] installed zzz-test-other-pkg (1.0-1)
+EOF
+
+    local base_args=(
+        --package-list="$pkglist"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --chaos-rat-list="$tmpdir/chaos_rat_empty.txt"
+        --community-list="$tmpdir/community_reports_empty.txt"
+        --no-notify
+    )
+
+    rc=0
+    out=$(XDG_CACHE_HOME="$tmpdir/xdg-cache" PACMAN_LOG_GLOB="$log_file" \
+        PACKAGE_ALLOWLIST_FILE="$allow_file" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+
+    # A: an allowlisted package's log match is tagged LOG_ALLOWLISTED, not
+    # LOG_HIST/LOG_HIT, and shown as an INFO note.
+    if [[ "$out" == *"LOG_ALLOWLISTED: zzz-test-allow-pkg"* && \
+          "$out" == *"INFO: log match(es) for allowlisted package(s)"* && \
+          "$out" != *"LOG_HIST: zzz-test-allow-pkg"* ]]; then
+        pass "package allowlist: check_logs tags an allowlisted match LOG_ALLOWLISTED"
+    else
+        fail "package allowlist: allowlisted match wrongly tagged, out: $out"
+    fi
+
+    # B: a non-allowlisted package on the same list is still flagged normally
+    # -- proves the allowlist is scoped to the named package, not the whole list.
+    if [[ "$out" == *"LOG_HIST: zzz-test-other-pkg"* ]]; then
+        pass "package allowlist: non-allowlisted package on same list still flagged"
+    else
+        fail "package allowlist: non-allowlisted package wrongly suppressed, out: $out"
+    fi
+
+    # C: LOG_ALLOWLISTED is exit-code-neutral -- a scan with only an
+    # allowlisted match (no other hits) still exits 0.
+    local only_allow_log="$tmpdir/pacman-allow-only.log"
+    printf '[2026-07-01T10:00:00-0600] [ALPM] installed zzz-test-allow-pkg (1.0-1)\n' > "$only_allow_log"
+    rc=0
+    out=$(XDG_CACHE_HOME="$tmpdir/xdg-cache2" PACMAN_LOG_GLOB="$only_allow_log" \
+        PACKAGE_ALLOWLIST_FILE="$allow_file" \
+        "$REPO_DIR/archcanary.sh" --package-list="$pkglist" \
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt" \
+        --chaos-rat-list="$tmpdir/chaos_rat_empty.txt" \
+        --community-list="$tmpdir/community_reports_empty.txt" \
+        --no-notify >/dev/null 2>&1) || rc=$?
+    if [[ $rc -eq 0 ]]; then
+        pass "package allowlist: allowlisted-only scan is exit-code-neutral (exit 0)"
+    else
+        fail "package allowlist: allowlisted-only scan should exit 0, got rc=$rc"
+    fi
+
+    # D: 'package' is now a recognized allowlist NAME in _allowlist_cli /
+    # root-helper, not rejected as "unknown allowlist" -- direct coverage for
+    # the case-statement addition in both _allowlist_path and root-helper.
+    rc=0
+    out=$(PACKAGE_ALLOWLIST_FILE="$allow_file" \
+        "$REPO_DIR/archcanary.sh" --allowlist-list=package 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"zzz-test-allow-pkg"* ]]; then
+        pass "package allowlist: --allowlist-list=package reads the file"
+    else
+        fail "package allowlist: --allowlist-list=package failed, rc=$rc, out: $out"
+    fi
+
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # check_logs — LOG_HIST "seen once" downgrade. A historical (no-longer-
 # installed) match only counts as a warning the first time; a repeat scan of
 # the exact same install event prints LOG_HIST_SEEN instead and stays
@@ -3873,6 +3962,9 @@ test_resolve_and_store_scan_users
 
 $VERBOSE && msg "--- Test 41: --scan-user section header lists deduped names ---"
 test_sah_section_header_deduped_names
+
+$VERBOSE && msg "--- Test 42: package allowlist (checks [1]/[2]) ---"
+test_package_allowlist
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

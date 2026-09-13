@@ -111,7 +111,7 @@ trap 'rm -f "${CLEANUP_FILES[@]}"' EXIT
 trap 'rm -f "${CLEANUP_FILES[@]}"; exit 1' INT TERM
 
 # ---------------------------------------------------------------------------
-# --allowlist-{list,add,remove} — manage the four system-wide allowlists at
+# --allowlist-{list,add,remove} — manage the five system-wide allowlists at
 # /etc/archcanary/*_allowlist.conf (seeded by install.sh --system). --list
 # needs no root (the files are mode 644); --add/--remove do, and are meant to
 # be invoked as `pkexec /usr/lib/archcanary/root-helper --allowlist-add=NAME:
@@ -126,6 +126,7 @@ _allowlist_path() {
         systemd)   echo "${SYSTEMD_ALLOWLIST_FILE:-/etc/archcanary/systemd_allowlist.conf}" ;;
         bpftool)   echo "${BPFTOOL_ALLOWLIST_FILE:-/etc/archcanary/bpftool_allowlist.conf}" ;;
         autostart) echo "${AUTOSTART_ALLOWLIST_FILE:-/etc/archcanary/autostart_allowlist.conf}" ;;
+        package)   echo "${PACKAGE_ALLOWLIST_FILE:-/etc/archcanary/package_allowlist.conf}" ;;
         *)         return 1 ;;
     esac
 }
@@ -156,7 +157,7 @@ _allowlist_cli() {
         value="${arg2#*:}"
     fi
     path="$(_allowlist_path "$name")" || {
-        echo "Error: unknown allowlist '$name' (expected: dkms, systemd, bpftool, autostart)" >&2
+        echo "Error: unknown allowlist '$name' (expected: dkms, systemd, bpftool, autostart, package)" >&2
         exit 1
     }
     if [[ ! -f "$path" ]]; then
@@ -524,7 +525,7 @@ for arg in "$@"; do
             echo "                            Comma- or space-separated, e.g.:"
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
             echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
-            echo "                                     NAME: dkms, systemd, bpftool, autostart"
+            echo "                                     NAME: dkms, systemd, bpftool, autostart, package"
             echo "  --allowlist-add=NAME:VALUE        Add VALUE to an allowlist and exit (needs root)"
             echo "  --allowlist-remove=NAME:VALUE     Remove VALUE from an allowlist and exit (needs root)"
             echo "  --extra-lists-list                List ~/.config/archcanary/extra_lists.conf entries and exit"
@@ -1610,6 +1611,27 @@ if [[ -r "$_auto_cfg" ]]; then    # skip if missing/unreadable (don't abort unde
 fi
 unset _auto_cfg _al
 
+# Merge the package allowlist into PACKAGE_ALLOWLIST (colon-separated; the env
+# var, if set, takes precedence and is appended to). Same rationale as DKMS/
+# systemd/bpftool/autostart above — for a package name that matches an
+# official compromised-package list purely by name (see SOURCES.md) but has
+# been manually verified clean, e.g. the AUR git history and the locally
+# cached PKGBUILD both show no trace of the campaign's malicious commit.
+# Applied in check_current/check_logs only — the underlying lists themselves
+# are untouched, so --search-packages still reports true list membership.
+# Override the path with PACKAGE_ALLOWLIST_FILE (used by the tests).
+PACKAGE_ALLOWLIST="${PACKAGE_ALLOWLIST:-}"
+_pkg_cfg="${PACKAGE_ALLOWLIST_FILE:-/etc/archcanary/package_allowlist.conf}"
+if [[ -r "$_pkg_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
+    while IFS= read -r _pl || [[ -n "$_pl" ]]; do
+        _pl="${_pl%%#*}"       # strip inline comments
+        read -r _pl _ <<< "$_pl"  # take first token only (ignores trailing descriptions)
+        [[ -z "$_pl" ]] && continue
+        PACKAGE_ALLOWLIST="${PACKAGE_ALLOWLIST:+${PACKAGE_ALLOWLIST}:}${_pl}"
+    done < "$_pkg_cfg"
+fi
+unset _pkg_cfg _pl
+
 # Resolves a bundled data file. Checks two locations relative to the running
 # script first (flat layout — $0 is /usr/lib/archcanary/archcanary.sh, the
 # root-scan copy; then the lists/ subdir layout — repo checkout,
@@ -2002,6 +2024,12 @@ print_list() {
 # ---------------------------------------------------------------------------
 check_current() {
     local found=() found_pkgs=()
+    # PACKAGE_ALLOWLIST: colon-separated list of package names that match an
+    # official list by name only but were manually verified clean (see
+    # check_logs for the same allowlist applied to pacman.log history).
+    # Example: PACKAGE_ALLOWLIST=chipmunk
+    local -a _pkg_allow
+    IFS=: read -ra _pkg_allow <<< "${PACKAGE_ALLOWLIST:-}"
     declare -gA CURRENTLY_INSTALLED_MAP=()
     while IFS= read -r pkg; do
         CURRENTLY_INSTALLED_MAP[$pkg]=1
@@ -2014,6 +2042,10 @@ check_current() {
             [[ -n "$install_date_iso" ]] || continue
             [[ -z "$START_DATE" || ! "$install_date_iso" < "$START_DATE" ]] || continue
             [[ -z "$END_DATE"   || ! "$install_date_iso" > "$END_DATE"   ]] || continue
+        fi
+        if _allowlist_contains "$pkg" _pkg_allow; then
+            echo "  INFO: package allowlisted (verified clean): $pkg"
+            continue
         fi
         if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then
             found+=("$pkg (installed: $install_date) [CHAOS RAT campaign, 2025-07]")
@@ -2037,6 +2069,12 @@ check_current() {
         print_list found
         echo "  Remove them:"
         printf '    sudo pacman -Rns -- %s\n' "${found_pkgs[*]}"
+        echo "  Verified one is a name-only collision with the official list (not the"
+        echo "  actual malicious package)? Mark it known-good instead of removing it:"
+        local _fp
+        for _fp in "${found_pkgs[@]}"; do
+            echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=package:$_fp"
+        done
         return 2
     fi
 }
@@ -2082,6 +2120,11 @@ check_logs() {
     declare -A pkg_map
     for pkg in "${INFECTED_PKGS[@]}"; do pkg_map[$pkg]=1; done
 
+    # PACKAGE_ALLOWLIST: same allowlist check_current applies to currently-
+    # installed packages, applied here to log-history matches too.
+    local -a _pkg_allow
+    IFS=: read -ra _pkg_allow <<< "${PACKAGE_ALLOWLIST:-}"
+
     # CURRENTLY_INSTALLED_MAP is populated by check_current(), which always
     # runs immediately before this function — reused here instead of
     # repeating its `pacman -Qmq` query, so a log hit for a package removed
@@ -2116,6 +2159,11 @@ check_logs() {
 
             [[ -v pkg_map[$pkg] ]] || continue
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
+
+            if _allowlist_contains "$pkg" _pkg_allow; then
+                echo "LOG_ALLOWLISTED: $pkg ($action on $datetime_str)"
+                continue
+            fi
 
             # Select this match's source annotation and, where a date exists
             # to compare against, its cutoff -- cutoff empty means "never
@@ -4574,10 +4622,12 @@ if ! $FOCUSED_MODE; then
         _has_hist_hit=false
         _has_old_hit=false
         _has_seen_hit=false
+        _has_allowlisted_hit=false
         grep -q '^LOG_HIT:' "$LOGS_TMP" 2>/dev/null && _has_current_hit=true
         grep -q '^LOG_HIST:' "$LOGS_TMP" 2>/dev/null && _has_hist_hit=true
         grep -q '^LOG_OLD:' "$LOGS_TMP" 2>/dev/null && _has_old_hit=true
         grep -q '^LOG_HIST_SEEN:' "$LOGS_TMP" 2>/dev/null && _has_seen_hit=true
+        grep -q '^LOG_ALLOWLISTED:' "$LOGS_TMP" 2>/dev/null && _has_allowlisted_hit=true
 
         if $_has_current_hit; then
             echo "  WARNING: currently-installed package(s) with a matching log entry"
@@ -4586,6 +4636,9 @@ if ! $FOCUSED_MODE; then
             echo "  NOTE: if the PKGBUILD looks clean now, the malicious commit may have been"
             echo "  reverted — check AUR git history around the install date/time above."
             echo "  Either way, treat the install-time window as a potential exposure."
+            echo "  Verified it's a name-only collision with the official list (not the"
+            echo "  actual malicious package)? Mark it known-good instead:"
+            echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=package:NAME"
             [[ 2 -gt $EXIT_CODE ]] && EXIT_CODE=2
             _log_ret=2
         fi
@@ -4609,10 +4662,14 @@ if ! $FOCUSED_MODE; then
             echo "  longer installed) — shown for the record, not re-counted as a warning:"
             grep '^LOG_HIST_SEEN:' "$LOGS_TMP" | sed 's/^LOG_HIST_SEEN: /  - /'
         fi
-        if ! $_has_current_hit && ! $_has_hist_hit && ! $_has_old_hit && ! $_has_seen_hit; then
+        if $_has_allowlisted_hit; then
+            echo "  INFO: log match(es) for allowlisted package(s) (manually verified clean):"
+            grep '^LOG_ALLOWLISTED:' "$LOGS_TMP" | sed 's/^LOG_ALLOWLISTED: /  - /'
+        fi
+        if ! $_has_current_hit && ! $_has_hist_hit && ! $_has_old_hit && ! $_has_seen_hit && ! $_has_allowlisted_hit; then
             echo "  Clean: no historical log matches found."
         fi
-        unset _has_current_hit _has_hist_hit _has_old_hit _has_seen_hit
+        unset _has_current_hit _has_hist_hit _has_old_hit _has_seen_hit _has_allowlisted_hit
         rm -f "$LOGS_TMP"
     else
         echo "  Skipped: /var/log/pacman.log not found."

@@ -268,7 +268,7 @@ are also accepted.
 List entries in an allowlist and exit.
 .I NAME
 is one of
-.BR dkms ", " systemd ", " bpftool ", " autostart .
+.BR dkms ", " systemd ", " bpftool ", " autostart ", " package .
 .TP
 \fB\-\-allowlist\-add\fR=\fINAME\fR:\fIVALUE\fR
 Add
@@ -374,6 +374,10 @@ result (if enabled).
 .I /etc/archcanary/dkms_allowlist.conf
 System-wide DKMS module allowlist for
 .BR \-\-check-kmod .
+.TP
+.I /etc/archcanary/package_allowlist.conf
+System-wide package name allowlist for checks [1]/[2] (currently-installed
+foreign packages and pacman.log history).
 .TP
 .I /var/log/lynis-report.dat
 Lynis report file read by

@@ -36,7 +36,7 @@ _archcanary() {
             return 0
             ;;
         --allowlist-list|--allowlist-add|--allowlist-remove)
-            COMPREPLY=($(compgen -W "dkms systemd bpftool autostart" -- "$cur"))
+            COMPREPLY=($(compgen -W "dkms systemd bpftool autostart package" -- "$cur"))
             return 0
             ;;
         --package-list|--malicious-npm-list|--chaos-rat-list|--russian-spam-list|--community-list|--extra-list|--extra-lists-add|--extra-lists-remove|--log-file)
