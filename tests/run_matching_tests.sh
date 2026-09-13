@@ -3736,6 +3736,114 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# check_pkgbuild_caches — --start-date/--end-date narrows which cached
+# PKGBUILDs get scanned, by mtime. Same date window already applied to
+# checks [1]/[2] (see check_current/check_logs).
+# ---------------------------------------------------------------------------
+test_pkgbuild_cache_mtime_window() {
+    local tmpdir out
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --check-pkgbuild --no-notify
+    )
+
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/old-pkg" "$tmpdir/mid-pkg" "$tmpdir/new-pkg"
+    printf 'pkgname=old-pkg\n' > "$tmpdir/old-pkg/PKGBUILD"
+    printf 'pkgname=mid-pkg\n' > "$tmpdir/mid-pkg/PKGBUILD"
+    printf 'pkgname=new-pkg\n' > "$tmpdir/new-pkg/PKGBUILD"
+    touch -d "2020-01-01" "$tmpdir/old-pkg/PKGBUILD"
+    touch -d "2026-06-10" "$tmpdir/mid-pkg/PKGBUILD"
+    touch -d "2026-09-13" "$tmpdir/new-pkg/PKGBUILD"
+
+    # A: no window -- all 3 scanned (no regression from the default behavior).
+    out=$(PKGBUILD_CACHE_DIRS="$tmpdir" "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1)
+    if [[ "$out" == *"found in 3 PKGBUILD/install file(s)"* ]]; then
+        pass "pkgbuild_cache_mtime_window: no window scans all 3 cached PKGBUILDs"
+    else
+        fail "pkgbuild_cache_mtime_window: expected 3 scanned with no window, out: $out"
+    fi
+
+    # B: both bounds set -- only mid-pkg's mtime (2026-06-10) falls inside.
+    out=$(PKGBUILD_CACHE_DIRS="$tmpdir" START_DATE=2026-06-01 END_DATE=2026-06-15 \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1)
+    if [[ "$out" == *"found in 1 PKGBUILD/install file(s)"* ]]; then
+        pass "pkgbuild_cache_mtime_window: start+end window scans only the in-range PKGBUILD"
+    else
+        fail "pkgbuild_cache_mtime_window: expected 1 scanned in 06-01..06-15 window, out: $out"
+    fi
+
+    # C: start-only -- mid-pkg and new-pkg qualify, old-pkg (2020) excluded.
+    out=$(PKGBUILD_CACHE_DIRS="$tmpdir" START_DATE=2026-01-01 \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1)
+    if [[ "$out" == *"found in 2 PKGBUILD/install file(s)"* ]]; then
+        pass "pkgbuild_cache_mtime_window: start-only window excludes the pre-window PKGBUILD"
+    else
+        fail "pkgbuild_cache_mtime_window: expected 2 scanned with start-only window, out: $out"
+    fi
+
+    # D: end-only, END_DATE itself inclusive -- old-pkg and mid-pkg (exactly
+    # on the boundary date) qualify, new-pkg excluded.
+    out=$(PKGBUILD_CACHE_DIRS="$tmpdir" END_DATE=2026-06-10 \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1)
+    if [[ "$out" == *"found in 2 PKGBUILD/install file(s)"* ]]; then
+        pass "pkgbuild_cache_mtime_window: end-only window is inclusive of END_DATE itself"
+    else
+        fail "pkgbuild_cache_mtime_window: expected 2 scanned with end-only window, out: $out"
+    fi
+
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
+# --start-date/--end-date format validation. A malformed value used to reach
+# consumers unvalidated: check [7]'s `find -newermt` would fail silently,
+# reporting 0 files scanned instead of erroring.
+# ---------------------------------------------------------------------------
+test_date_window_validation() {
+    local base_args=(
+        --package-list="$SCRIPT_DIR/fake_package_lists/simple.txt"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --no-notify --no-summary
+    )
+    local out rc=0
+
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --start-date=not-a-date 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"Error: --start-date must be YYYY-MM-DD"*"not-a-date"* ]]; then
+        pass "date_window_validation: malformed --start-date rejected with exit 1"
+    else
+        fail "date_window_validation: expected rejection of malformed --start-date, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --end-date=garbage-end 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"Error: --end-date must be YYYY-MM-DD"*"garbage-end"* ]]; then
+        pass "date_window_validation: malformed --end-date rejected with exit 1"
+    else
+        fail "date_window_validation: expected rejection of malformed --end-date, rc=$rc, out: $out"
+    fi
+
+    # Unpadded values sort wrong as a plain string vs. a real ISO date.
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --start-date=2026-9-1 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"Error: --start-date must be YYYY-MM-DD"* ]]; then
+        pass "date_window_validation: unpadded --start-date rejected, not silently misparsed"
+    else
+        fail "date_window_validation: expected rejection of unpadded --start-date, rc=$rc, out: $out"
+    fi
+
+    rc=0
+    out=$("$REPO_DIR/archcanary.sh" "${base_args[@]}" --start-date=2026-06-01 --end-date=2026-06-10 2>&1) || rc=$?
+    if [[ "$out" != *"Error: --start-date"* && "$out" != *"Error: --end-date"* ]]; then
+        pass "date_window_validation: well-formed window accepted"
+    else
+        fail "date_window_validation: well-formed window wrongly rejected, rc=$rc, out: $out"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # check_logs — LOG_HIST "seen once" downgrade. A historical (no-longer-
 # installed) match only counts as a warning the first time; a repeat scan of
 # the exact same install event prints LOG_HIST_SEEN instead and stays
@@ -3965,6 +4073,12 @@ test_sah_section_header_deduped_names
 
 $VERBOSE && msg "--- Test 42: package allowlist (checks [1]/[2]) ---"
 test_package_allowlist
+
+$VERBOSE && msg "--- Test 43: check_pkgbuild_caches date window (mtime filter) ---"
+test_pkgbuild_cache_mtime_window
+
+$VERBOSE && msg "--- Test 44: --start-date/--end-date format validation ---"
+test_date_window_validation
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1

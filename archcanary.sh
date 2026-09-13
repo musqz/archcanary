@@ -510,8 +510,10 @@ for arg in "$@"; do
   --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)
   --community-list=PATH     Custom community-reported package list (default: ./community_reports.txt)
   --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
-            echo "  --start-date=YYYY-MM-DD   Only flag packages installed on or after this date (env: START_DATE)"
-            echo "  --end-date=YYYY-MM-DD     Only flag packages installed on or before this date (env: END_DATE)"
+            echo "  --start-date=YYYY-MM-DD   Only flag packages installed on or after this date (env: START_DATE);"
+            echo "                            also narrows check [7] to cached PKGBUILDs mtime'd on or after it"
+            echo "  --end-date=YYYY-MM-DD     Only flag packages installed on or before this date (env: END_DATE);"
+            echo "                            also narrows check [7] to cached PKGBUILDs mtime'd on or before it"
             echo "  --no-notify               Suppress the desktop notification on detection
   --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --color=auto|always|never Control symbol/color output (default: auto; also obeys NO_COLOR env)"
@@ -1151,6 +1153,22 @@ fi
 if [[ -n "$END_DATE_OPT" ]]; then
     END_DATE="$END_DATE_OPT"
 fi
+
+# Validated here once so every consumer (checks [1]/[2]/[7]) gets a
+# canonical zero-padded YYYY-MM-DD string. Checks [1]/[2] compare it as a
+# plain string (an unpadded month/day sorts wrong), and check [7]'s `find
+# -newermt` silently prints nothing on a value it can't parse -- a scan that
+# looks clean instead of erroring.
+_date_re='^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+if [[ -n "$START_DATE" && ! "$START_DATE" =~ $_date_re ]]; then
+    echo "Error: --start-date must be YYYY-MM-DD (got '$START_DATE')" >&2
+    exit 1
+fi
+if [[ -n "$END_DATE" && ! "$END_DATE" =~ $_date_re ]]; then
+    echo "Error: --end-date must be YYYY-MM-DD (got '$END_DATE')" >&2
+    exit 1
+fi
+unset _date_re
 
 # ---------------------------------------------------------------------------
 # Invoking-user home under sudo/pkexec
@@ -2885,6 +2903,21 @@ check_pkgbuild_caches() {
     local cache_dirs_default="$HOME/.cache/yay:$HOME/.cache/paru:$HOME/.cache/aurutils:$HOME/.cache/pikaur:$HOME/.cache/trizen"
     IFS=: read -ra cache_dirs <<< "${PKGBUILD_CACHE_DIRS:-$cache_dirs_default}"
 
+    # Date window (--start-date/--end-date, see check_current/check_logs):
+    # applied via each cached PKGBUILD/.install's mtime, roughly when the
+    # AUR helper built/cached it (breaks under cp -a/rsync -a/tar, which
+    # preserve original timestamps). No window set means both arrays below
+    # stay empty and find behaves exactly as before. START_DATE/END_DATE are
+    # validated to strict YYYY-MM-DD earlier, so "$END_DATE 23:59:59" below
+    # always parses -- no extra `date` subprocess needed just for "day after".
+    local -a _mtime_filter=()
+    if [[ -n "$START_DATE" ]]; then
+        _mtime_filter+=(-newermt "$START_DATE")
+    fi
+    if [[ -n "$END_DATE" ]]; then
+        _mtime_filter+=(-not -newermt "$END_DATE 23:59:59")
+    fi
+
     local found_count=0
     local scanned=0
     # Matches an ANSI-C-quoted string built from 3+ chained \xHH (hex) or
@@ -3259,7 +3292,7 @@ check_pkgbuild_caches() {
             # into it. Without this, archcanary scanning its own cached AUR
             # build flags its own obfuscation-technique test fixtures as if
             # they were a real package's malicious PKGBUILD.
-            find "$dir" \( -path '*/tests/fake_pkgbuilds' -prune \) -o \( -name "PKGBUILD" -o -name "*.install" \) -type f -print 2>/dev/null
+            find "$dir" \( -path '*/tests/fake_pkgbuilds' -prune \) -o \( -name "PKGBUILD" -o -name "*.install" \) "${_mtime_filter[@]}" -type f -print 2>/dev/null
         done
     )
 
@@ -3306,8 +3339,11 @@ check_pkgbuild_caches() {
     done < <(
         for dir in "${cache_dirs[@]}"; do
             [[ -d "$dir" ]] || continue
-            # Same self-scan exclusion as the pattern-scan find above.
-            find "$dir" \( -path '*/tests/fake_pkgbuilds' -prune \) -o -name "PKGBUILD" -type f -print 2>/dev/null
+            # Same self-scan exclusion as the pattern-scan find above. The
+            # date window gates this find by the PKGBUILD's own mtime, not
+            # each embedded binary's -- a binary-only touch inside an
+            # otherwise-old cache dir isn't caught. Out of scope, as elsewhere.
+            find "$dir" \( -path '*/tests/fake_pkgbuilds' -prune \) -o -name "PKGBUILD" "${_mtime_filter[@]}" -type f -print 2>/dev/null
         done
     )
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added: `--start-date`/`--end-date` now also narrow check [7] (`check_pkgbuild_caches`) to cached PKGBUILD/.install files whose mtime falls in the window — roughly when the AUR helper actually built/cached that package. Previously the window only applied to checks [1]/[2] (currently-installed packages and pacman.log history); this lets the same "what did I touch during this campaign's active window" question be asked of cached PKGBUILDs too. No window set (the default) scans exactly as before.
+- Fix: `--start-date`/`--end-date` are now validated to strict `YYYY-MM-DD` at parse time. Previously a malformed or unpadded value reached checks [1]/[2]/[7] unvalidated and inconsistently — check [7]'s `find`-based filter would fail silently on an unparseable value and report 0 files scanned instead of erroring, while an unpadded date sorted wrong in checks [1]/[2]'s plain string comparison. Caught in `/code-review`, live-reproduced before the fix.
+
 ## v0.1.35 (2026-09-13)
 
 - Added: `glanced`, `tokentracker-cli`, `tokentracker-bin`, and `claude-config-bin` to `lists/community_reports.txt` — all four published by the same AUR account, deleted by an AUR admin on 2026-09-12 for confirmed malicious upstream code. `glanced`'s upstream (`ayan-de/glance-linux`) shipped obfuscated JS disguised as a `.woff2` font file, auto-executed via a `.vscode/tasks.json` `runOn:folderOpen` task, resolving a 2nd-stage RAT through an Ethereum blockchain transaction lookup used as a C2 channel. Reported on `aur-general` by Saren and Nicolas Boichat.

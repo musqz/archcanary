@@ -209,11 +209,13 @@ URL.
 Repeatable.
 .TP
 \fB\-\-start-date\fR=\fIYYYY\-MM\-DD\fR
-Only flag packages installed on or after this date. Env:
+Only flag packages installed on or after this date. Also narrows the
+PKGBUILD/install cache scan to files with an mtime on or after this date. Env:
 .IR START_DATE .
 .TP
 \fB\-\-end-date\fR=\fIYYYY\-MM\-DD\fR
-Only flag packages installed on or before this date. Env:
+Only flag packages installed on or before this date. Also narrows the
+PKGBUILD/install cache scan to files with an mtime on or before this date. Env:
 .IR END_DATE .
 .SS Output control
 .TP
