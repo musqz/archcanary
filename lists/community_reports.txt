@@ -91,3 +91,7 @@ chrome
 google-chrome-bin
 ttf-mac-fonts-all
 storageexplorer-bin
+glanced
+tokentracker-cli
+tokentracker-bin
+claude-config-bin
