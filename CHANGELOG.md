@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: `--doctor`'s system-install check never got a `package allowlist` entry alongside the DKMS/systemd/bpftool/autostart ones, so a missing `/etc/archcanary/package_allowlist.conf` went unreported. Another instance of the same packaging-surfaces-drift class as the PKGBUILD/`archcanary-tui` gaps fixed in v0.1.35. (Like its 4 siblings, this check only tests existence, not readability — an unreadable-but-present file still shows `[ OK ]` even though checks [1]/[2] silently skip it; a pre-existing gap, not addressed here.)
+
 ## v0.1.35 (2026-09-13)
 
 - Added: `glanced`, `tokentracker-cli`, `tokentracker-bin`, and `claude-config-bin` to `lists/community_reports.txt` — all four published by the same AUR account, deleted by an AUR admin on 2026-09-12 for confirmed malicious upstream code. `glanced`'s upstream (`ayan-de/glance-linux`) shipped obfuscated JS disguised as a `.woff2` font file, auto-executed via a `.vscode/tasks.json` `runOn:folderOpen` task, resolving a 2nd-stage RAT through an Ethereum blockchain transaction lookup used as a C2 channel. Reported on `aur-general` by Saren and Nicolas Boichat.
