@@ -986,6 +986,7 @@ run_doctor() {
         _item "systemd allowlist"                        "$(_file /etc/archcanary/systemd_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/systemd_allowlist.conf"
         _item "bpftool allowlist"                        "$(_file /etc/archcanary/bpftool_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/bpftool_allowlist.conf"
         _item "autostart allowlist"                      "$(_file /etc/archcanary/autostart_allowlist.conf)"  "bash $installer_sys" "path: /etc/archcanary/autostart_allowlist.conf"
+        _item "package allowlist"                        "$(_file /etc/archcanary/package_allowlist.conf)"    "bash $installer_sys" "path: /etc/archcanary/package_allowlist.conf"
         printf '\n'
     fi
 
