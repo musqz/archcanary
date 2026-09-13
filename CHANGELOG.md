@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added: `glanced`, `tokentracker-cli`, `tokentracker-bin`, and `claude-config-bin` to `lists/community_reports.txt` — all four published by the same AUR account, deleted by an AUR admin on 2026-09-12 for confirmed malicious upstream code. `glanced`'s upstream (`ayan-de/glance-linux`) shipped obfuscated JS disguised as a `.woff2` font file, auto-executed via a `.vscode/tasks.json` `runOn:folderOpen` task, resolving a 2nd-stage RAT through an Ethereum blockchain transaction lookup used as a C2 channel. Reported on `aur-general` by Saren and Nicolas Boichat.
+
 ## v0.1.34 (2026-09-10)
 
 - Added: `check_pkgbuild_caches` Pattern 16 — a deceptive character in the **host** of a top-level `url=` or `source=` URL: a confusable Cyrillic/Greek/Armenian/fullwidth letter that renders like ASCII (`а` for `a`) but resolves to a host the attacker registered, or an invisible / reordering character (zero-width, bidi override, U+00AD, Tags block) hiding part of the host. Only the authority is checked — a non-ASCII byte in a URL path (`.../wiki/Программа`), in `pkgdesc`/`optdepends`/comments, or in an indented in-function `url=` is left alone, since non-Latin text there is legitimate. Byte-matched under `LC_ALL=C` with `grep -E`. Ported to the yay hook as a warning (`configs/yay-init.lua`, marker `(v15)`). Modeled on NeoArch's `security_scan.py`.
