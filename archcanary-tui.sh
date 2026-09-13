@@ -63,6 +63,7 @@ declare -A ALLOWLIST_LABELS=(
     [systemd]="systemd (persistence check)"
     [bpftool]="bpftool (eBPF loaders)"
     [autostart]="Autostart (XDG persistence check)"
+    [package]="Package (checks [1]/[2] name-match allowlist)"
 )
 
 _pause() {
@@ -315,6 +316,7 @@ _allowlists_menu() {
         echo "2) systemd (persistence check)"
         echo "3) bpftool (eBPF loaders)"
         echo "4) Autostart (XDG persistence check)"
+        echo "5) Package (checks [1]/[2] name-match allowlist)"
         echo "0) Back"
         echo
         local c
@@ -324,6 +326,7 @@ _allowlists_menu() {
             2) _allowlist_detail_menu systemd ;;
             3) _allowlist_detail_menu bpftool ;;
             4) _allowlist_detail_menu autostart ;;
+            5) _allowlist_detail_menu package ;;
             0|"") return 0 ;;
             *) ;;
         esac
