@@ -26,7 +26,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ARCHCANARY="$SCRIPT_DIR/archcanary.sh"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ARCHCANARY="$REPO_DIR/archcanary.sh"
 HEDGEDOC_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
 
 LISTS=()
@@ -117,8 +118,8 @@ fi
 # ---------------------------------------------------------------------------
 # Merge AUR package lists
 # ---------------------------------------------------------------------------
-AUR_TEMP=$(mktemp /tmp/aur_merge_aur_XXXXXX.txt)
-NPM_TEMP=$(mktemp /tmp/aur_merge_npm_XXXXXX.txt)
+AUR_TEMP=$(mktemp /tmp/aur_merge_aur_XXXXXX)
+NPM_TEMP=$(mktemp /tmp/aur_merge_npm_XXXXXX)
 AUR_SOURCES=0
 NPM_SOURCES=0
 
@@ -181,7 +182,7 @@ done
 
 # 4. If no custom npm lists given, use the default from the repo
 if [[ ${#NPM_LISTS[@]} -eq 0 ]]; then
-    DEFAULT_NPM="$SCRIPT_DIR/malicious_npm_packages.txt"
+    DEFAULT_NPM="$REPO_DIR/lists/malicious_npm_packages.txt"
     if [[ -f "$DEFAULT_NPM" ]]; then
         cat "$DEFAULT_NPM" >> "$NPM_TEMP"
         info "using default npm list: $DEFAULT_NPM"

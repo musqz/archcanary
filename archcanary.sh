@@ -437,7 +437,7 @@ for arg in "$@"; do
         --refresh)               REFRESH_PACKAGE_LIST=true ;;
         --verbose|-v)            VERBOSE=true ;;
         --debug)                 VERBOSE=true; set -x ;;
-        --log-file=*)            LOG_FILE="${arg#*=}" ;;
+        --log-file=*)            [[ "${arg#*=}" == "auto" ]] && LOG_FILE="" || LOG_FILE="${arg#*=}" ;;
         --package-list=*)        PACKAGE_LIST_FILE_OPT="${arg#*=}" ;;
         --malicious-npm-list=*)  MALICIOUS_NPM_LIST_OPT="${arg#*=}" ;;
         --chaos-rat-list=*)      CHAOS_RAT_LIST_OPT="${arg#*=}" ;;
@@ -504,18 +504,18 @@ for arg in "$@"; do
             echo "  --no-aur-audit     Skip the aur-audit.wtako.net feed on --refresh (env: AUR_AUDIT_ENABLE=false)"
             echo "  --verbose, -v, --debug    Verbose output (--debug also enables set -x)"
             echo "  --log-file=PATH           Write full detail log to PATH (auto: ~/.cache/archcanary/aur-check-<date>.log)"
-            echo "  --package-list=PATH       Custom infected AUR package list (default: ./package_list.txt)"
-            echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ./malicious_npm_packages.txt)"
-            echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ./chaos_rat_packages.txt)
-  --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ./malicious_russian_spam_packages.txt)
-  --community-list=PATH     Custom community-reported package list (default: ./community_reports.txt)
-  --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
+            echo "  --package-list=PATH       Custom infected AUR package list (default: ~/.config/archcanary/package_list.txt)"
+            echo "  --malicious-npm-list=PATH Custom malicious npm package name list (default: ~/.config/archcanary/malicious_npm_packages.txt)"
+            echo "  --chaos-rat-list=PATH     Custom CHAOS RAT (2025) package list (default: ~/.config/archcanary/chaos_rat_packages.txt)"
+            echo "  --russian-spam-list=PATH  Custom Russian Spam Campaign (2026) list (default: ~/.config/archcanary/malicious_russian_spam_packages.txt)"
+            echo "  --community-list=PATH     Custom community-reported package list (default: ~/.config/archcanary/community_reports.txt)"
+            echo "  --extra-list=PATH_OR_URL  Load an extra package list (file path or https:// URL); repeatable"
             echo "  --start-date=YYYY-MM-DD   Only flag packages installed on or after this date (env: START_DATE);"
             echo "                            also narrows check [7] to cached PKGBUILDs mtime'd on or after it"
             echo "  --end-date=YYYY-MM-DD     Only flag packages installed on or before this date (env: END_DATE);"
             echo "                            also narrows check [7] to cached PKGBUILDs mtime'd on or before it"
-            echo "  --no-notify               Suppress the desktop notification on detection
-  --no-summary              Suppress the check summary table at the end of a scan"
+            echo "  --no-notify               Suppress the desktop notification on detection"
+            echo "  --no-summary              Suppress the check summary table at the end of a scan"
             echo "  --color=auto|always|never Control symbol/color output (default: auto; also obeys NO_COLOR env)"
             echo "  --format=text|json        Output a JSON summary instead of the human-readable report"
             echo "                            (default: text; JSON goes to stdout, full narrative still logged)"

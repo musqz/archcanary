@@ -61,6 +61,11 @@ install-components)
     # ~/.config/yay/init.lua automatically (per-user path, hooks are opt-in).
     install -m 644 "$REPO_DIR/configs/yay-init.lua" \
         "$SYSTEM_LIB/yay-init.lua"
+    # auditd rules template — fallback for --audit-rules-get when no rules are
+    # actually seeded (auditd absent at install time). PKGBUILD also ships this
+    # to the same path so both install routes satisfy archcanary.sh:350.
+    install -m 644 "$REPO_DIR/configs/audit-rules.conf" \
+        "$SYSTEM_LIB/audit-rules.conf"
     cp "$REPO_DIR/configs/org.archcanary.policy" /usr/share/polkit-1/actions/
     # Seed the bundled package lists next to the system script so a root scan
     # (system service) finds them — root's $HOME is /root, which is not seeded.
@@ -192,6 +197,7 @@ EOF
     echo "  installed: $SYSTEM_LIB/archcanary.sh"
     echo "  installed: $SYSTEM_LIB/root-helper"
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
+    echo "  installed: $SYSTEM_LIB/audit-rules.conf (template for --audit-rules-get)"
     echo "  installed: $SYSTEM_LIB/yay-init.lua (template — cp to ~/.config/yay/init.lua yourself to enable, see --doctor)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages,community_reports}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
@@ -283,6 +289,10 @@ uninstall-components)
           /etc/audit/rules.d/archcanary.conf
     augenrules --load >/dev/null 2>&1 || true
     echo "  removed: /etc/audit/rules.d/30-archcanary.rules (auditd rules)"
+    # Legacy cleanup: the Lynis plugin was installed to /usr/share/lynis/plugins/
+    # in June 2026 releases under both names (renamed mid-window). The plugin
+    # concept was removed, but users who installed during that window still carry
+    # these files — remove them on uninstall.
     rm -f /usr/share/lynis/plugins/plugin_archcanary_phase1 \
           /usr/share/lynis/plugins/plugin_archcanary_phase1.sh
     ;;

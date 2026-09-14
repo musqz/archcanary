@@ -41,7 +41,7 @@ The root scan can't notify (no desktop session), so a user `.path` unit watches 
 
 ## Quick setup (recommended)
 
-`./install.sh --system` does all of this for you — it installs the system scan units, the user-level scan, the notifier, and the opt-in scan-all-homes unit (installed but never enabled — see section 5); creates `/var/lib/archcanary/`; seeds the package lists and the system-wide DKMS, systemd, and bpftool allowlists; enables the system timer + pacman-trigger, the user timer, and the notifier; and migrates away any old user-scope scan units:
+`./install.sh --system` does most of this for you — it installs the system scan units, the user-level scan, the notifier, and the opt-in scan-all-homes unit (installed but never enabled — see section 5); creates `/var/lib/archcanary/`; seeds the package lists and the system-wide DKMS, systemd, and bpftool allowlists; and migrates away any old user-scope scan units. It never enables anything automatically — do that yourself as shown below (system units need `sudo systemctl enable`, user units `systemctl --user enable`):
 
 ```bash
 ./install.sh --system
@@ -141,8 +141,10 @@ Description=archcanary user-level scan
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/archcanary --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log
+ExecStart=/usr/bin/archcanary --check-npm-cache --check-bun-cache --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-autostart --log-file=%h/.cache/archcanary/last-user-scan.log
 ```
+
+(The shipped unit points at `/usr/bin/archcanary`, the AUR/PKGBUILD install route; `install.sh --system` rewrites this to `/usr/local/bin/archcanary` on the copy it installs.)
 
 **`~/.config/systemd/user/archcanary-user.timer`**
 ```ini

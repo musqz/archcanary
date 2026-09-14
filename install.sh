@@ -191,6 +191,19 @@ if $SYSTEM; then
             _removed_user=true
         fi
     done
+    # Same for the user-level man page and bash-completion specs — a stale
+    # user copy shadows the system one forever (see --doctor).
+    for _user_file in \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/archcanary.1" \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/archcanary" \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/canary"; do
+        if [[ -f "$_user_file" || -L "$_user_file" ]]; then
+            rm -f "$_user_file"
+            echo "  removed:   $_user_file (superseded by system install)"
+            _removed_user=true
+        fi
+    done
+    unset _user_file
 else
     mkdir -p "$USER_BIN"
     install -m 755 "$REPO_DIR/archcanary.sh"     "$USER_BIN/archcanary"
@@ -286,12 +299,11 @@ if $SYSTEM; then
        "$REPO_DIR"/systemd/user/archcanary-user.service \
        "$REPO_DIR"/systemd/user/archcanary-user.timer \
        "$USER_UNITS/"
-    # The source unit uses %h/.local/bin (user install default). For a system
-    # install the binary lands in $SYSTEM_BIN, so patch the installed copy.
-    if $SYSTEM; then
-        sed -i "s|%h/.local/bin/archcanary|$SYSTEM_BIN/archcanary|g" \
-            "$USER_UNITS/archcanary-user.service"
-    fi
+    # The source unit uses /usr/bin/archcanary (AUR/PKGBUILD route). For a
+    # system install the binary lands in $SYSTEM_BIN (/usr/local/bin), so
+    # patch the installed copy.
+    sed -i "s|/usr/bin/archcanary|$SYSTEM_BIN/archcanary|g" \
+        "$USER_UNITS/archcanary-user.service"
     systemctl --user daemon-reload 2>/dev/null || true
     echo "  installed: $USER_UNITS/archcanary-user.{service,timer} + notify.{path,service} (not enabled — see below)"
 

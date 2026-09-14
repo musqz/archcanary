@@ -22,6 +22,19 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 declare -A STATUS=()
 LAST_RC=0
 
+# Resolve the archcanary binary against known-good install locations only.
+# Never consult $PATH — this path is handed to sudo and must not be
+# attacker-influenceable (prevents PATH-hijack to root).
+_find_archcanary_root() {
+    local _home="${SUDO_USER:+$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)}"
+    _home="${_home:-$HOME}"
+    for _p in "$_home/.local/bin/archcanary" "$_home/bin/archcanary" \
+              /usr/local/bin/archcanary /usr/bin/archcanary; do
+        if [[ -x "$_p" ]]; then echo "$_p"; return 0; fi
+    done
+    return 1
+}
+
 declare -A CHECK_FLAGS=(
     [systemd]="--check-systemd"
     [npm]="--check-npm-cache"
@@ -94,7 +107,13 @@ _run() {
     echo
     LAST_RC=0
     if [[ "$use_sudo" == true ]]; then
-        sudo archcanary "$@" || LAST_RC=$?
+        local _cmd
+        if ! _cmd="$(_find_archcanary_root)"; then
+            echo "Error: archcanary not found in a known install location" >&2
+            LAST_RC=1
+        else
+            sudo "$_cmd" "$@" || LAST_RC=$?
+        fi
     else
         archcanary "$@" || LAST_RC=$?
     fi
@@ -228,7 +247,10 @@ _edit_via_get_set() {
     read -rp "Save changes? [y/N]: " ans || exit 0
     [[ "$ans" =~ ^[Yy]$ ]] || return 0
     echo
-    if sudo archcanary "$set_flag" < "$tmpfile"; then
+    local _cmd
+    if ! _cmd="$(_find_archcanary_root)"; then
+        echo "Error: archcanary not found in a known install location" >&2
+    elif sudo "$_cmd" "$set_flag" < "$tmpfile"; then
         echo "Saved."
     else
         echo "Save failed."
