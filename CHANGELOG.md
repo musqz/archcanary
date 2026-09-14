@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.36 (2026-09-14)
 
 - Fix: `--doctor`'s system-install check never got a `package allowlist` entry alongside the DKMS/systemd/bpftool/autostart ones, so a missing `/etc/archcanary/package_allowlist.conf` went unreported. Another instance of the same packaging-surfaces-drift class as the PKGBUILD/`archcanary-tui` gaps fixed in v0.1.35. (Like its 4 siblings, this check only tests existence, not readability — an unreadable-but-present file still shows `[ OK ]` even though checks [1]/[2] silently skip it; a pre-existing gap, not addressed here.)
 - Added: `--start-date`/`--end-date` now also narrow check [7] (`check_pkgbuild_caches`) to cached PKGBUILD/.install files whose mtime falls in the window — roughly when the AUR helper actually built/cached that package. Previously the window only applied to checks [1]/[2] (currently-installed packages and pacman.log history); this lets the same "what did I touch during this campaign's active window" question be asked of cached PKGBUILDs too. No window set (the default) scans exactly as before.
