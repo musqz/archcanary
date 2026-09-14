@@ -969,8 +969,12 @@ run_doctor() {
         local user_completion="${XDG_DATA_HOME:-$real_home/.local/share}/bash-completion/completions/archcanary"
         local sys_completion="${ARCHCANARY_SYS_COMPLETION:-/usr/share/bash-completion/completions/archcanary}"
         if [[ -f "$user_completion" && -f "$sys_completion" ]] && ! cmp -s "$user_completion" "$sys_completion"; then
+            # Fixed with a direct copy, not "bash install.sh" — an AUR
+            # install has no repo clone to run that from, and the repo
+            # isn't needed anyway: the correct bytes are already sitting at
+            # $sys_completion.
             _warn "bash completion (user copy differs from system copy)" \
-                "bash $installer   # refreshes the user copy, which is the one that actually wins" \
+                "install -Dm644 \"$sys_completion\" \"$user_completion\"" \
                 "$user_completion is out of sync with $sys_completion — bash prefers the user copy regardless of which is newer"
         fi
         printf '\n'
