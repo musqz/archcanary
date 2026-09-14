@@ -4,6 +4,7 @@
 
 - Fix: `--doctor`'s bash-completion-drift warning suggested `bash install.sh # (cd to the archcanary repo first)` as the fix — a dead end for AUR installs, which never leave a repo clone behind. The correct bytes are already sitting at the system completion path, so the fix now copies them directly (`install -Dm644`) instead.
 - Added: `check_pkgbuild_caches` Pattern 17 — a `.install` scriptlet that plants or escalates a login path: `usermod`/`gpasswd` adding a user to `wheel`, a `NOPASSWD` sudoers edit, or a hardcoded password piped into `chpasswd`/`passwd`. `.install`-only — `package()` runs under fakeroot, so a real PKGBUILD escape needs `sudo`, already caught by Pattern 14. Modeled on a real 2026-09-14 `aur-general` incident (`x11-qemu-validation`): a compromised maintainer's scriptlet created a user with a hardcoded password, added it to `wheel`, and enabled `sshd` with password auth for instant root-equivalent remote access. Reported by Saren; the AUR admin suspended the account and removed the package the same day.
+- Added: ported Pattern 17 (above) to the yay hook (`configs/yay-init.lua`, marker `(v16)`), as a warning. Unlike every other port in that file, yay's Lua API hands the hook only the PKGBUILD's own text — no `.install` field — so this one reads the `.install` file straight off disk via `event.data.dir` and the PKGBUILD's own `install=` line, the same file `--check-pkgbuild` itself would read.
 
 ## v0.1.36 (2026-09-14)
 

@@ -7,7 +7,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v15).
+-- yay 13.0 Lua hooks for the AUR security stack (v16).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -423,6 +423,178 @@ local function _archcanary_has_deceptive_unicode(pkgbuild)
   return nil
 end
 
+-- Pattern port (check_pkgbuild_caches Pattern 17, .install only): a
+-- scriptlet that plants or escalates a login path -- wheel/sudoers
+-- escalation, or a password set outside an interactive prompt. Real
+-- 2026-09-14 aur-general incident (x11-qemu-validation): a compromised
+-- maintainer's post_install created a user with a hardcoded password,
+-- added it to wheel, and enabled sshd with password auth for instant
+-- root-equivalent remote access. .install-only, like the bash side --
+-- package() runs under fakeroot, a real PKGBUILD escape needs sudo
+-- (_archcanary_has_priv_esc above already covers that).
+--
+-- Unlike every other port in this file, yay's Lua API hands the hook only
+-- the PKGBUILD's own text (event.data.pkgbuild) -- there's no dedicated
+-- .install field, so this reads the file straight off disk from
+-- event.data.dir (the build directory yay just downloaded, where
+-- PKGBUILD/.SRCINFO/.install all live side by side -- "dir" per yay's own
+-- doc/lua.md: "the build directory location", same payload shape for
+-- AURPostDownload and AURPreInstall), using the PKGBUILD's own `install=`
+-- line to find the filename. Returns false (not flagged) if install= is
+-- absent, unresolvable, or the file can't be opened -- never fails open
+-- into a false abort.
+--
+-- The Arch Wiki's own PKGBUILD template uses install=$pkgname.install (not
+-- a static literal), so a plain no-substitution parse would silently no-op
+-- for a large share of real packages -- $pkgname/${pkgname} and
+-- $pkgbase/${pkgbase} (the only variables a real install= line commonly
+-- interpolates) are resolved from the PKGBUILD's own pkgname=/pkgbase=
+-- lines. A split-package pkgname=(...) array is left alone (not string-
+-- substituted into "(a"-style garbage) since resolving it correctly needs
+-- the actual sub-package being installed, not just PKGBUILD text -- and
+-- any other variable, or one that's still unresolved after substitution,
+-- makes the whole match fail rather than guess at the wrong filename.
+local function _archcanary_install_file(pkgbuild)
+  local text = "\n" .. pkgbuild   -- so a match works even when install=/
+                                   -- pkgname=/pkgbase= is the file's first line
+  local raw = text:match("\ninstall%s*=%s*(%S+)")
+  if not raw then return nil end
+  raw = raw:gsub("^['\"]", ""):gsub("['\"]$", "")
+  if raw:find("$", 1, true) then
+    local pkgname = text:match("\npkgname%s*=%s*(%S+)")
+    local pkgbase = text:match("\npkgbase%s*=%s*(%S+)")
+    if pkgname and not pkgname:find("(", 1, true) then
+      raw = raw:gsub("%$%{?pkgname%}?", pkgname)
+    end
+    if pkgbase and not pkgbase:find("(", 1, true) then
+      raw = raw:gsub("%$%{?pkgbase%}?", pkgbase)
+    end
+  end
+  return raw:match("^([%w_.%-]+)$")
+end
+
+-- wheel/sudoers escalation: useradd/usermod granting wheel membership (the
+-- g/G flag matched anywhere in the short-flag cluster, so -G/-aG/-Ga all
+-- hit -- the one-shot `useradd -G wheel -p <hash> name` form of the
+-- incident, not just a separate usermod call; wheel matched anywhere in a
+-- comma-joined group list, e.g. `-aG docker,wheel` or `-aG wheel,docker`),
+-- gpasswd -a <user> wheel, or a NOPASSWD line on the same line as a
+-- sudoers/sudoers.d reference with no ;/& between them (a | is allowed, so
+-- a `| sudo tee /etc/sudoers` pipeline still matches). Neither function
+-- strips quoted spans first (unlike _archcanary_has_priv_esc above) -- a
+-- literal `echo "example: usermod -aG wheel testuser"` doc string can
+-- false-positive; accepted for now, since this is a warn, not an abort,
+-- and the bash side (check_pkgbuild_caches) makes the identical
+-- trade-off. Known gap, same as the bash side: a sudoers drop-in with the
+-- filename and the NOPASSWD text on separate heredoc lines isn't
+-- correlated -- every check in this file is per-line.
+local function _archcanary_has_wheel_escalation(line)
+  local s = line .. " "   -- guarantee a boundary char after a trailing match
+  return s:match("useradd%s.-%-%a*[gG]%a*%s+%S*wheel[^%w_]") ~= nil
+      or s:match("usermod%s.-%-%a*[gG]%a*%s+%S*wheel[^%w_]") ~= nil
+      or s:match("gpasswd%s+%-a%s+%S+%s+wheel[^%w_]") ~= nil
+end
+-- Checks every sudoers/NOPASSWD occurrence pair on the line (not just the
+-- first of each), so an earlier decoy mention of "sudoers" (e.g. inside an
+-- unrelated log message) can't shield a later real pairing -- Lua's find()
+-- only ever returns the first hit, unlike the bash side's regex engine,
+-- which already tries every position on its own.
+local function _archcanary_has_nopasswd_sudoers(line)
+  local sud, nop = {}, {}
+  for pos in line:gmatch("()sudoers") do sud[#sud + 1] = pos end
+  for pos in line:gmatch("()NOPASSWD") do nop[#nop + 1] = pos end
+  for _, s in ipairs(sud) do
+    for _, n in ipairs(nop) do
+      local lo, hi = math.min(s, n), math.max(s, n)
+      if not line:sub(lo, hi):find("[;&]") then return true end
+    end
+  end
+  return false
+end
+
+-- a login password set outside an interactive prompt: bare chpasswd (a
+-- scriptlet has no legitimate reason to ever call it), or a literal
+-- echoed/printf'd straight into chpasswd/passwd, optionally through one
+-- privilege/env wrapper -- mirrors _archcanary_wrapped_shell/
+-- _archcanary_pipe_to_shell's wrapper handling above, targeting
+-- chpasswd/passwd instead of a shell. Deliberately excludes
+-- `useradd/usermod -p $(...)`-style dynamically generated passwords, same
+-- as the bash side -- the one-shot `useradd -G wheel -p <hash>` incident
+-- shape is still caught above via wheel alone.
+-- Deliberately near-duplicates _archcanary_wrapped_shell/
+-- _archcanary_pipe_to_shell above (same token-walk / wrapper-unwrap
+-- shape, different target word list) rather than generalizing those --
+-- they're already shipped and covered by test_yay_hook_pipe_anchor;
+-- reworking them to share this code would mean relocating that pair
+-- earlier in the file (both are defined and used well above this point)
+-- for a maintainability win, not a correctness one. If a third port ever
+-- needs the same shape, unify all three then.
+local _ARCHCANARY_PASSWD_TARGETS = { "chpasswd", "passwd" }
+local function _archcanary_wrapped_target(seg, targets)
+  for tok in seg:gmatch("%S+") do
+    for _, name in ipairs(targets) do
+      if tok == name or tok:match("^" .. name .. "[;|&)<>`]") then
+        return true
+      end
+    end
+    if not (tok:match("^%-") or tok:match("^[%a_][%w_]*=")) then
+      return false
+    end
+  end
+  return false
+end
+-- Terminator includes `<` alongside whitespace so a herestring/redirect
+-- form (`chpasswd<<<"user:pass"`, `chpasswd<file`) still counts -- not
+-- just the space-delimited `chpasswd < file` shape.
+local function _archcanary_has_chpasswd(line)
+  return (" " .. line .. " "):find("[;&|%s]chpasswd[%s<]") ~= nil
+end
+local function _archcanary_pipe_to_passwd(s)
+  if not (s:find("echo%s") or s:find("printf%s")) then return false end
+  s = " " .. s:gsub("||", "  ") .. "\n"
+  for _, name in ipairs(_ARCHCANARY_PASSWD_TARGETS) do
+    if s:find("|&?%s*" .. name .. "[%s;|&)<>`]") then return true end
+  end
+  for _, w in ipairs(_ARCHCANARY_PIPE_WRAPPERS) do
+    for seg in s:gmatch("|&?%s*" .. w .. "%s+([^|;&]*)") do
+      if _archcanary_wrapped_target(seg, _ARCHCANARY_PASSWD_TARGETS) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+-- Reads the .install file the PKGBUILD references (if any) straight off
+-- disk and scans it line by line, like the bash side. Whole-line comments
+-- are skipped. Returns true if it plants/escalates a privileged account.
+-- The read is capped (a real .install scriptlet is a few hundred bytes to
+-- a few KB) rather than an unbounded f:read("*a") -- this is attacker-
+-- controlled input (an arbitrary AUR package's build directory), and the
+-- scanner reading it shouldn't itself be the thing that balloons memory
+-- or hangs on it.
+local function _archcanary_has_backdoor_account(pkgbuild, dir)
+  if not dir or dir == "" then return false end
+  local install_file = _archcanary_install_file(pkgbuild)
+  if not install_file then return false end
+  local f = io.open(dir .. "/" .. install_file, "r")
+  if not f then return false end
+  local content = f:read(262144)
+  f:close()
+  if not content then return false end
+  for line in (content .. "\n"):gmatch("([^\n]*)\n") do
+    if not line:match("^%s*#") then
+      if _archcanary_has_wheel_escalation(line)
+         or _archcanary_has_nopasswd_sudoers(line)
+         or _archcanary_has_chpasswd(line)
+         or _archcanary_pipe_to_passwd(line) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 local function _archcanary_config_dir()
   local xdg = os.getenv("XDG_CONFIG_HOME")
   if xdg and xdg ~= "" then return xdg .. "/archcanary" end
@@ -599,6 +771,20 @@ yay.create_autocmd("AURPostDownload", {
       flagged = true
       yay.log.warn(_archcanary_banner(pkg, "DECEPTIVE URL CHARACTER") .. " (" .. unicode_spoof
                    .. " — the host isn't the ASCII name it appears to be; compare it byte-for-byte before continuing)")
+    end
+
+    -- Warn, don't abort (same rationale as above): a heuristic on .install
+    -- text, worth surfacing but not worth blocking a build over. Reads the
+    -- .install file itself off disk via event.data.dir (the build
+    -- directory -- passed inline below, not assigned to a local `dir`,
+    -- since that name is taken below for archcanary's own config
+    -- directory) since yay's Lua API doesn't hand the hook the .install
+    -- file's content directly.
+    if _archcanary_has_backdoor_account(pkgbuild, event.data.dir) then
+      flagged = true
+      yay.log.warn(_archcanary_banner(pkg, "BACKDOOR ACCOUNT IN INSTALL SCRIPTLET")
+                   .. " — creates/escalates a privileged account (wheel/sudoers membership or a"
+                   .. " non-interactively-set password); review the .install file before continuing")
     end
 
     local dir          = _archcanary_config_dir()
