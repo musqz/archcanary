@@ -1,0 +1,13 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-backdoor-account
+pkgver=1.0
+pkgrel=1
+pkgdesc="fake validation package"
+arch=('any')
+install=pkg-backdoor-account.install
+source=()
+sha256sums=()
+
+package() {
+    :
+}

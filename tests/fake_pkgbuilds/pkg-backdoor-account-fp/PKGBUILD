@@ -1,0 +1,18 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-backdoor-account-fp
+pkgver=1.0
+pkgrel=1
+pkgdesc="benign package exercising Pattern 17's false-positive surface"
+arch=('any')
+install=pkg-backdoor-account-fp.install
+source=()
+sha256sums=()
+
+package() {
+    # Pattern 17 is .install-only -- this text must not be flagged even
+    # though it matches, since package() runs under fakeroot and can't
+    # actually touch wheel/sudoers/a system password (a real attempt needs
+    # sudo, which Pattern 14 already catches).
+    usermod -aG wheel fakeroot
+    echo "fakeroot:xnano-recovery" | chpasswd
+}

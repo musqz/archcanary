@@ -1,0 +1,7 @@
+post_install() {
+    # example only, never actually run this: echo "user:pass" | chpasswd
+    usermod -aG docker "$SUDO_USER"
+    gpasswd -a "$SUDO_USER" audio
+    passwd -l svcacct
+    useradd -r -s /usr/bin/nologin -p "$(openssl passwd -6 "$(openssl rand -base64 12)")" svcacct
+}

@@ -1413,6 +1413,38 @@ test_pkgbuild_obfuscation() {
     else
         fail "pkgbuild_obfuscation: Pattern 16 false positive on legitimate non-ASCII, rc=$rc, out: $out"
     fi
+
+    # Sub-test Z4: Pattern 17 — a .install post_install that creates a user
+    # with a hardcoded password (piped into chpasswd) and adds it to wheel
+    # → WARNING for both lines. Modeled on the real 2026-09-14 aur-general
+    # incident (x11-qemu-validation): a compromised maintainer's scriptlet
+    # planted exactly this backdoor shape.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-backdoor-account" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 \
+          && "$out" == *"WARNING: scriptlet creates/escalates a privileged account in"*'chpasswd'* \
+          && "$out" == *"WARNING: scriptlet creates/escalates a privileged account in"*'wheel'* ]]; then
+        pass "pkgbuild_obfuscation: .install hardcoded-password backdoor account (chpasswd + wheel) detected"
+    else
+        fail "pkgbuild_obfuscation: Pattern 17 backdoor account not detected, rc=$rc, out: $out"
+    fi
+
+    # Sub-test Z5: Pattern 17 false-positive guard — a non-wheel group add
+    # (docker/audio), locking an account (`passwd -l`), and a dynamically
+    # generated (openssl-piped) useradd -p password must all stay clean in
+    # the .install; the identical wheel/chpasswd text in PKGBUILD's
+    # package() must stay clean too, since Pattern 17 is .install-only
+    # (package() runs under fakeroot — Pattern 14 already covers a real
+    # PKGBUILD escape via sudo).
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-backdoor-account-fp" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" != *"scriptlet creates/escalates a privileged account"* ]]; then
+        pass "pkgbuild_obfuscation: non-wheel group/locked account/dynamic password and PKGBUILD-only text not flagged"
+    else
+        fail "pkgbuild_obfuscation: Pattern 17 false positive, rc=$rc, out: $out"
+    fi
 }
 
 # ---------------------------------------------------------------------------

