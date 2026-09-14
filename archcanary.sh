@@ -3004,6 +3004,48 @@ check_pkgbuild_caches() {
     # install an unrelated dependency (tor) to stage its backdoor.
     local re_pacman_noninteractive='pacman[[:space:]].*--noconfirm'
 
+    # A .install scriptlet granting a login/sudo path that wasn't there
+    # before — wheel/sudoers escalation or a non-interactively-set account
+    # password. Real 2026-09-14 aur-general incident (x11-qemu-validation,
+    # maintainer account later confirmed compromised and suspended): its
+    # post_install created a user with a hardcoded password, added it to
+    # wheel, and enabled+started sshd with password auth — instant
+    # root-equivalent remote access to anyone who read the script. The
+    # source itself was pulled before it could be captured (AUR cgit blocks
+    # scripted fetches with Anubis, and the package was nuked same-day), so
+    # this generalizes the reported technique rather than matching its
+    # literal text.
+    # No legitimate PKGBUILD/.install ever touches group membership,
+    # sudoers, or a login password — package() runs under fakeroot as the
+    # calling user (Pattern 14's note), so only a .install scriptlet (real
+    # root via pacman) can actually pull this off. Two independent signals,
+    # either is sufficient on its own:
+    #  (a) re_wheel_sudoers — useradd/usermod granting wheel membership (the
+    #      one-shot `useradd -G wheel -p <hash> name` form of the incident,
+    #      not just a separate usermod call) or gpasswd adding a user to
+    #      wheel; the -g/-G flag is matched anywhere in the short-flag
+    #      cluster (`-G`, `-aG`, `-Ga`, ...) and wheel anywhere in a
+    #      comma-joined group list (`-aG docker,wheel` as well as `-aG
+    #      wheel,docker`) — or a NOPASSWD line written/uncommented in
+    #      sudoers/sudoers.d, including via a `| sudo tee` pipeline. Known
+    #      gap: a sudoers drop-in built with the filename and the NOPASSWD
+    #      text on separate heredoc lines isn't correlated — every pattern
+    #      in this scan is per-line, and joining a heredoc body to its
+    #      header is a separate mechanism (see Pattern 9's dedicated
+    #      dup-source tracker) not worth building for this one case.
+    #  (b) re_hardcoded_passwd — chpasswd (a scriptlet has no legitimate
+    #      reason to ever call it, regardless of sudo/doas/pkexec/env/exec
+    #      and any flags in front of it — reuses $_pipe_wrap/$_wrapopt from
+    #      the Tor/pipe-to-shell patterns above), or a literal string piped
+    #      straight into chpasswd/passwd. Deliberately excludes
+    #      `useradd/usermod -p $(...)`-style dynamically generated
+    #      passwords — that's a separate, much blurrier case (some
+    #      appliance-style packages roll a random admin password by design)
+    #      not worth the FP risk here; the one-shot `useradd -G wheel -p
+    #      <hash>` incident shape is still caught above via wheel alone.
+    local re_wheel_sudoers='(useradd|usermod)[[:space:]].*-[A-Za-z]*[gG][A-Za-z]*[[:space:]]+[^[:space:]]*wheel([^[:alnum:]_]|$)|gpasswd[[:space:]]+-a[[:space:]]+[^[:space:]]+[[:space:]]+wheel([^[:alnum:]_]|$)|sudoers(\.d/[^[:space:]]*)?[^;&]*NOPASSWD|NOPASSWD[^;&]*sudoers'
+    local re_hardcoded_passwd='(^|[;&|[:space:]])chpasswd([[:space:]]|$)|(echo|printf)[[:space:]].*\|[[:space:]]*('"$_pipe_wrap$_wrapopt"')?(chpasswd|passwd)([[:space:]]|$)'
+
     # A privilege-escalation helper (sudo/doas/pkexec) invoked from a
     # PKGBUILD's build()/package(). makepkg runs those as the calling user
     # (package() under fakeroot), so shelling through sudo writes outside the
@@ -3175,6 +3217,23 @@ check_pkgbuild_caches() {
                 echo "    pacman can't safely re-enter itself mid-transaction -- a real"
                 echo "    .install usage is a read-only query, never a mutating -S/-R with"
                 echo "    --noconfirm."
+                found_count=2
+            fi
+
+            # --- Pattern 17: .install scriptlet creates/escalates a privileged
+            # account --- .install only: PKGBUILD's package() runs under
+            # fakeroot as the calling user (see Pattern 14), so it can't
+            # actually touch wheel/sudoers/a system password -- if it tries,
+            # Pattern 14 already caught the sudo/doas/pkexec call that would
+            # be needed to do it for real.
+            if ! $_is_pkgbuild && [[ -z "$_line_is_comment" ]] \
+               && [[ "$line" =~ $re_wheel_sudoers || "$line" =~ $re_hardcoded_passwd ]]; then
+                echo "  WARNING: scriptlet creates/escalates a privileged account in $file:$lineno"
+                echo "    $line"
+                echo "    No .install scriptlet legitimately touches group membership,"
+                echo "    sudoers, or sets a login password -- this is how a real 2026-09-14"
+                echo "    AUR incident (x11-qemu-validation) planted a hardcoded-password"
+                echo "    root-equivalent backdoor via post_install."
                 found_count=2
             fi
 
