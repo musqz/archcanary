@@ -1910,7 +1910,7 @@ test_doctor_stale_completion() {
     out=$(HOME="$fake_home" XDG_DATA_HOME="$fake_home/.local/share" XDG_CONFIG_HOME="$fake_home/.config" \
         ARCHCANARY_SYS_COMPLETION="$sys_completion" \
         "$REPO_DIR/archcanary.sh" --doctor=user 2>&1) || true
-    if [[ "$out" == *"bash completion (user copy differs from system copy)"* && "$out" == *"install.sh"* ]]; then
+    if [[ "$out" == *"bash completion (user copy differs from system copy)"* && "$out" == *"install -Dm644 \"$sys_completion\" \"$fake_home/.local/share/bash-completion/completions/archcanary\""* ]]; then
         pass "doctor: stale user completion copy detected, fix hint present"
     else
         fail "doctor: expected stale-completion WARN, out: $out"
