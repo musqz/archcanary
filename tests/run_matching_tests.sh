@@ -2268,6 +2268,91 @@ test_yay_hook_deceptive_unicode() {
 }
 
 # ---------------------------------------------------------------------------
+# test_yay_hook_backdoor_account — the Lua port of Pattern 17 must match the
+# calibrated bash behaviour, and — unlike every other port in this file —
+# actually reads a real .install file off disk (event.data.dir + the
+# PKGBUILD's own install= line), since yay's Lua API hands the hook only the
+# PKGBUILD's text, not the .install file's content. Real 2026-09-14
+# aur-general incident (x11-qemu-validation): a compromised maintainer's
+# post_install planted a hardcoded-password backdoor account in wheel.
+# ---------------------------------------------------------------------------
+test_yay_hook_backdoor_account() {
+    local lua
+    lua=$(command -v lua5.4 || command -v lua || command -v luajit) || {
+        pass "yay_hook_backdoor_account: no Lua interpreter, skipped"
+        return
+    }
+    local drv tmpdir
+    drv=$(mktemp)
+    tmpdir=$(mktemp -d)
+    {
+        grep '^local _ARCHCANARY_PIPE_WRAPPERS' "$REPO_DIR/configs/yay-init.lua"
+        sed -n '/^local function _archcanary_install_file/,/^local function _archcanary_config_dir/p' \
+            "$REPO_DIR/configs/yay-init.lua" | sed '$d'
+        echo 'print(_archcanary_has_backdoor_account(arg[1], arg[2]) and "FLAG" or "clean")'
+    } > "$drv"
+
+    # positive: hardcoded-password chpasswd + wheel escalation on separate
+    # lines (mirrors the bash fixture pkg-backdoor-account)
+    cat > "$tmpdir/pkg.install" << 'EOF'
+post_install() {
+    useradd -m fakeroot
+    echo "fakeroot:xnano-recovery" | chpasswd
+    usermod -aG wheel fakeroot
+}
+EOF
+    # positive: the one-shot incident shape, account+password+wheel in one command
+    cat > "$tmpdir/pkg2.install" << 'EOF'
+post_install() {
+    useradd -m -G wheel -p "$(openssl passwd -6 secret)" backdoor
+}
+EOF
+    # clean: non-wheel group, locked account, dynamically generated password
+    # (mirrors the bash fixture pkg-backdoor-account-fp)
+    cat > "$tmpdir/pkg3.install" << 'EOF'
+post_install() {
+    usermod -aG docker "$SUDO_USER"
+    gpasswd -a "$SUDO_USER" audio
+    passwd -l svcacct
+    useradd -r -s /usr/bin/nologin -G docker -p "$(openssl passwd -6 "$(openssl rand -base64 12)")" svcacct
+}
+EOF
+    # positive: a decoy earlier "sudoers" mention (e.g. a log message) must
+    # not shield a real NOPASSWD/sudoers.d pairing later on the same line
+    cat > "$tmpdir/pkg5.install" << 'EOF'
+post_install() {
+    logger "note: sudoers policy"; printf '%s\n' 'attacker ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers.d/pwn
+}
+EOF
+    # positive: chpasswd herestring (no space before <<<)
+    cat > "$tmpdir/pkg6.install" << 'EOF'
+post_install() {
+    chpasswd<<<"admin:$(cat /tmp/p)"
+}
+EOF
+
+    local ok=1
+    [[ "$("$lua" "$drv" $'pkgname=foo\ninstall=pkg.install' "$tmpdir")"  == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" $'pkgname=foo\ninstall=pkg2.install' "$tmpdir")" == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" $'pkgname=foo\ninstall=pkg3.install' "$tmpdir")" == clean ]] || ok=0
+    [[ "$("$lua" "$drv" 'pkgname=foo' "$tmpdir")"                        == clean ]] || ok=0
+    [[ "$("$lua" "$drv" $'pkgname=foo\ninstall=missing.install' "$tmpdir")" == clean ]] || ok=0
+    # the Arch Wiki's own canonical install=$pkgname.install idiom, resolved
+    # against the PKGBUILD's own pkgname= line rather than left unmatched
+    [[ "$("$lua" "$drv" $'pkgname=pkg\ninstall=$pkgname.install' "$tmpdir")" == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" $'pkgname=pkg5\ninstall=$pkgname.install' "$tmpdir")" == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" $'pkgname=pkg6\ninstall=$pkgname.install' "$tmpdir")" == FLAG  ]] || ok=0
+
+    rm -f "$drv"
+    rm -rf "$tmpdir"
+    if [[ $ok -eq 1 ]]; then
+        pass "yay_hook_backdoor_account: .install wheel/sudoers escalation + hardcoded chpasswd flagged (incl. one-shot useradd -G wheel -p form, decoy-shielded NOPASSWD/sudoers, chpasswd herestring, and install=\$pkgname.install resolution); non-wheel/locked/dynamic-password and missing install= stay clean"
+    else
+        fail "yay_hook_backdoor_account: Lua Pattern 17 port misbehaved"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # test_doctor_stale_paru_hook — same three-state marker check as yay's
 # init.lua, but for paru's PreBuildCommand hook, plus a 4th sub-test
 # confirming the check only appears when `paru` is actually on $PATH (it
@@ -4036,6 +4121,9 @@ test_yay_hook_no_frontier
 
 $VERBOSE && msg "--- Test 19f: yay hook Pattern 16 (deceptive Unicode) Lua port ---"
 test_yay_hook_deceptive_unicode
+
+$VERBOSE && msg "--- Test 19g: yay hook Pattern 17 (.install backdoor account) Lua port ---"
+test_yay_hook_backdoor_account
 
 $VERBOSE && msg "--- Test 20: check_logs pre-campaign date correlation ---"
 test_check_logs

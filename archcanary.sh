@@ -1027,7 +1027,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v15)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v16)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -3037,14 +3037,18 @@ check_pkgbuild_caches() {
     #      reason to ever call it, regardless of sudo/doas/pkexec/env/exec
     #      and any flags in front of it — reuses $_pipe_wrap/$_wrapopt from
     #      the Tor/pipe-to-shell patterns above), or a literal string piped
-    #      straight into chpasswd/passwd. Deliberately excludes
-    #      `useradd/usermod -p $(...)`-style dynamically generated
-    #      passwords — that's a separate, much blurrier case (some
-    #      appliance-style packages roll a random admin password by design)
-    #      not worth the FP risk here; the one-shot `useradd -G wheel -p
-    #      <hash>` incident shape is still caught above via wheel alone.
+    #      straight into chpasswd/passwd. Bare chpasswd's terminator
+    #      includes `<` alongside whitespace/end-of-line, so a herestring
+    #      (`chpasswd<<<"user:pass"`) or unspaced redirect (`chpasswd<file`)
+    #      still counts, not just the spaced `chpasswd < file` shape.
+    #      Deliberately excludes `useradd/usermod -p $(...)`-style
+    #      dynamically generated passwords — that's a separate, much
+    #      blurrier case (some appliance-style packages roll a random admin
+    #      password by design) not worth the FP risk here; the one-shot
+    #      `useradd -G wheel -p <hash>` incident shape is still caught above
+    #      via wheel alone.
     local re_wheel_sudoers='(useradd|usermod)[[:space:]].*-[A-Za-z]*[gG][A-Za-z]*[[:space:]]+[^[:space:]]*wheel([^[:alnum:]_]|$)|gpasswd[[:space:]]+-a[[:space:]]+[^[:space:]]+[[:space:]]+wheel([^[:alnum:]_]|$)|sudoers(\.d/[^[:space:]]*)?[^;&]*NOPASSWD|NOPASSWD[^;&]*sudoers'
-    local re_hardcoded_passwd='(^|[;&|[:space:]])chpasswd([[:space:]]|$)|(echo|printf)[[:space:]].*\|[[:space:]]*('"$_pipe_wrap$_wrapopt"')?(chpasswd|passwd)([[:space:]]|$)'
+    local re_hardcoded_passwd='(^|[;&|[:space:]])chpasswd([[:space:]<]|$)|(echo|printf)[[:space:]].*\|[[:space:]]*('"$_pipe_wrap$_wrapopt"')?(chpasswd|passwd)([[:space:]]|$)'
 
     # A privilege-escalation helper (sudo/doas/pkexec) invoked from a
     # PKGBUILD's build()/package(). makepkg runs those as the calling user
