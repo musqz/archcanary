@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: `--doctor`'s bash-completion-drift warning suggested `bash install.sh # (cd to the archcanary repo first)` as the fix — a dead end for AUR installs, which never leave a repo clone behind. The correct bytes are already sitting at the system completion path, so the fix now copies them directly (`install -Dm644`) instead.
+
 ## v0.1.36 (2026-09-14)
 
 - Fix: `--doctor`'s system-install check never got a `package allowlist` entry alongside the DKMS/systemd/bpftool/autostart ones, so a missing `/etc/archcanary/package_allowlist.conf` went unreported. Another instance of the same packaging-surfaces-drift class as the PKGBUILD/`archcanary-tui` gaps fixed in v0.1.35. (Like its 4 siblings, this check only tests existence, not readability — an unreadable-but-present file still shows `[ OK ]` even though checks [1]/[2] silently skip it; a pre-existing gap, not addressed here.)
