@@ -397,9 +397,3 @@ Community detection scripts this consolidates:
 | liphiwolf (upstream PR #7) | `lockfile-js` detection, expanded package list |
 
 Full source list with URLs: [SOURCES.md](SOURCES.md).
-
----
-
-## License
-
-GPL-3.0. See [LICENSE](LICENSE). No warranty — use at your own risk.
