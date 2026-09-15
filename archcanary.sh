@@ -2084,6 +2084,18 @@ check_current() {
         found_pkgs+=("$pkg")
     done < <(pacman -Qmq "${INFECTED_PKGS[@]}" 2>/dev/null)
 
+    # CURRENTLY_INSTALLED_ANY_MAP: same infected-name list, but installed
+    # from ANY source (not just foreign/AUR via -Qmq above). check_logs uses
+    # the gap between the two maps to tell "still installed, just no longer
+    # from the AUR" (e.g. a package that graduated from the AUR into an
+    # official repo) apart from "fully removed" -- both would otherwise look
+    # identical to a foreign-only lookup. One extra batched call, no
+    # per-package subprocess.
+    declare -gA CURRENTLY_INSTALLED_ANY_MAP=()
+    while IFS= read -r pkg; do
+        CURRENTLY_INSTALLED_ANY_MAP[$pkg]=1
+    done < <(pacman -Qq "${INFECTED_PKGS[@]}" 2>/dev/null)
+
     if [[ ${#found[@]} -eq 0 ]]; then
         echo "  Clean: no infected packages currently installed."
         return 0
@@ -2148,11 +2160,13 @@ check_logs() {
     local -a _pkg_allow
     IFS=: read -ra _pkg_allow <<< "${PACKAGE_ALLOWLIST:-}"
 
-    # CURRENTLY_INSTALLED_MAP is populated by check_current(), which always
-    # runs immediately before this function — reused here instead of
-    # repeating its `pacman -Qmq` query, so a log hit for a package removed
-    # long ago can be reported as historical-only rather than an active
-    # infection.
+    # CURRENTLY_INSTALLED_MAP and CURRENTLY_INSTALLED_ANY_MAP are populated
+    # by check_current(), which always runs immediately before this function
+    # — reused here instead of repeating its `pacman -Qmq`/`pacman -Qq`
+    # queries. The gap between the two (in ANY_MAP but not in the
+    # foreign-only MAP) means "still installed, but no longer from the AUR"
+    # -- e.g. a package that graduated from the AUR into an official repo --
+    # which is not the same as a log hit for a package removed long ago.
 
     local re_date='^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:+-]+)\]'
     local re_alpm='\[ALPM\] ([a-z]+) ([^ ]+)'
@@ -2223,6 +2237,17 @@ check_logs() {
                 tag="LOG_OLD"
             elif [[ -v CURRENTLY_INSTALLED_MAP[$pkg] ]]; then
                 tag="LOG_HIT"
+            elif [[ -v CURRENTLY_INSTALLED_ANY_MAP[$pkg] ]]; then
+                # Still installed, just no longer foreign to pacman -- e.g.
+                # the same name is now served by a configured repo (official
+                # or third-party). That is NOT evidence of safety on its own,
+                # so this keeps LOG_HIST's severity (still bumps EXIT_CODE)
+                # instead of clearing it -- only the "removed" framing was
+                # wrong, not the seriousness. Deliberately not deduped via
+                # seen_map/new_seen like LOG_HIST is: this is an ongoing
+                # current-install fact each scan, the same as LOG_HIT, not a
+                # one-time historical event to acknowledge once.
+                tag="LOG_MIGRATED"
             elif [[ -v seen_map["$pkg"$'\t'"$datetime_str"] ]]; then
                 tag="LOG_HIST_SEEN"
             else
@@ -4727,11 +4752,13 @@ if ! $FOCUSED_MODE; then
         _has_old_hit=false
         _has_seen_hit=false
         _has_allowlisted_hit=false
+        _has_migrated_hit=false
         grep -q '^LOG_HIT:' "$LOGS_TMP" 2>/dev/null && _has_current_hit=true
         grep -q '^LOG_HIST:' "$LOGS_TMP" 2>/dev/null && _has_hist_hit=true
         grep -q '^LOG_OLD:' "$LOGS_TMP" 2>/dev/null && _has_old_hit=true
         grep -q '^LOG_HIST_SEEN:' "$LOGS_TMP" 2>/dev/null && _has_seen_hit=true
         grep -q '^LOG_ALLOWLISTED:' "$LOGS_TMP" 2>/dev/null && _has_allowlisted_hit=true
+        grep -q '^LOG_MIGRATED:' "$LOGS_TMP" 2>/dev/null && _has_migrated_hit=true
 
         if $_has_current_hit; then
             echo "  WARNING: currently-installed package(s) with a matching log entry"
@@ -4770,10 +4797,25 @@ if ! $FOCUSED_MODE; then
             echo "  INFO: log match(es) for allowlisted package(s) (manually verified clean):"
             grep '^LOG_ALLOWLISTED:' "$LOGS_TMP" | sed 's/^LOG_ALLOWLISTED: /  - /'
         fi
-        if ! $_has_current_hit && ! $_has_hist_hit && ! $_has_old_hit && ! $_has_seen_hit && ! $_has_allowlisted_hit; then
+        if $_has_migrated_hit; then
+            echo "  NOTE: package(s) with a matching log entry that are still installed, but"
+            echo "  no longer classified as foreign/AUR by pacman (the name is now provided"
+            echo "  by a configured repository — official or third-party):"
+            grep '^LOG_MIGRATED:' "$LOGS_TMP" | sed 's/^LOG_MIGRATED: /  - /'
+            echo "  This is not automatically safe — check which repo it's actually coming"
+            echo "  from before assuming a legitimate move. Verified it's a name-only"
+            echo "  collision with the official list (not the actual malicious package)?"
+            echo "  Mark it known-good instead:"
+            echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=package:NAME"
+            [[ 1 -gt $EXIT_CODE ]] && EXIT_CODE=1
+            [[ $_log_ret -lt 1 ]] && _log_ret=1
+        fi
+        if ! $_has_current_hit && ! $_has_hist_hit && ! $_has_old_hit && ! $_has_seen_hit && \
+           ! $_has_allowlisted_hit && ! $_has_migrated_hit; then
             echo "  Clean: no historical log matches found."
         fi
-        unset _has_current_hit _has_hist_hit _has_old_hit _has_seen_hit _has_allowlisted_hit
+        unset _has_current_hit _has_hist_hit _has_old_hit _has_seen_hit _has_allowlisted_hit \
+            _has_migrated_hit
         rm -f "$LOGS_TMP"
     else
         echo "  Skipped: /var/log/pacman.log not found."
