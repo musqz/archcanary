@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
 # pkexec target for privileged AUR malware checks.
 # Accepts exactly one flag; rejects everything else.
 set -euo pipefail
