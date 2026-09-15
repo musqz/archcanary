@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
 # lib/archcanary-root-install.sh — root-only steps for install.sh's --system
 # mode, run via a single `sudo bash .../archcanary-root-install.sh <mode>`
 # call per step group. A sudoers config restricted to a command allowlist

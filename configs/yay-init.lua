@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-3.0-only
 -- Template for ~/.config/yay/init.lua — yay's own hook filename, hardcoded
 -- by yay itself (not archcanary's choice). This file is never copied there
 -- automatically by any archcanary install path (AUR package or install.sh):

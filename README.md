@@ -402,4 +402,4 @@ Full source list with URLs: [SOURCES.md](SOURCES.md).
 
 ## License
 
-Community tools — no warranty. Use at your own risk.
+GPL-3.0. See [LICENSE](LICENSE). No warranty — use at your own risk.

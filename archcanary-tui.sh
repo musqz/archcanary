@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
 set -euo pipefail
 
 if ! command -v archcanary >/dev/null 2>&1; then

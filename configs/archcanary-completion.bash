@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 # bash completion for archcanary / canary
 # Installed by install.sh / the AUR package into a bash-completion
 # completions/ directory (system or user) where it loads automatically.
