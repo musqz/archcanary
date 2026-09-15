@@ -4041,6 +4041,73 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# check_logs — LOG_MIGRATED. A package that graduated from the AUR into a
+# repo (official or third-party) is still installed, just no longer foreign
+# per pacman -Qmq -- a log hit for it must not be reported as "removed" the
+# way a genuinely-uninstalled LOG_HIST match is, but it also must NOT be
+# downgraded to zero severity, since "no longer foreign" is not the same as
+# "verified safe" (e.g. a third-party repo, or a name collision). Uses a
+# real, always-installed repo package (pacman itself) instead of a
+# zzz-test-* fixture, since this path depends on the real `pacman -Qq`
+# lookup and there is no override mechanism for it (see test_check_logs'
+# header comment for the same limitation on the LOG_HIT path).
+# ---------------------------------------------------------------------------
+test_check_logs_migrated() {
+    local tmpdir log_file pkglist cache_home out rc
+
+    tmpdir=$(mktemp -d)
+    log_file="$tmpdir/pacman.log"
+    pkglist="$tmpdir/package_list.txt"
+    cache_home="$tmpdir/xdg-cache"
+    printf 'pacman\n' > "$pkglist"
+
+    # Date is after the base list's campaign_cutoff (2026-06-09) -- LOG_OLD
+    # takes priority over LOG_MIGRATED (like it does over LOG_HIT/LOG_HIST),
+    # so a pre-cutoff date here would mask the branch this test targets.
+    cat > "$log_file" <<'EOF'
+[2026-07-01T10:00:00-0600] [ALPM] installed pacman (1.0-1)
+EOF
+
+    local base_args=(
+        --package-list="$pkglist"
+        --malicious-npm-list="$SCRIPT_DIR/fake_npm_lists/malicious_npm.txt"
+        --chaos-rat-list="$tmpdir/chaos_rat_empty.txt"
+        --no-notify
+    )
+
+    rc=0
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$log_file" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports_empty.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+
+    if [[ "$out" == *"LOG_MIGRATED: pacman"* && "$out" != *"LOG_HIST: pacman"* ]]; then
+        pass "check_logs: still-installed, no-longer-foreign match tagged LOG_MIGRATED, not LOG_HIST"
+    else
+        fail "check_logs: expected LOG_MIGRATED for pacman (real, non-foreign, installed), out: $out"
+    fi
+    if [[ $rc -eq 1 ]]; then
+        pass "check_logs: LOG_MIGRATED keeps LOG_HIST's severity (exit 1), not silenced to 0"
+    else
+        fail "check_logs: LOG_MIGRATED should exit 1 like LOG_HIST, got rc=$rc"
+    fi
+
+    # Repeat scan: LOG_MIGRATED is a current-install fact, not a one-time
+    # historical event -- unlike LOG_HIST it must NOT be downgraded to a
+    # "_SEEN" variant (and must not collide with LOG_HIST's seen_map at all).
+    rc=0
+    out=$(XDG_CACHE_HOME="$cache_home" PACMAN_LOG_GLOB="$log_file" \
+        COMMUNITY_REPORTS_LIST="$tmpdir/community_reports_empty.txt" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"LOG_MIGRATED: pacman"* && "$out" != *"LOG_MIGRATED_SEEN"* && $rc -eq 1 ]]; then
+        pass "check_logs: LOG_MIGRATED repeats every scan (not deduped like LOG_HIST)"
+    else
+        fail "check_logs: expected LOG_MIGRATED again on repeat scan, out: $out rc=$rc"
+    fi
+
+    rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
@@ -4199,6 +4266,9 @@ test_pkgbuild_cache_mtime_window
 
 $VERBOSE && msg "--- Test 44: --start-date/--end-date format validation ---"
 test_date_window_validation
+
+$VERBOSE && msg "--- Test 45: check_logs LOG_MIGRATED (still installed, no longer foreign) ---"
+test_check_logs_migrated
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
