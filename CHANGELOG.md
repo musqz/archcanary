@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: Pattern 14 (bash and yay hook `(v17)`) missed `sudo "$srcdir/linter"` — quoted spans were deleted before matching, leaving a bare `sudo` that failed the needs-an-argument test. A bare `sudo` now matches. Real case: `fsearch-bin` (2026-08-01, removed from the AUR 2026-09-29) ran a committed ELF that way; Pattern 8 flagged the binary, Pattern 14 did not.
+
 ## v0.1.37 (2026-09-16)
 
 - Changed: relicensed as GPL-3.0. The README's "no warranty" line was never a license grant, so the project legally defaulted to all-rights-reserved — worse than source-available. Adds the canonical GPLv3 text as `LICENSE` (installed by the package), fixes `packaging/PKGBUILD`'s `license=` field (was incorrectly `'MIT'`, using the SPDX `GPL-3.0-only` form to match current Arch convention), and adds `SPDX-License-Identifier: GPL-3.0-only` headers to archcanary's own scripts (`sources/*.sh`, reference copies of other people's mailing-list scripts, are deliberately left unmarked). Reported on the EndeavourOS forum. The AUR `PKGBUILD` already got a metadata-only `license=` sync (`0.1.36-2`); the actual `LICENSE` file ships with this release.

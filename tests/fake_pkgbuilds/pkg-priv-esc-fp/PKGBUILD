@@ -16,6 +16,7 @@ EOF
     # A real call, but 'sudo -u' runs the step AS the build user: that is
     # de-escalation, not a fakeroot escape -- even with flags before -u.
     sudo --preserve-env=PATH -u builder ./configure --prefix=/usr
+    sudo -u "$srcuser" -D "$srcdir" make
     make  # build first, then; sudo make install  <- ';'+sudo in a comment
 }
 

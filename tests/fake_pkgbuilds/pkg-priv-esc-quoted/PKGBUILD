@@ -1,0 +1,11 @@
+# Maintainer: Someone <someone@example.com>
+pkgname=pkg-priv-esc-quoted
+pkgver=1.0
+pkgrel=1
+source=("https://example.com/pkg-1.0.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    sudo "$srcdir/helper"
+    make
+}

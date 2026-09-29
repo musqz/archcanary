@@ -1028,7 +1028,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v16)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v17)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -3092,7 +3092,9 @@ check_pkgbuild_caches() {
     # Pattern 14 is PKGBUILD-only (a .install scriptlet already runs as
     # root). The scan loop strips quoted spans and a trailing comment, then
     # splits the line into commands, so these anchor at fragment start.
-    local re_priv_esc='^[[:space:]]*(sudo|doas|pkexec)[[:space:]]+[^[:space:]]'
+    # A bare `sudo` also matches: stripping the quoted span from
+    # `sudo "$srcdir/x"` leaves nothing after it.
+    local re_priv_esc='^[[:space:]]*(sudo|doas|pkexec)([[:space:]]+[^[:space:]]|[[:space:]]*$)'
     # -u/--user as sudo's own option: any run of -x / --long / --long=val
     # flags may sit between (--preserve-env=PATH, -E, -H, ...).
     local re_runas='^[[:space:]]*(sudo|doas)([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+(-u([[:space:]]|$)|--user)'
