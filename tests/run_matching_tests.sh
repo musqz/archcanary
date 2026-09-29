@@ -1286,6 +1286,17 @@ test_pkgbuild_obfuscation() {
         fail "pkgbuild_obfuscation: compound-line decoy evaded Pattern 14, rc=$rc, out: $out"
     fi
 
+    # Sub-test X7: a quoted sole argument (`sudo "$srcdir/linter"`, fsearch-bin)
+    # must not vanish with the quote-stripping and dodge Pattern 14.
+    rc=0
+    out=$(PKGBUILD_CACHE_DIRS="$fixtures/pkg-priv-esc-quoted" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: privilege escalation (sudo/doas/pkexec) in"* ]]; then
+        pass "pkgbuild_obfuscation: quoted sole argument to sudo flagged"
+    else
+        fail "pkgbuild_obfuscation: quoted-argument sudo evaded Pattern 14, rc=$rc, out: $out"
+    fi
+
     # Sub-test X6: `sudo tar -u` — `-u` is tar's flag, not sudo's option, so
     # this is a real escape. The run-as carve-out must only fire when `-u` is
     # sudo's own option.
@@ -2185,6 +2196,10 @@ test_yay_hook_priv_esc_mutable() {
     } > "$drv"
     local ok=1 nl=$'\n'
     [[ "$("$lua" "$drv" pe "package(){${nl}  sudo cp x /usr/bin/x${nl}}")"           == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" pe "build(){${nl}  sudo \"\$srcdir/linter\"${nl}}")"          == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" pe "build(){${nl}  sudo 'x'${nl}}")"                          == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" pe "build(){${nl}  su''do cp a /usr/bin/a${nl}}")"            == FLAG  ]] || ok=0
+    [[ "$("$lua" "$drv" pe "build(){${nl}  sudo -u \"\$u\" -D \"\$d\" make${nl}}")"    == clean ]] || ok=0
     [[ "$("$lua" "$drv" pe "build(){${nl}  sudo -u builder ./configure${nl}}")"      == clean ]] || ok=0
     [[ "$("$lua" "$drv" pe "package(){${nl}  sudo -u root_svc cp p /usr/bin/x${nl}}")" == clean ]] || ok=0
     [[ "$("$lua" "$drv" pe "package(){${nl}  sudo -u root cp p /usr/bin/x${nl}}")"   == FLAG  ]] || ok=0

@@ -8,7 +8,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v16).
+-- yay 13.0 Lua hooks for the AUR security stack (v17).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -263,7 +263,8 @@ local function _archcanary_has_priv_esc(pkgbuild)
       local root_ua = _archcanary_runas_root(dq)
       for frag in (scan .. "("):gmatch("([^;&|({]*)[;&|({]") do
         for _, tool in ipairs({ "sudo", "doas", "pkexec" }) do
-          if frag:match("^%s*" .. tool .. "%s+%S")
+          -- bare `sudo` counts: a quoted sole argument was stripped away
+          if (frag:match("^%s*" .. tool .. "%s+%S") or frag:match("^%s*" .. tool .. "%s*$"))
              and not (_archcanary_runas(frag) and not root_ua) then
             return tool
           end
