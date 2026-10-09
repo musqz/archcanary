@@ -95,3 +95,15 @@ glanced
 tokentracker-cli
 tokentracker-bin
 claude-config-bin
+baresip-qt-gui-git
+docan-gtk-bin
+kde-window-moves-git
+pam-fprint-helper
+pam-open-fprint-helper
+plasma6-applet-power-menu
+plasma6-applet-quicklaunch
+qt6curve-git
+shortwave-mpris-bin
+shortwave-mpris-git
+simplesinewavegenerator-bin
+simplesinewavegenerator-git
