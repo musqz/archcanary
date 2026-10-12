@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix: `archcanary.service` and `archcanary-onchange.service` logged `[: ...: integer expected` and never appended the `aur_build` audit events to `last-scan.log` — systemd expands `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` as unit specifiers inside `ExecStartPre=`/`ExecStartPost=` before `sh` runs, so `stat -c %Y` wrote a path into `.prev-epoch` and the `date` formats were mangled. Escaped as `%%`. The `ausearch -ts` date now uses the locale's own format (`%%x`), since `ausearch` rejects `MM/DD/YYYY` outside en_US. The snapshot also moved from `ExecStartPost=` to `ExecStopPost=`, which systemd skips when the scan exits 1 or 2 — so it was missing on exactly the flagged scans. A new test fails on any unescaped `%` in the system units' `Exec*=` lines. `install.sh --system` installs copy units to `/etc/systemd/system`, which override the packaged ones: re-run `install.sh --system` to pick up the fix. Reported on the EndeavourOS forum.
 - Fix: Pattern 14 (bash and yay hook `(v17)`) missed `sudo "$srcdir/linter"` — quoted spans were deleted before matching, leaving a bare `sudo` that failed the needs-an-argument test. A bare `sudo` now matches. Real case: `fsearch-bin` (2026-08-01, removed from the AUR 2026-09-29) ran a committed ELF that way; Pattern 8 flagged the binary, Pattern 14 did not.
 
 ## v0.1.37 (2026-09-16)

@@ -4128,6 +4128,21 @@ EOF
 # ---------------------------------------------------------------------------
 echo "=== Matching Tests ==="
 
+# ---------------------------------------------------------------------------
+# test_systemd_unit_percent_escape — systemd expands a lone % in Exec*= lines
+# as a unit specifier before sh runs; literal percents must be written %%.
+# ---------------------------------------------------------------------------
+test_systemd_unit_percent_escape() {
+    local hits
+    hits=$(grep -nE '^Exec[A-Za-z]*=' "$REPO_DIR"/systemd/system/*.service \
+        | sed 's/%%//g' | grep '%' || true)
+    if [[ -z "$hits" ]]; then
+        pass "systemd_unit_percent_escape: no unescaped % in system unit Exec lines"
+    else
+        fail "systemd_unit_percent_escape: unescaped % in Exec line: $hits"
+    fi
+}
+
 $VERBOSE && msg ""
 
 $VERBOSE && msg "--- Test 1: suffix_ambiguity ---"
@@ -4285,6 +4300,9 @@ test_date_window_validation
 
 $VERBOSE && msg "--- Test 45: check_logs LOG_MIGRATED (still installed, no longer foreign) ---"
 test_check_logs_migrated
+
+$VERBOSE && msg "--- Test 46: systemd unit Exec lines escape % ---"
+test_systemd_unit_percent_escape
 
 echo "=== Results: $PASS_COUNT PASS, $FAIL_COUNT FAIL ==="
 [[ $FAIL_COUNT -eq 0 ]] || exit 1
