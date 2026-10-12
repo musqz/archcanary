@@ -66,6 +66,8 @@ StateDirectory=archcanary
 ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
 ```
 
+> After each scan, `ExecStopPost=` appends the `ausearch -k aur_build` events (makepkg runs) since the previous scan to `last-scan.log`. Needs auditd and the `aur_build` rule (`--audit-rules-get`). `last-scan.log` is world-readable, so every user can read these command lines.
+
 > `StateDirectory=archcanary` makes systemd create `/var/lib/archcanary` (mode 0755, root) automatically. This runs only the **system-level** checks (plus the always-on package/log checks) — the ones that need root and are machine-wide. The user-level checks run in section 3 as your user. `--no-notify` because root has no desktop session — section 2 handles alerts.
 
 **`/etc/systemd/system/archcanary.timer`**
