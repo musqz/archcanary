@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.39 (2026-10-16)
 
 - Fix: checks [3] and [10] missed `ExecStart = /tmp/x`, an indented key, `Restart = always`, a spaced or `Persistent=yes` timer, `Unit = x.service`, a `..` path out of a trusted prefix, and an evil second `ExecStart=` or `ExecStartPre=`/`ExecStop*=` line. Check [10] now also reports unowned binaries from `ExecStartPre`/`ExecStop*`/`ExecReload`/`ExecCondition` lines.
 - Fix: check [10] cut a quoted `ExecStart="/opt/My App/bin/app"` at the first space and suggested an allowlist command the root-helper rejects. The full path is now reported; a path with spaces can't be allowlisted, and the hint says so.
