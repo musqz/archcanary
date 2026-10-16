@@ -33,7 +33,7 @@ systemd SYSTEM timer (weekly + on boot, runs as root)
             ├── [7]  PKGBUILD / install file scan (obfuscation-aware)
             ├── [8]  loaded eBPF programs via bpftool (stealth hook types)
             ├── [9]  ld.so.preload injection
-            ├── [10] XDG autostart + shell RC persistence
+            ├── [10] XDG autostart + shell RC + user bin persistence
             └── [11] kernel module / DKMS audit          (root → actually runs)
                     │
                     └── writes /var/lib/archcanary/last-scan.log
@@ -128,7 +128,7 @@ triggers (timer + `.path` units) are in [systemd.md](systemd.md).
     ├── dkms_allowlist.conf           # DKMS allowlist
     ├── systemd_allowlist.conf        # systemd unit allowlist
     ├── bpftool_allowlist.conf        # bpftool eBPF loader allowlist
-    ├── autostart_allowlist.conf      # XDG autostart Exec= allowlist
+    ├── autostart_allowlist.conf      # autostart allowlist (Exec=, ExecStart, user-bin sudo)
     └── package_allowlist.conf        # checks [1]/[2] package-name allowlist
                                        # (all five: sudoedit directly, or --allowlist-add/--allowlist-remove)
 /usr/share/polkit-1/actions/

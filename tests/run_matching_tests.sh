@@ -806,6 +806,151 @@ SVC
     fi
     rm -rf "$tmpdir7d"
 
+    # Sub-test M5: sudo/su/doas/pkexec/run0 planted in ~/.local/bin or ~/bin →
+    # WARNING; a symlink to the same-named /usr command, or a non-executable
+    # file, is not; an allowlisted path → INFO only.
+    local tmpdir7e
+    tmpdir7e=$(mktemp -d)
+    mkdir -p "$tmpdir7e/.local/bin" "$tmpdir7e/bin"
+    printf '#!/bin/sh\n' > "$tmpdir7e/.local/bin/sudo"
+    chmod +x "$tmpdir7e/.local/bin/sudo"
+    printf '#!/bin/sh\n' > "$tmpdir7e/bin/pkexec"
+    chmod +x "$tmpdir7e/bin/pkexec"
+    printf '#!/bin/sh\n' > "$tmpdir7e/bin/run0"
+    ln -s /usr/bin/true "$tmpdir7e/bin/doas"
+    mkdir -p "$tmpdir7e/.npm-global/bin"
+    printf '#!/bin/sh\n' > "$tmpdir7e/.npm-global/bin/sudo"
+    chmod +x "$tmpdir7e/.npm-global/bin/sudo"
+    # same-name system symlink is exempt; skip the case when the host has no su
+    [[ -x /usr/bin/su ]] && ln -s /usr/bin/su "$tmpdir7e/bin/su"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7e" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: $tmpdir7e/.local/bin/sudo can shadow"* \
+          && "$out" == *"WARNING: $tmpdir7e/bin/pkexec can shadow"* \
+          && "$out" == *"WARNING: $tmpdir7e/bin/doas can shadow"* \
+          && "$out" == *"WARNING: $tmpdir7e/.npm-global/bin/sudo can shadow"* \
+          && "$out" != *"bin/su can shadow"* && "$out" != *"bin/run0 can shadow"* ]]; then
+        pass "check_autostart: planted sudo/pkexec and mismatched doas symlink flagged; same-name su symlink and non-exec run0 not"
+    else
+        fail "check_autostart: shadow sudo, rc=$rc, out: $out"
+    fi
+    local allow_file6
+    allow_file6=$(mktemp)
+    printf '%s\n' "$tmpdir7e/.local/bin/sudo" "$tmpdir7e/bin/pkexec" "$tmpdir7e/bin/doas" "$tmpdir7e/.npm-global/bin/sudo" > "$allow_file6"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7e" AUTOSTART_ALLOWLIST_FILE="$allow_file6" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: sudo in user bin dir allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: allowlisted user-bin sudo/pkexec/doas → INFO only, exit 0"
+    else
+        fail "check_autostart: allowlisted shadow sudo, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7e"
+    rm -f "$allow_file6"
+
+    # Sub-test M6: prefix-only symlink name (su -> sum) is flagged, and a home
+    # dir the root-helper regex rejects gets no allowlist command.
+    local tmpdir7f
+    tmpdir7f=$(mktemp -d "${TMPDIR:-/tmp}/ac sp.XXXXXX")
+    mkdir -p "$tmpdir7f/bin"
+    if [[ -x /usr/bin/sum ]]; then
+        ln -s /usr/bin/sum "$tmpdir7f/bin/su"
+        rc=0
+        out=$(AUTOSTART_HOME="$tmpdir7f" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+            "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+        if [[ $rc -eq 2 && "$out" == *"bin/su can shadow"* \
+              && "$out" == *"this path can't be allowlisted"* \
+              && "$out" != *"--allowlist-add=autostart:$tmpdir7f"* ]]; then
+            pass "check_autostart: su -> sum symlink flagged; spaced path gets no allowlist hint"
+        else
+            fail "check_autostart: su->sum / spaced path, rc=$rc, out: $out"
+        fi
+    fi
+    rm -rf "$tmpdir7f"
+
+    # Sub-test M7: ~/bin symlinked to ~/.local/bin reports a planted sudo once
+    local tmpdir7g
+    tmpdir7g=$(mktemp -d)
+    mkdir -p "$tmpdir7g/.local/bin"
+    ln -s "$tmpdir7g/.local/bin" "$tmpdir7g/bin"
+    printf '#!/bin/sh\n' > "$tmpdir7g/.local/bin/sudo"
+    chmod +x "$tmpdir7g/.local/bin/sudo"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7g" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$(grep -c 'can shadow the system sudo' <<< "$out")" -eq 1 ]]; then
+        pass "check_autostart: ~/bin -> ~/.local/bin symlink reports planted sudo once"
+    else
+        fail "check_autostart: duplicate dir should report once, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7g"
+
+    # Sub-test M8: _shadow_pin only pins a user-owned regular file named like a
+    # privilege command in a user bin dir (root runs it via --allowlist-add).
+    local tmpdir7h pin_out
+    tmpdir7h=$(mktemp -d)
+    mkdir -p "$tmpdir7h/.local/bin" "$tmpdir7h/other"
+    printf '#!/bin/sh\n' > "$tmpdir7h/.local/bin/sudo"
+    printf '#!/bin/sh\n' > "$tmpdir7h/.local/bin/notsudo"
+    printf '#!/bin/sh\n' > "$tmpdir7h/other/sudo"
+    ln -s "$tmpdir7h/.local/bin/sudo" "$tmpdir7h/.local/bin/su"
+    pin_out=$(
+        eval "$(sed -n '/^_SHADOW_CMDS=/,/^_SHADOW_BIN_DIRS=/p;/^_shadow_pin()/,/^}/p' "$REPO_DIR/archcanary.sh")"
+        printf 'a=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/sudo")"
+        printf 'b=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/notsudo")"
+        printf 'c=%s\n' "$(_shadow_pin "$tmpdir7h/other/sudo")"
+        printf 'd=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/su")"
+        printf 'e=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/../bin/sudo")"
+        printf 'f=%s\n' "$(_shadow_pin /usr/bin/su)"
+    )
+    local want_hash
+    want_hash=$(sha256sum "$tmpdir7h/.local/bin/sudo"); want_hash="sha256:${want_hash%% *}"
+    if [[ "$pin_out" == *"a=$want_hash"* && "$pin_out" == *$'\nb=\n'* && "$pin_out" == *$'\nc=\n'* \
+          && "$pin_out" == *$'\nd=\n'* && "$pin_out" == *$'\ne=\n'* && "$pin_out" == *$'\nf='* \
+          && "$pin_out" != *"f=sha256"* ]]; then
+        pass "_shadow_pin: pins only user-owned regular privilege-command files in user bin dirs"
+    else
+        fail "_shadow_pin guards wrong: $pin_out"
+    fi
+
+    # Sub-test M9: a pinned allowlist entry stays INFO while the file is
+    # unchanged, warns once it changes; a malformed pin is ignored (unpinned).
+    local allow_file7
+    allow_file7=$(mktemp)
+    printf '%s %s\n' "$tmpdir7h/.local/bin/sudo" "$want_hash" > "$allow_file7"
+    # only the pinned sudo may remain in the fixture home
+    rm -f "$tmpdir7h/.local/bin/su" "$tmpdir7h/.local/bin/notsudo" "$tmpdir7h/other/sudo"
+    chmod +x "$tmpdir7h/.local/bin/sudo"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7h" AUTOSTART_ALLOWLIST_FILE="$allow_file7" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: sudo in user bin dir allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: pinned shadow sudo, unchanged → INFO only"
+    else
+        fail "check_autostart: unchanged pinned sudo, rc=$rc, out: $out"
+    fi
+    printf '#!/bin/sh\necho pwned\n' > "$tmpdir7h/.local/bin/sudo"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7h" AUTOSTART_ALLOWLIST_FILE="$allow_file7" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"changed since it was allowlisted"* ]]; then
+        pass "check_autostart: pinned shadow sudo, content changed → WARNING"
+    else
+        fail "check_autostart: changed pinned sudo should warn, rc=$rc, out: $out"
+    fi
+    printf '%s sha256:nothex\n' "$tmpdir7h/.local/bin/sudo" > "$allow_file7"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7h" AUTOSTART_ALLOWLIST_FILE="$allow_file7" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: sudo in user bin dir allowlisted"* ]]; then
+        pass "check_autostart: malformed pin ignored → unpinned INFO"
+    else
+        fail "check_autostart: malformed pin, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7h"
+    rm -f "$allow_file7"
+
     # Sub-test N: absolute .desktop Exec= path under $HOME/bin or
     # $HOME/.local/bin must NOT be flagged — regression guard for a real
     # false positive (Conky's LXQt-generated autostart entry pointing at a
@@ -3105,10 +3250,10 @@ EOF
         echo \"EXIT_CODE=\$EXIT_CODE\"
     " 2>&1)
 
-    if [[ "$out" == *"XDG autostart + shell RCs=2"* ]]; then
+    if [[ "$out" == *"Autostart, shell RCs, user bin=2"* ]]; then
         pass "scan_all_homes: worst-of-N reflects the flagged user's autostart finding"
     else
-        fail "scan_all_homes: expected 'XDG autostart + shell RCs=2', out: $out"
+        fail "scan_all_homes: expected 'Autostart, shell RCs, user bin=2', out: $out"
     fi
     if [[ "$out" == *"npm cache=0"* ]]; then
         pass "scan_all_homes: an unrelated check stays clean when no user triggers it"
@@ -3368,12 +3513,12 @@ EOF
 shift; shift
 user="$1"; shift
 shift
-clean6='[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]'
+clean6='[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"Autostart, shell RCs, user bin","status":"clean"}]'
 case "$user" in
     alice) echo "{\"result\":\"clean\",\"checks\":$clean6}" ;;
-    bob)   echo '{"result":"warnings","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"warning"}]}' ;;
+    bob)   echo '{"result":"warnings","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"Autostart, shell RCs, user bin","status":"warning"}]}' ;;
     carol) exit 1 ;;
-    dave)  echo '{"result":"infected","checks":[{"name":"npm cache","status":"infected"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"infected"},{"name":"XDG autostart + shell RCs","status":"clean"}]}' ;;
+    dave)  echo '{"result":"infected","checks":[{"name":"npm cache","status":"infected"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"infected"},{"name":"Autostart, shell RCs, user bin","status":"clean"}]}' ;;
 esac
 EOF
     chmod +x "$fake_bin/sudo"
@@ -3398,7 +3543,7 @@ EOF
 
     if [[ "$out" == *"Check summary: USER alice"* && "$out" == *"Check summary: USER bob"* && \
           "$out" == *"Check summary: USER carol"* && "$out" == *"Check summary: USER dave"* && \
-          "$out" =~ 'XDG autostart + shell RCs'[[:space:]]+WARN_ICON && \
+          "$out" =~ 'Autostart, shell RCs, user bin'[[:space:]]+WARN_ICON && \
           "$out" == *"carol"*"(could not evaluate"* && \
           "$out" =~ 'npm cache'[[:space:]]+INFECTED_ICON && \
           "$out" =~ 'PKGBUILD obfuscation scan'[[:space:]]+REVIEW_ICON ]]; then
@@ -3438,7 +3583,7 @@ EOF
     cat > "$fake_bin/sudo" <<'EOF'
 #!/usr/bin/env bash
 shift; shift; shift; shift
-echo '{"result":"clean","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]}'
+echo '{"result":"clean","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"Autostart, shell RCs, user bin","status":"clean"}]}'
 EOF
     chmod +x "$fake_bin/sudo"
 

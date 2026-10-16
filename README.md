@@ -61,7 +61,7 @@ Every scan prints a per-check summary before the final verdict:
  [7]  PKGBUILD obfuscation scan            ✅  clean
  [8]  eBPF programs (bpftool)              ✅  clean
  [9]  ld.so.preload injection              ✅  clean
- [10] XDG autostart + shell RCs            ✅  clean
+ [10] Autostart, shell RCs, user bin       ✅  clean
  [11] Kernel modules (DKMS)                ✅  clean
  [12] Lynis hardening                      ✅  clean
  [13] Package integrity                    ✅  clean
@@ -149,7 +149,7 @@ run everything at once with `--full`.
 | `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex, ANSI-C hex/octal, rev/tr pipe-to-shell), Tor/onion fetches, downloads into system paths, `sudo`/`doas`/`pkexec` from a PKGBUILD or `.install`, patch sources on a mutable merge-request/pull-request URL, a look-alike (Cyrillic/Greek/Armenian/fullwidth) or hidden (zero-width, bidi) character in the host of a `url=`/`source=` URL, and undocumented ELF binaries actually committed to a package's own AUR git tree (not just downloaded by makepkg — a -bin package's own source binary sitting in the build dir is not flagged) | No |
 | `--check-bpftool` | Enumerate loaded eBPF programs (stealth types), perf/kprobe attachments with owning PID and hooked function, XDP/TC network attachments | Yes |
 | `--check-ldso` | `/etc/ld.so.preload` injection + recent `/etc/ld.so.conf.d/` changes | No |
-| `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns | No |
+| `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns, `sudo`/`su`/`doas`/`pkexec`/`run0` in `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `~/.cargo/bin`, `~/go/bin` or `~/.bun/bin`; an allowlisted one is pinned by sha256 and re-flagged if it changes | No |
 | `--check-kmod` | Kernel modules not owned by pacman; untracked DKMS builds | Yes |
 | `--check-lynis` | Read last Lynis report — hardening index, warnings, scan date | Yes |
 | `--run-lynis` | Run `lynis audit system`, stream output | Yes |

@@ -87,7 +87,10 @@ changes.
 .TP
 .B \-\-check-autostart
 Scan XDG autostart entries, user systemd services, and shell RC files
-for download-and-exec patterns.
+for download-and-exec patterns. Also flag a sudo, su, doas, pkexec or run0 in
+~/.local/bin, ~/bin, ~/.npm-global/bin, ~/.cargo/bin, ~/go/bin or ~/.bun/bin
+that can shadow the system command. An allowlisted one is pinned by sha256
+and flagged again if its content changes.
 .TP
 .B \-\-check-kmod
 Audit loaded kernel modules against pacman-tracked files; flag

@@ -121,6 +121,32 @@ trap 'rm -f "${CLEANUP_FILES[@]}"; exit 1' INT TERM
 # privilege boundary. Env var overrides match the ones the scan-time parsing
 # below already uses, so both point at the same file.
 # ---------------------------------------------------------------------------
+# Privilege commands and user bin dirs (relative to $HOME) that check_autostart
+# scans for shadowing shims; _shadow_pin uses the same lists.
+_SHADOW_CMDS=(sudo su doas pkexec run0)
+_SHADOW_BIN_DIRS=(.local/bin bin .npm-global/bin .cargo/bin go/bin .bun/bin)
+
+# Prints "sha256:<hex>" for a user-owned regular file named like a privilege
+# command in one of _SHADOW_BIN_DIRS, else nothing. Root runs this via
+# --allowlist-add, so it is deliberately narrow: no "..", no symlinks, no
+# root-owned files (never hashes /usr/bin/sudo or anything else outside a home).
+_shadow_pin() {
+    local p="$1" b d c s h
+    [[ "$p" == /* && "$p" != *..* && -f "$p" && ! -L "$p" ]] || return 0
+    [[ "$(stat -c %u -- "$p" 2>/dev/null)" != 0 ]] || return 0
+    b="${p##*/}"; d="${p%/*}"
+    for c in "${_SHADOW_CMDS[@]}"; do
+        [[ "$b" == "$c" ]] || continue
+        for s in "${_SHADOW_BIN_DIRS[@]}"; do
+            [[ "$d" == */"$s" ]] || continue
+            h=$(sha256sum -- "$p" 2>/dev/null) || return 0
+            printf 'sha256:%s' "${h%% *}"
+            return 0
+        done
+    done
+    return 0
+}
+
 _allowlist_path() {
     case "$1" in
         dkms)      echo "${DKMS_ALLOWLIST_FILE:-/etc/archcanary/dkms_allowlist.conf}" ;;
@@ -189,8 +215,10 @@ _allowlist_cli() {
             echo "already allowlisted: $value"
             exit 0
         fi
-        printf '%s\n' "$value" >> "$path"
-        echo "added: $value"
+        local pin=""
+        [[ "$name" == autostart ]] && pin=$(_shadow_pin "$value")
+        printf '%s\n' "$value${pin:+ $pin}" >> "$path"
+        echo "added: $value${pin:+ ($pin)}"
         exit 0
     else
         if ! _allowlist_values "$path" | grep -qxF "$value"; then
@@ -485,7 +513,7 @@ for arg in "$@"; do
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links/perf-hooks/net-attachments (needs root)"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
-            echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
+            echo "  --check-autostart  Scan XDG autostart entries, shell RCs and user bin dirs for low-privilege persistence"
             echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
             echo "  --check-lynis      Parse Lynis hardening report (/var/log/lynis-report.dat)"
             echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
@@ -1342,11 +1370,11 @@ _resolve_scan_user_opts() {
 # enforcing agreement between them.
 _SAH_PER_USER_CHECK_NAMES=(
     "npm cache" "bun cache" "yarn cache" "pnpm cache"
-    "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"
+    "PKGBUILD obfuscation scan" "Autostart, shell RCs, user bin"
 )
 declare -A _SAH_PER_USER_CHECK_IDX=(
     ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
-    ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
+    ["PKGBUILD obfuscation scan"]="7" ["Autostart, shell RCs, user bin"]="10"
 )
 
 _run_scan_all_homes() {
@@ -1624,16 +1652,18 @@ unset _bpf_cfg _bl
 # AppImage/Flatpak export) and shouldn't trip the XDG autostart check.
 # Override the path with AUTOSTART_ALLOWLIST_FILE (used by the tests).
 AUTOSTART_ALLOWLIST="${AUTOSTART_ALLOWLIST:-}"
+declare -A AUTOSTART_PIN=()
 _auto_cfg="${AUTOSTART_ALLOWLIST_FILE:-/etc/archcanary/autostart_allowlist.conf}"
 if [[ -r "$_auto_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
     while IFS= read -r _al || [[ -n "$_al" ]]; do
         _al="${_al%%#*}"       # strip inline comments
-        read -r _al _ <<< "$_al"  # take first token only (ignores trailing descriptions)
+        read -r _al _pin _ <<< "$_al"  # first token is the entry; an optional second sha256:<hex> pins it
         [[ -z "$_al" ]] && continue
+        [[ "$_pin" =~ ^sha256:[0-9a-f]{64}$ ]] && AUTOSTART_PIN["$_al"]="${_pin#sha256:}"
         AUTOSTART_ALLOWLIST="${AUTOSTART_ALLOWLIST:+${AUTOSTART_ALLOWLIST}:}${_al}"
     done < "$_auto_cfg"
 fi
-unset _auto_cfg _al
+unset _auto_cfg _al _pin
 
 # Merge the package allowlist into PACKAGE_ALLOWLIST (colon-separated; the env
 # var, if set, takes precedence and is appended to). Same rationale as DKMS/
@@ -3658,11 +3688,13 @@ check_ldso() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 10: XDG autostart + shell RC persistence
+# Check 10: XDG autostart + shell RC + user bin persistence
 # Detects low-privilege persistence requiring no root:
 #   1. ~/.config/autostart/*.desktop — Exec= outside /usr/ or /opt/
 #   2. ~/.config/systemd/user/*.service — ExecStart= binary not owned by pacman
 #   3. Shell RCs — lines matching download-and-execute or eval+subshell patterns
+#   4. user bin dirs (~/.local/bin, ~/bin, ~/.npm-global/bin, ~/.cargo/bin, ~/go/bin,
+#      ~/.bun/bin) — sudo/su/doas/pkexec/run0 that can shadow the system command
 # Home dir injectable via AUTOSTART_HOME for testing.
 # ---------------------------------------------------------------------------
 check_autostart() {
@@ -3903,6 +3935,52 @@ check_autostart() {
                 found=2
             fi
         done < "$rc"
+    done
+
+    # A sudo/su/doas/pkexec/run0 in a user bin dir can shadow the system one
+    # (fake-sudo password grabber). A symlink to the same-named system
+    # command (e.g. sudo -> /usr/bin/sudo-rs) is fine.
+    local _bd _bs _bn _bp _bt _bh _bseen=$'\n'
+    for _bs in "${_SHADOW_BIN_DIRS[@]}"; do
+        _bd="$home_dir/$_bs"
+        # ~/bin is often a symlink to ~/.local/bin; scan each real dir once
+        _bt=$(readlink -f -- "$_bd" 2>/dev/null) || _bt="$_bd"
+        [[ "$_bseen" == *$'\n'"$_bt"$'\n'* ]] && continue
+        _bseen+="$_bt"$'\n'
+        for _bn in "${_SHADOW_CMDS[@]}"; do
+            _bp="$_bd/$_bn"
+            [[ -f "$_bp" && -x "$_bp" ]] || continue
+            if [[ -L "$_bp" ]]; then
+                _bt=$(readlink -f -- "$_bp")
+                [[ ( "$_bt" == /usr/bin/* || "$_bt" == /usr/sbin/* ) && \
+                   ( "${_bt##*/}" == "$_bn" || "${_bt##*/}" == "$_bn"-* ) ]] && continue
+            fi
+            if _allowlist_contains "$_bp" _autostart_allow; then
+                _bh=""
+                if [[ -n "${AUTOSTART_PIN[$_bp]:-}" ]]; then
+                    _bh=$(sha256sum -- "$_bp" 2>/dev/null) || _bh=""
+                    _bh="${_bh%% *}"
+                fi
+                if [[ -n "${AUTOSTART_PIN[$_bp]:-}" && "$_bh" != "${AUTOSTART_PIN[$_bp]}" ]]; then
+                    echo "  WARNING: $_bp changed since it was allowlisted (sha256 differs from the pin)"
+                    echo "    If you didn't change it, remove it. If you did, allowlist it again:"
+                    echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-remove=autostart:$_bp"
+                    echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$_bp"
+                    found=2
+                else
+                    echo "  INFO: $_bn in user bin dir allowlisted: $_bp"
+                fi
+            else
+                echo "  WARNING: $_bp can shadow the system $_bn"
+                if [[ ! "$_bp" =~ ^[A-Za-z0-9/][A-Za-z0-9._@+/-]{0,127}$ ]]; then
+                    echo "    If you didn't create it, remove it (this path can't be allowlisted)."
+                else
+                    echo "    If you didn't create it, remove it; otherwise mark it known-good:"
+                    echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$_bp"
+                fi
+                found=2
+            fi
+        done
     done
 
     [[ $found -eq 0 ]] && echo "  Clean: no suspicious autostart or shell RC entries found."
@@ -4323,7 +4401,7 @@ _rec() { _SUMMARY_NAMES+=("$1"); _SUMMARY_CODES+=("$2"); _SUMMARY_IDX+=("${3:-}"
 _is_behavior_check_name() {
     case "$1" in
         "Systemd persistence"|"eBPF programs (bpftool)"|"ld.so.preload injection"|\
-        "XDG autostart + shell RCs"|"Kernel modules (DKMS)"|"PKGBUILD obfuscation scan")
+        "Autostart, shell RCs, user bin"|"Kernel modules (DKMS)"|"PKGBUILD obfuscation scan")
             return 0 ;;
         *) return 1 ;;
     esac
@@ -4925,10 +5003,10 @@ if $CHECK_LDSO; then
 fi
 
 if $CHECK_AUTOSTART && ! $SCAN_HOMES_MODE; then
-    echo "--- [10] XDG autostart + shell RC persistence check ---"
+    echo "--- [10] XDG autostart + shell RC + user bin persistence check ---"
     check_autostart && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "XDG autostart + shell RCs" "$ret" "10"
+    _rec "Autostart, shell RCs, user bin" "$ret" "10"
     echo
 fi
 
