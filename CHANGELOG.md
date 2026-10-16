@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix: checks [3] and [10] missed `ExecStart = /tmp/x`, an indented key, `Restart = always`, a spaced or `Persistent=yes` timer, `Unit = x.service`, a `..` path out of a trusted prefix, and an evil second `ExecStart=` or `ExecStartPre=`/`ExecStop*=` line. Check [10] now also reports unowned binaries from `ExecStartPre`/`ExecStop*`/`ExecReload`/`ExecCondition` lines.
+- Fix: check [10] cut a quoted `ExecStart="/opt/My App/bin/app"` at the first space and suggested an allowlist command the root-helper rejects. The full path is now reported; a path with spaces can't be allowlisted, and the hint says so.
 - Fix: check [10] flagged `ExecStart='/usr/local/bin/backrest'` and ignored its allowlist entry — `ExecStart=` was read with `\S+`, so the quotes stayed in the path and neither the `/usr/local/bin/` skip nor the exact-path allowlist match could hit. Quotes and stacked exec prefixes (`-@`, `!!`, `|`) are now stripped.
 - Fix: check [3] flagged a `Restart=always` unit with a quoted `ExecStart="/usr/bin/x"` as unvetted — same quote bug in its vetting.
 

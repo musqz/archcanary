@@ -395,6 +395,71 @@ SVC
     fi
     rm -rf "$tmpdir"
 
+    # Sub-test C4: Restart= with whitespace, ".." in a vetted prefix, and a
+    # benign first ExecStart hiding an unvetted second one must all warn.
+    local sname sunit
+    for sname in ws traversal second pre stop; do
+        tmpdir=$(mktemp -d)
+        : > "$tmpdir/bin"
+        case "$sname" in
+            ws)        sunit=$'Restart = always\nExecStart=/tmp/evil' ;;
+            traversal) sunit=$'Restart=always\nExecStart=/usr/..'"$tmpdir"'/bin' ;;
+            second)    sunit=$'Restart=always\nExecStart=/usr/bin/true\nExecStart=/tmp/evil' ;;
+            pre)       sunit=$'Restart=always\nExecStartPre=/tmp/evil\nExecStart=/usr/bin/true' ;;
+            stop)      sunit=$'Restart=always\nExecStart=/usr/bin/true\nExecStopPost=/tmp/evil' ;;
+        esac
+        printf '[Service]\n%s\n' "$sunit" > "$tmpdir/b.service"
+        rc=0
+        out=$(SYSTEMD_SCAN_DIRS="$tmpdir" \
+            "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+        if [[ $rc -eq 2 && "$out" == *"WARNING"* ]]; then
+            pass "check_systemd: unit-parse bypass '$sname' flagged"
+        else
+            fail "check_systemd: unit-parse bypass '$sname' not flagged, rc=$rc, got: $out"
+        fi
+        rm -rf "$tmpdir"
+    done
+
+    # Sub-test C5: every exec line vetted → stays clean (over-flag guard)
+    tmpdir=$(mktemp -d)
+    printf '[Service]\nRestart=always\nExecStartPre=/usr/bin/true\nExecStart=/usr/bin/true\nExecStop=/usr/bin/true\n' \
+        > "$tmpdir/ok.service"
+    rc=0
+    out=$(SYSTEMD_SCAN_DIRS="$tmpdir" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_systemd: all exec lines vetted → clean"
+    else
+        fail "check_systemd: all-vetted unit should be clean, rc=$rc, got: $out"
+    fi
+    rm -rf "$tmpdir"
+
+    # Sub-test C6: persistent timer written with spaces around "=" targeting
+    # an unvetted service must still warn
+    tmpdir=$(mktemp -d)
+    local tvariant
+    for tvariant in spaced yes unit; do
+        tmpdir=$(mktemp -d)
+        case "$tvariant" in
+            spaced) printf '[Timer]\nOnBootSec = 1min\nPersistent = true\n' > "$tmpdir/t.timer"
+                    printf '[Service]\nExecStart=/tmp/evil\n' > "$tmpdir/t.service" ;;
+            yes)    printf '[Timer]\nOnBootSec=1min\nPersistent=yes\n' > "$tmpdir/t.timer"
+                    printf '[Service]\nExecStart=/tmp/evil\n' > "$tmpdir/t.service" ;;
+            unit)   printf '[Timer]\nOnBootSec=1min\nPersistent=true\nUnit = evil.service\n' > "$tmpdir/t.timer"
+                    printf '[Service]\nExecStart=/usr/bin/true\n' > "$tmpdir/t.service"
+                    printf '[Service]\nExecStart=/tmp/evil\n' > "$tmpdir/evil.service" ;;
+        esac
+        rc=0
+        out=$(SYSTEMD_SCAN_DIRS="$tmpdir" \
+            "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+        if [[ $rc -eq 2 && "$out" == *"t.timer"* ]]; then
+            pass "check_systemd: timer variant '$tvariant' flagged"
+        else
+            fail "check_systemd: timer variant '$tvariant' should warn, rc=$rc, got: $out"
+        fi
+        rm -rf "$tmpdir"
+    done
+
     # Sub-test D: allowlisted unit names → INFO, no WARNING, exit 0 (clean)
     local allow_file
     allow_file=$(mktemp)
@@ -695,6 +760,51 @@ SVC
     fi
     rm -rf "$tmpdir7b"
     rm -f "$allow_file5"
+
+    # Sub-test M3: each unit-parse bypass must still produce a WARNING —
+    # whitespace around "=", ".." traversal past the /usr/local/bin skip, and
+    # a benign first ExecStart/ExecStartPre hiding an unowned second one.
+    local name unit
+    for name in ws indent traversal second pre; do
+        local tmpdir7c
+        tmpdir7c=$(mktemp -d)
+        mkdir -p "$tmpdir7c/.config/systemd/user"
+        case "$name" in
+            ws)        unit='ExecStart = /opt/fake-unowned-pkg/x' ;;
+            indent)    unit='  ExecStart=/opt/fake-unowned-pkg/x' ;;
+            traversal) unit='ExecStart=/usr/local/bin/../../../opt/fake-unowned-pkg/x' ;;
+            second)    unit=$'ExecStart=/usr/local/bin/ok\nExecStart=/opt/fake-unowned-pkg/x' ;;
+            pre)       unit=$'ExecStartPre=/opt/fake-unowned-pkg/x\nExecStart=/usr/local/bin/ok' ;;
+        esac
+        printf '[Service]\n%s\n' "$unit" > "$tmpdir7c/.config/systemd/user/b.service"
+        rc=0
+        out=$(AUTOSTART_HOME="$tmpdir7c" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+            "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+        if [[ $rc -eq 2 && "$out" == *"WARNING: user service with unowned ExecStart binary"* ]]; then
+            pass "check_autostart: unit-parse bypass '$name' flagged"
+        else
+            fail "check_autostart: unit-parse bypass '$name' not flagged, rc=$rc, out: $out"
+        fi
+        rm -rf "$tmpdir7c"
+    done
+
+    # Sub-test M4: quoted ExecStart path with spaces is reported whole, with
+    # no allowlist command (the allowlist can't store whitespace)
+    local tmpdir7d
+    tmpdir7d=$(mktemp -d)
+    mkdir -p "$tmpdir7d/.config/systemd/user"
+    printf '[Service]\nExecStart="/opt/fake-unowned-pkg/My App/bin/app" --x\n' \
+        > "$tmpdir7d/.config/systemd/user/b.service"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7d" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"ExecStart=/opt/fake-unowned-pkg/My App/bin/app "* \
+          && "$out" != *"--allowlist-add=autostart"* ]]; then
+        pass "check_autostart: quoted ExecStart path with spaces reported whole, no allowlist hint"
+    else
+        fail "check_autostart: spaced ExecStart path, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7d"
 
     # Sub-test N: absolute .desktop Exec= path under $HOME/bin or
     # $HOME/.local/bin must NOT be flagged — regression guard for a real

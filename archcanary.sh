@@ -2269,15 +2269,28 @@ check_logs() {
     fi
 }
 
-# First ExecStart= token of a unit file, without systemd's exec prefixes
-# (-, +, @, !, :, |) or matched surrounding quotes (e.g. ExecStart='/usr/local/bin/x').
+# Strip one pair of matching surrounding quotes from $1.
+_strip_matched_quotes() {
+    local v="$1"
+    case "$v" in
+        \'?*\'|\"?*\") v="${v:1:${#v}-2}" ;;
+    esac
+    printf '%s\n' "$v"
+}
+
+# First token of every Exec{Start,Stop,Reload,Condition}[Pre|Post]= line of a
+# unit file, one per line, without systemd's exec prefixes (-, +, @, !, :, |)
+# or matched surrounding quotes. Whitespace around the key and "=" is accepted
+# as systemd does; ".." segments are collapsed so a prefix test can't be
+# satisfied by /usr/local/bin/../../tmp/x.
 _unit_exec_binary() {
     local bin
-    bin=$(grep -oP '^ExecStart=[-+@!:|]*\K\S+' "$1" 2>/dev/null | head -1) || true
-    case "$bin" in
-        \'?*\'|\"?*\") bin="${bin:1:${#bin}-2}" ;;
-    esac
-    printf '%s\n' "$bin"
+    while IFS= read -r bin; do
+        bin=$(_strip_matched_quotes "$bin")
+        while [[ "$bin" == [-+@!:\|]* ]]; do bin="${bin:1}"; done
+        [[ "$bin" == /* && "$bin" == *..* ]] && bin=$(realpath -sm -- "$bin")
+        printf '%s\n' "$bin"
+    done < <(grep -oP '^\s*Exec(Start|Stop|Reload|Condition)(Pre|Post)?\s*=\s*[-+@!:|]*\K("[^"]*"(?=\s|$)|\x27[^\x27]*\x27(?=\s|$)|\S+)' "$1" 2>/dev/null || true)
 }
 
 # ---------------------------------------------------------------------------
@@ -2294,16 +2307,16 @@ _service_vetted() {
     local svc="$1"
     [[ -f "$svc" ]] || return 1
     pacman -Qo "$svc" &>/dev/null 2>&1 && return 0
-    local exec_start
-    exec_start=$(_unit_exec_binary "$svc")
-    if [[ -n "$exec_start" && "$exec_start" == /* ]]; then
-        if [[ "$exec_start" == /usr/* || "$exec_start" == /opt/* || \
-              "$exec_start" == /bin/* || "$exec_start" == /sbin/* || \
-              "$exec_start" == /usr/local/* ]] && [[ -f "$exec_start" ]]; then
-            return 0
-        fi
-    fi
-    return 1
+    local exec_start any=false
+    # /usr/* also covers /usr/local/*
+    while IFS= read -r exec_start; do
+        any=true
+        [[ "$exec_start" == /* ]] || return 1
+        [[ "$exec_start" == /usr/* || "$exec_start" == /opt/* || \
+           "$exec_start" == /bin/* || "$exec_start" == /sbin/* ]] || return 1
+        [[ -f "$exec_start" ]] || return 1
+    done < <(_unit_exec_binary "$svc")
+    $any
 }
 
 # Locate the .service file a unit name resolves to, across the standard dirs
@@ -2346,7 +2359,7 @@ _allowlist_contains() {
 
 check_systemd() {
     local found=()
-    local re_restart='^Restart=(always|on-failure|on-abnormal|on-abort)'
+    local re_restart='^[[:space:]]*Restart[[:space:]]*=[[:space:]]*(always|on-failure|on-abnormal|on-abort)'
     # SYSTEMD_ALLOWLIST: colon-separated list of unit names that are known-good
     # but not tracked by pacman and not vetted by the standard-prefix check
     # (e.g. a self-hosted app installed from an upstream binary release).
@@ -2373,17 +2386,10 @@ check_systemd() {
         while IFS= read -r svc; do
             pacman -Qo "$svc" &>/dev/null 2>&1 && continue
             if grep -qE "$re_restart" "$svc" 2>/dev/null; then
-                local exec_start
-                exec_start=$(_unit_exec_binary "$svc")
-                if [[ -n "$exec_start" && "$exec_start" == /* ]]; then
-                    if [[ "$exec_start" == /usr/* || "$exec_start" == /opt/* || \
-                          "$exec_start" == /bin/* || "$exec_start" == /sbin/* || \
-                          "$exec_start" == /usr/local/* ]] && [[ -f "$exec_start" ]]; then
-                        continue
-                    fi
-                fi
+                _service_vetted "$svc" && continue
                 local match
                 match=$(grep -oE "$re_restart" "$svc" | head -1)
+                match="${match//[[:space:]]/}"
                 if _allowlist_contains "$(_systemd_unit_name "$svc")" _svc_allow; then
                     echo "  INFO: systemd unit allowlisted (not vetted): $svc ($match)"
                     continue
@@ -2400,9 +2406,9 @@ check_systemd() {
         $is_user_dir && continue
         while IFS= read -r timer; do
             pacman -Qo "$timer" &>/dev/null 2>&1 && continue
-            if grep -q 'OnBootSec=' "$timer" 2>/dev/null && grep -q 'Persistent=true' "$timer" 2>/dev/null; then
+            if grep -qE '^[[:space:]]*OnBootSec[[:space:]]*=' "$timer" 2>/dev/null && grep -qE '^[[:space:]]*Persistent[[:space:]]*=[[:space:]]*(true|yes|on|1)([[:space:]]|$)' "$timer" 2>/dev/null; then
                 local target svc_file
-                target=$(grep -oP '^\s*Unit=\K\S+' "$timer" 2>/dev/null | head -1)
+                target=$(grep -oP '^\s*Unit\s*=\s*\K\S+' "$timer" 2>/dev/null | head -1)
                 [[ -z "$target" ]] && target="$(basename "${timer%.timer}").service"
                 svc_file=$(_find_service_file "$target" "$dir") || svc_file=""
                 # Vetted target → benign timer; skip. Otherwise flag it.
@@ -3835,28 +3841,36 @@ check_autostart() {
     local user_svc_dir="$home_dir/.config/systemd/user"
     if [[ -d "$user_svc_dir" ]]; then
         while IFS= read -r svc; do
-            local exec_bin
-            exec_bin=$(_unit_exec_binary "$svc")
-            [[ -z "$exec_bin" ]] && continue
-            exec_bin="${exec_bin//%h/$home_dir}"
-            [[ "$exec_bin" == "$home_dir/.local/bin/"* ]] && continue
-            [[ "$exec_bin" == "$home_dir/bin/"* ]] && continue
-            # /usr/local/ is the FHS-conventional prefix for manually-installed
-            # software; Arch's pacman never writes there, so unowned binaries in
-            # /usr/local/bin/ are expected and not a persistence signal.
-            [[ "$exec_bin" == "/usr/local/bin/"* ]] && continue
-            if ! pacman -Qo "$exec_bin" &>/dev/null 2>&1; then
-                if _allowlist_contains "$exec_bin" _autostart_allow; then
-                    echo "  INFO: user service allowlisted (unowned ExecStart binary): $svc"
-                    echo "    ExecStart=$exec_bin"
-                else
-                    echo "  WARNING: user service with unowned ExecStart binary: $svc"
-                    echo "    ExecStart=$exec_bin (not tracked by pacman)"
-                    echo "    If you recognize this (e.g. a package that ships its unit via /etc/skel),"
-                    echo "    mark it known-good: pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$exec_bin"
-                    found=2
+            local exec_bin _seen=$'\n'
+            while IFS= read -r exec_bin; do
+                [[ -z "$exec_bin" ]] && continue
+                [[ "$_seen" == *$'\n'"$exec_bin"$'\n'* ]] && continue
+                _seen+="$exec_bin"$'\n'
+                exec_bin="${exec_bin//%h/$home_dir}"
+                [[ "$exec_bin" == /* && "$exec_bin" == *..* ]] && exec_bin=$(realpath -sm -- "$exec_bin")
+                [[ "$exec_bin" == "$home_dir/.local/bin/"* ]] && continue
+                [[ "$exec_bin" == "$home_dir/bin/"* ]] && continue
+                # /usr/local/ is the FHS-conventional prefix for manually-installed
+                # software; Arch's pacman never writes there, so unowned binaries in
+                # /usr/local/bin/ are expected and not a persistence signal.
+                [[ "$exec_bin" == "/usr/local/bin/"* ]] && continue
+                if ! pacman -Qo "$exec_bin" &>/dev/null 2>&1; then
+                    if _allowlist_contains "$exec_bin" _autostart_allow; then
+                        echo "  INFO: user service allowlisted (unowned ExecStart binary): $svc"
+                        echo "    ExecStart=$exec_bin"
+                    else
+                        echo "  WARNING: user service with unowned ExecStart binary: $svc"
+                        echo "    ExecStart=$exec_bin (not tracked by pacman)"
+                        echo "    If you recognize this (e.g. a package that ships its unit via /etc/skel),"
+                        if [[ "$exec_bin" == *[[:space:]]* ]]; then
+                            echo "    (a path with spaces can't be allowlisted)"
+                        else
+                            echo "    mark it known-good: pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$exec_bin"
+                        fi
+                        found=2
+                    fi
                 fi
-            fi
+            done < <(_unit_exec_binary "$svc")
         done < <(find "$user_svc_dir" -name '*.service' -type f 2>/dev/null)
     fi
 
