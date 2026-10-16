@@ -2269,6 +2269,17 @@ check_logs() {
     fi
 }
 
+# First ExecStart= token of a unit file, without systemd's exec prefixes
+# (-, +, @, !, :, |) or matched surrounding quotes (e.g. ExecStart='/usr/local/bin/x').
+_unit_exec_binary() {
+    local bin
+    bin=$(grep -oP '^ExecStart=[-+@!:|]*\K\S+' "$1" 2>/dev/null | head -1) || true
+    case "$bin" in
+        \'?*\'|\"?*\") bin="${bin:1:${#bin}-2}" ;;
+    esac
+    printf '%s\n' "$bin"
+}
+
 # ---------------------------------------------------------------------------
 # Check 3: systemd persistence artifacts
 # Widened from the original Restart=always + RestartSec=30 pair to cover:
@@ -2284,7 +2295,7 @@ _service_vetted() {
     [[ -f "$svc" ]] || return 1
     pacman -Qo "$svc" &>/dev/null 2>&1 && return 0
     local exec_start
-    exec_start=$(grep -oP '^ExecStart=[-+@!:]*\K[^[:space:]]+' "$svc" 2>/dev/null | head -1)
+    exec_start=$(_unit_exec_binary "$svc")
     if [[ -n "$exec_start" && "$exec_start" == /* ]]; then
         if [[ "$exec_start" == /usr/* || "$exec_start" == /opt/* || \
               "$exec_start" == /bin/* || "$exec_start" == /sbin/* || \
@@ -2363,7 +2374,7 @@ check_systemd() {
             pacman -Qo "$svc" &>/dev/null 2>&1 && continue
             if grep -qE "$re_restart" "$svc" 2>/dev/null; then
                 local exec_start
-                exec_start=$(grep -oP '^ExecStart=[-+@!:]*\K[^[:space:]]+' "$svc" 2>/dev/null | head -1)
+                exec_start=$(_unit_exec_binary "$svc")
                 if [[ -n "$exec_start" && "$exec_start" == /* ]]; then
                     if [[ "$exec_start" == /usr/* || "$exec_start" == /opt/* || \
                           "$exec_start" == /bin/* || "$exec_start" == /sbin/* || \
@@ -3825,7 +3836,7 @@ check_autostart() {
     if [[ -d "$user_svc_dir" ]]; then
         while IFS= read -r svc; do
             local exec_bin
-            exec_bin=$(grep -oP '^ExecStart=\K\S+' "$svc" 2>/dev/null | head -1) || continue
+            exec_bin=$(_unit_exec_binary "$svc")
             [[ -z "$exec_bin" ]] && continue
             exec_bin="${exec_bin//%h/$home_dir}"
             [[ "$exec_bin" == "$home_dir/.local/bin/"* ]] && continue

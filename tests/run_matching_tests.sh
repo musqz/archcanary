@@ -361,6 +361,40 @@ test_check_systemd_hardened() {
     fi
     rm -rf "$tmpdir"
 
+    # Sub-test C2: quoted ExecStart of a vetted binary with Restart=always → clean
+    tmpdir=$(mktemp -d)
+    cat > "$tmpdir/quoted.service" << 'SVC'
+[Service]
+Restart=always
+ExecStart="/usr/bin/true"
+SVC
+    rc=0
+    out=$(SYSTEMD_SCAN_DIRS="$tmpdir" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ "$out" == *"Clean"* && "$out" != *"WARNING"* ]]; then
+        pass "check_systemd: quoted ExecStart of a vetted binary → clean"
+    else
+        fail "check_systemd: quoted ExecStart should be unquoted, got: $out"
+    fi
+    rm -rf "$tmpdir"
+
+    # Sub-test C3: unquoting must not vet an unsafe path
+    tmpdir=$(mktemp -d)
+    cat > "$tmpdir/evil.service" << 'SVC'
+[Service]
+Restart=always
+ExecStart="/tmp/evil"
+SVC
+    rc=0
+    out=$(SYSTEMD_SCAN_DIRS="$tmpdir" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING"* ]]; then
+        pass "check_systemd: quoted ExecStart in /tmp still flagged"
+    else
+        fail "check_systemd: quoted /tmp ExecStart should warn, rc=$rc, got: $out"
+    fi
+    rm -rf "$tmpdir"
+
     # Sub-test D: allowlisted unit names → INFO, no WARNING, exit 0 (clean)
     local allow_file
     allow_file=$(mktemp)
@@ -630,6 +664,37 @@ SVC
     fi
     rm -rf "$tmpdir7"
     rm -f "$allow_file3" "$allow_file4"
+
+    # Sub-test M2: quoted ExecStart path and stacked exec prefixes (-@, !!)
+    # must be normalised before the /usr/local/bin skip and the allowlist match.
+    local tmpdir7b
+    tmpdir7b=$(mktemp -d)
+    mkdir -p "$tmpdir7b/.config/systemd/user"
+    cat > "$tmpdir7b/.config/systemd/user/backrest.service" << 'SVC'
+[Service]
+ExecStart='/usr/local/bin/backrest'
+SVC
+    cat > "$tmpdir7b/.config/systemd/user/tool.service" << 'SVC'
+[Service]
+ExecStart=-@"/opt/fake-unowned-pkg/tool"
+SVC
+    cat > "$tmpdir7b/.config/systemd/user/tool2.service" << 'SVC'
+[Service]
+ExecStart=!!/opt/fake-unowned-pkg/tool
+SVC
+    local allow_file5
+    allow_file5=$(mktemp)
+    printf '/opt/fake-unowned-pkg/tool\n' > "$allow_file5"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7b" AUTOSTART_ALLOWLIST_FILE="$allow_file5" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" != *"WARNING"* && "$out" == *"allowlisted (unowned ExecStart binary)"* ]]; then
+        pass "check_autostart: quoted/prefixed ExecStart path is normalised"
+    else
+        fail "check_autostart: quoted ExecStart should be unquoted, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7b"
+    rm -f "$allow_file5"
 
     # Sub-test N: absolute .desktop Exec= path under $HOME/bin or
     # $HOME/.local/bin must NOT be flagged — regression guard for a real
