@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix: check [10] flagged `ExecStart='/usr/local/bin/backrest'` and ignored its allowlist entry — `ExecStart=` was read with `\S+`, so the quotes stayed in the path and neither the `/usr/local/bin/` skip nor the exact-path allowlist match could hit. Quotes and stacked exec prefixes (`-@`, `!!`, `|`) are now stripped.
+- Fix: check [3] flagged a `Restart=always` unit with a quoted `ExecStart="/usr/bin/x"` as unvetted — same quote bug in its vetting.
+
 ## v0.1.38 (2026-10-12)
 
 - Fix: `archcanary.service` and `archcanary-onchange.service` logged `[: ...: integer expected` and never appended the `aur_build` audit events to `last-scan.log` — systemd expands `%Y`, `%m`, `%d`, `%H`, `%M`, `%S` as unit specifiers inside `ExecStartPre=`/`ExecStartPost=` before `sh` runs, so `stat -c %Y` wrote a path into `.prev-epoch` and the `date` formats were mangled. Escaped as `%%`. The `ausearch -ts` date now uses the locale's own format (`%%x`), since `ausearch` rejects `MM/DD/YYYY` outside en_US. The snapshot also moved from `ExecStartPost=` to `ExecStopPost=`, which systemd skips when the scan exits 1 or 2 — so it was missing on exactly the flagged scans. A new test fails on any unescaped `%` in the system units' `Exec*=` lines. `install.sh --system` installs copy units to `/etc/systemd/system`, which override the packaged ones: re-run `install.sh --system` to pick up the fix. Reported on the EndeavourOS forum.
