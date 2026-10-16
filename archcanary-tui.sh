@@ -55,7 +55,7 @@ declare -A CHECK_LABELS=(
     [pnpm]="pnpm cache"
     [pkgbuild]="PKGBUILD / .install files"
     [ldso]="ld.so.preload injection"
-    [autostart]="XDG autostart + shell RCs"
+    [autostart]="Autostart, shell RCs, user bin"
 )
 
 declare -A ROOT_CHECK_FLAGS=(

@@ -1342,11 +1342,11 @@ _resolve_scan_user_opts() {
 # enforcing agreement between them.
 _SAH_PER_USER_CHECK_NAMES=(
     "npm cache" "bun cache" "yarn cache" "pnpm cache"
-    "PKGBUILD obfuscation scan" "XDG autostart + shell RCs"
+    "PKGBUILD obfuscation scan" "Autostart, shell RCs, user bin"
 )
 declare -A _SAH_PER_USER_CHECK_IDX=(
     ["npm cache"]="5" ["bun cache"]="6" ["yarn cache"]="6b" ["pnpm cache"]="6c"
-    ["PKGBUILD obfuscation scan"]="7" ["XDG autostart + shell RCs"]="10"
+    ["PKGBUILD obfuscation scan"]="7" ["Autostart, shell RCs, user bin"]="10"
 )
 
 _run_scan_all_homes() {
@@ -3658,7 +3658,7 @@ check_ldso() {
 }
 
 # ---------------------------------------------------------------------------
-# Check 10: XDG autostart + shell RC persistence
+# Check 10: XDG autostart + shell RC + user bin persistence
 # Detects low-privilege persistence requiring no root:
 #   1. ~/.config/autostart/*.desktop — Exec= outside /usr/ or /opt/
 #   2. ~/.config/systemd/user/*.service — ExecStart= binary not owned by pacman
@@ -4358,7 +4358,7 @@ _rec() { _SUMMARY_NAMES+=("$1"); _SUMMARY_CODES+=("$2"); _SUMMARY_IDX+=("${3:-}"
 _is_behavior_check_name() {
     case "$1" in
         "Systemd persistence"|"eBPF programs (bpftool)"|"ld.so.preload injection"|\
-        "XDG autostart + shell RCs"|"Kernel modules (DKMS)"|"PKGBUILD obfuscation scan")
+        "Autostart, shell RCs, user bin"|"Kernel modules (DKMS)"|"PKGBUILD obfuscation scan")
             return 0 ;;
         *) return 1 ;;
     esac
@@ -4960,10 +4960,10 @@ if $CHECK_LDSO; then
 fi
 
 if $CHECK_AUTOSTART && ! $SCAN_HOMES_MODE; then
-    echo "--- [10] XDG autostart + shell RC persistence check ---"
+    echo "--- [10] XDG autostart + shell RC + user bin persistence check ---"
     check_autostart && ret=$? || ret=$?
     [[ $ret -gt $EXIT_CODE ]] && EXIT_CODE=$ret
-    _rec "XDG autostart + shell RCs" "$ret" "10"
+    _rec "Autostart, shell RCs, user bin" "$ret" "10"
     echo
 fi
 

@@ -33,7 +33,7 @@ systemd SYSTEM timer (weekly + on boot, runs as root)
             ├── [7]  PKGBUILD / install file scan (obfuscation-aware)
             ├── [8]  loaded eBPF programs via bpftool (stealth hook types)
             ├── [9]  ld.so.preload injection
-            ├── [10] XDG autostart + shell RC persistence
+            ├── [10] XDG autostart + shell RC + user bin persistence
             └── [11] kernel module / DKMS audit          (root → actually runs)
                     │
                     └── writes /var/lib/archcanary/last-scan.log

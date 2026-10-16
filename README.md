@@ -61,7 +61,7 @@ Every scan prints a per-check summary before the final verdict:
  [7]  PKGBUILD obfuscation scan            ✅  clean
  [8]  eBPF programs (bpftool)              ✅  clean
  [9]  ld.so.preload injection              ✅  clean
- [10] XDG autostart + shell RCs            ✅  clean
+ [10] Autostart, shell RCs, user bin       ✅  clean
  [11] Kernel modules (DKMS)                ✅  clean
  [12] Lynis hardening                      ✅  clean
  [13] Package integrity                    ✅  clean

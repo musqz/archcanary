@@ -3185,10 +3185,10 @@ EOF
         echo \"EXIT_CODE=\$EXIT_CODE\"
     " 2>&1)
 
-    if [[ "$out" == *"XDG autostart + shell RCs=2"* ]]; then
+    if [[ "$out" == *"Autostart, shell RCs, user bin=2"* ]]; then
         pass "scan_all_homes: worst-of-N reflects the flagged user's autostart finding"
     else
-        fail "scan_all_homes: expected 'XDG autostart + shell RCs=2', out: $out"
+        fail "scan_all_homes: expected 'Autostart, shell RCs, user bin=2', out: $out"
     fi
     if [[ "$out" == *"npm cache=0"* ]]; then
         pass "scan_all_homes: an unrelated check stays clean when no user triggers it"
@@ -3448,12 +3448,12 @@ EOF
 shift; shift
 user="$1"; shift
 shift
-clean6='[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]'
+clean6='[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"Autostart, shell RCs, user bin","status":"clean"}]'
 case "$user" in
     alice) echo "{\"result\":\"clean\",\"checks\":$clean6}" ;;
-    bob)   echo '{"result":"warnings","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"warning"}]}' ;;
+    bob)   echo '{"result":"warnings","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"Autostart, shell RCs, user bin","status":"warning"}]}' ;;
     carol) exit 1 ;;
-    dave)  echo '{"result":"infected","checks":[{"name":"npm cache","status":"infected"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"infected"},{"name":"XDG autostart + shell RCs","status":"clean"}]}' ;;
+    dave)  echo '{"result":"infected","checks":[{"name":"npm cache","status":"infected"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"infected"},{"name":"Autostart, shell RCs, user bin","status":"clean"}]}' ;;
 esac
 EOF
     chmod +x "$fake_bin/sudo"
@@ -3478,7 +3478,7 @@ EOF
 
     if [[ "$out" == *"Check summary: USER alice"* && "$out" == *"Check summary: USER bob"* && \
           "$out" == *"Check summary: USER carol"* && "$out" == *"Check summary: USER dave"* && \
-          "$out" =~ 'XDG autostart + shell RCs'[[:space:]]+WARN_ICON && \
+          "$out" =~ 'Autostart, shell RCs, user bin'[[:space:]]+WARN_ICON && \
           "$out" == *"carol"*"(could not evaluate"* && \
           "$out" =~ 'npm cache'[[:space:]]+INFECTED_ICON && \
           "$out" =~ 'PKGBUILD obfuscation scan'[[:space:]]+REVIEW_ICON ]]; then
@@ -3518,7 +3518,7 @@ EOF
     cat > "$fake_bin/sudo" <<'EOF'
 #!/usr/bin/env bash
 shift; shift; shift; shift
-echo '{"result":"clean","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"XDG autostart + shell RCs","status":"clean"}]}'
+echo '{"result":"clean","checks":[{"name":"npm cache","status":"clean"},{"name":"bun cache","status":"clean"},{"name":"yarn cache","status":"clean"},{"name":"pnpm cache","status":"clean"},{"name":"PKGBUILD obfuscation scan","status":"clean"},{"name":"Autostart, shell RCs, user bin","status":"clean"}]}'
 EOF
     chmod +x "$fake_bin/sudo"
 
