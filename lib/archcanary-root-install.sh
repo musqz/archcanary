@@ -151,7 +151,7 @@ EOF
         tee /etc/archcanary/autostart_allowlist.conf >/dev/null << 'EOF'
 # Names to skip during the XDG autostart check (--check-autostart),
 # system-wide allowlist. One entry per line. Everything after # is a
-# comment. Covers two separate findings within the same check, each with
+# comment. Covers three separate findings within the same check, each with
 # its own matching rule:
 #
 # 1. .desktop Exec= names that are known-good but can't be resolved via
@@ -168,6 +168,10 @@ EOF
 #    ships its user unit via /etc/skel (copied into ~/.config/systemd/user/
 #    at account creation, so pacman never tracks that specific copy even
 #    though the binary itself is a normal pacman-owned file).
+#
+# 3. A sudo/su/doas/pkexec/run0 file in a user bin dir (~/.local/bin,
+#    ~/bin, ~/.npm-global/bin, ~/.cargo/bin, ~/go/bin, ~/.bun/bin) that
+#    you created yourself. Matched against its exact, full path.
 #
 # Examples:
 # zeitgeist-datahub               # desktop activity logging, ships in a non-PATH libdir

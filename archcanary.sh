@@ -485,7 +485,7 @@ for arg in "$@"; do
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links/perf-hooks/net-attachments (needs root)"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
-            echo "  --check-autostart  Scan XDG autostart entries and shell RCs for low-privilege persistence"
+            echo "  --check-autostart  Scan XDG autostart entries, shell RCs and user bin dirs for low-privilege persistence"
             echo "  --check-kmod       Audit loaded kernel modules against pacman-tracked files (needs root)"
             echo "  --check-lynis      Parse Lynis hardening report (/var/log/lynis-report.dat)"
             echo "  --check-pkginteg   Verify installed file checksums against pacman database (SHA256 mismatch)"
@@ -3663,6 +3663,8 @@ check_ldso() {
 #   1. ~/.config/autostart/*.desktop — Exec= outside /usr/ or /opt/
 #   2. ~/.config/systemd/user/*.service — ExecStart= binary not owned by pacman
 #   3. Shell RCs — lines matching download-and-execute or eval+subshell patterns
+#   4. user bin dirs (~/.local/bin, ~/bin, ~/.npm-global/bin, ~/.cargo/bin, ~/go/bin,
+#      ~/.bun/bin) — sudo/su/doas/pkexec/run0 that can shadow the system command
 # Home dir injectable via AUTOSTART_HOME for testing.
 # ---------------------------------------------------------------------------
 check_autostart() {
@@ -3903,6 +3905,39 @@ check_autostart() {
                 found=2
             fi
         done < "$rc"
+    done
+
+    # A sudo/su/doas/pkexec/run0 in a user bin dir can shadow the system one
+    # (fake-sudo password grabber). A symlink to the same-named system
+    # command (e.g. sudo -> /usr/bin/sudo-rs) is fine.
+    local _bd _bn _bp _bt _bseen=$'\n'
+    for _bd in "$home_dir/.local/bin" "$home_dir/bin" "$home_dir/.npm-global/bin" \
+               "$home_dir/.cargo/bin" "$home_dir/go/bin" "$home_dir/.bun/bin"; do
+        # ~/bin is often a symlink to ~/.local/bin; scan each real dir once
+        _bt=$(readlink -f -- "$_bd" 2>/dev/null) || _bt="$_bd"
+        [[ "$_bseen" == *$'\n'"$_bt"$'\n'* ]] && continue
+        _bseen+="$_bt"$'\n'
+        for _bn in sudo su doas pkexec run0; do
+            _bp="$_bd/$_bn"
+            [[ -f "$_bp" && -x "$_bp" ]] || continue
+            if [[ -L "$_bp" ]]; then
+                _bt=$(readlink -f -- "$_bp")
+                [[ ( "$_bt" == /usr/bin/* || "$_bt" == /usr/sbin/* ) && \
+                   ( "${_bt##*/}" == "$_bn" || "${_bt##*/}" == "$_bn"-* ) ]] && continue
+            fi
+            if _allowlist_contains "$_bp" _autostart_allow; then
+                echo "  INFO: $_bn in user bin dir allowlisted: $_bp"
+            else
+                echo "  WARNING: $_bp can shadow the system $_bn"
+                if [[ ! "$_bp" =~ ^[A-Za-z0-9/][A-Za-z0-9._@+/-]{0,127}$ ]]; then
+                    echo "    If you didn't create it, remove it (this path can't be allowlisted)."
+                else
+                    echo "    If you didn't create it, remove it; otherwise mark it known-good:"
+                    echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$_bp"
+                fi
+                found=2
+            fi
+        done
     done
 
     [[ $found -eq 0 ]] && echo "  Clean: no suspicious autostart or shell RC entries found."

@@ -806,6 +806,86 @@ SVC
     fi
     rm -rf "$tmpdir7d"
 
+    # Sub-test M5: sudo/su/doas/pkexec/run0 planted in ~/.local/bin or ~/bin →
+    # WARNING; a symlink to the same-named /usr command, or a non-executable
+    # file, is not; an allowlisted path → INFO only.
+    local tmpdir7e
+    tmpdir7e=$(mktemp -d)
+    mkdir -p "$tmpdir7e/.local/bin" "$tmpdir7e/bin"
+    printf '#!/bin/sh\n' > "$tmpdir7e/.local/bin/sudo"
+    chmod +x "$tmpdir7e/.local/bin/sudo"
+    printf '#!/bin/sh\n' > "$tmpdir7e/bin/pkexec"
+    chmod +x "$tmpdir7e/bin/pkexec"
+    printf '#!/bin/sh\n' > "$tmpdir7e/bin/run0"
+    ln -s /usr/bin/true "$tmpdir7e/bin/doas"
+    mkdir -p "$tmpdir7e/.npm-global/bin"
+    printf '#!/bin/sh\n' > "$tmpdir7e/.npm-global/bin/sudo"
+    chmod +x "$tmpdir7e/.npm-global/bin/sudo"
+    # same-name system symlink is exempt; skip the case when the host has no su
+    [[ -x /usr/bin/su ]] && ln -s /usr/bin/su "$tmpdir7e/bin/su"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7e" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"WARNING: $tmpdir7e/.local/bin/sudo can shadow"* \
+          && "$out" == *"WARNING: $tmpdir7e/bin/pkexec can shadow"* \
+          && "$out" == *"WARNING: $tmpdir7e/bin/doas can shadow"* \
+          && "$out" == *"WARNING: $tmpdir7e/.npm-global/bin/sudo can shadow"* \
+          && "$out" != *"bin/su can shadow"* && "$out" != *"bin/run0 can shadow"* ]]; then
+        pass "check_autostart: planted sudo/pkexec and mismatched doas symlink flagged; same-name su symlink and non-exec run0 not"
+    else
+        fail "check_autostart: shadow sudo, rc=$rc, out: $out"
+    fi
+    local allow_file6
+    allow_file6=$(mktemp)
+    printf '%s\n' "$tmpdir7e/.local/bin/sudo" "$tmpdir7e/bin/pkexec" "$tmpdir7e/bin/doas" "$tmpdir7e/.npm-global/bin/sudo" > "$allow_file6"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7e" AUTOSTART_ALLOWLIST_FILE="$allow_file6" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: sudo in user bin dir allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: allowlisted user-bin sudo/pkexec/doas → INFO only, exit 0"
+    else
+        fail "check_autostart: allowlisted shadow sudo, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7e"
+    rm -f "$allow_file6"
+
+    # Sub-test M6: prefix-only symlink name (su -> sum) is flagged, and a home
+    # dir the root-helper regex rejects gets no allowlist command.
+    local tmpdir7f
+    tmpdir7f=$(mktemp -d "${TMPDIR:-/tmp}/ac sp.XXXXXX")
+    mkdir -p "$tmpdir7f/bin"
+    if [[ -x /usr/bin/sum ]]; then
+        ln -s /usr/bin/sum "$tmpdir7f/bin/su"
+        rc=0
+        out=$(AUTOSTART_HOME="$tmpdir7f" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+            "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+        if [[ $rc -eq 2 && "$out" == *"bin/su can shadow"* \
+              && "$out" == *"this path can't be allowlisted"* \
+              && "$out" != *"--allowlist-add=autostart:$tmpdir7f"* ]]; then
+            pass "check_autostart: su -> sum symlink flagged; spaced path gets no allowlist hint"
+        else
+            fail "check_autostart: su->sum / spaced path, rc=$rc, out: $out"
+        fi
+    fi
+    rm -rf "$tmpdir7f"
+
+    # Sub-test M7: ~/bin symlinked to ~/.local/bin reports a planted sudo once
+    local tmpdir7g
+    tmpdir7g=$(mktemp -d)
+    mkdir -p "$tmpdir7g/.local/bin"
+    ln -s "$tmpdir7g/.local/bin" "$tmpdir7g/bin"
+    printf '#!/bin/sh\n' > "$tmpdir7g/.local/bin/sudo"
+    chmod +x "$tmpdir7g/.local/bin/sudo"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7g" AUTOSTART_ALLOWLIST_FILE="/nonexistent-allowlist-xyz" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$(grep -c 'can shadow the system sudo' <<< "$out")" -eq 1 ]]; then
+        pass "check_autostart: ~/bin -> ~/.local/bin symlink reports planted sudo once"
+    else
+        fail "check_autostart: duplicate dir should report once, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7g"
+
     # Sub-test N: absolute .desktop Exec= path under $HOME/bin or
     # $HOME/.local/bin must NOT be flagged — regression guard for a real
     # false positive (Conky's LXQt-generated autostart entry pointing at a

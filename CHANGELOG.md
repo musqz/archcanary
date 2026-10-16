@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added: check [10] flags a `sudo`, `su`, `doas`, `pkexec` or `run0` in `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `~/.cargo/bin`, `~/go/bin` or `~/.bun/bin`, user-writable dirs that can shadow the system command (fake-sudo password grabber). Symlinks into `/usr` are skipped; allowlist an intended wrapper by its full path.
+
 ## v0.1.39 (2026-10-16)
 
 - Fix: checks [3] and [10] missed `ExecStart = /tmp/x`, an indented key, `Restart = always`, a spaced or `Persistent=yes` timer, `Unit = x.service`, a `..` path out of a trusted prefix, and an evil second `ExecStart=` or `ExecStartPre=`/`ExecStop*=` line. Check [10] now also reports unowned binaries from `ExecStartPre`/`ExecStop*`/`ExecReload`/`ExecCondition` lines.
