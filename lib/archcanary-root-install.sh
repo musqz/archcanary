@@ -171,7 +171,9 @@ EOF
 #
 # 3. A sudo/su/doas/pkexec/run0 file in a user bin dir (~/.local/bin,
 #    ~/bin, ~/.npm-global/bin, ~/.cargo/bin, ~/go/bin, ~/.bun/bin) that
-#    you created yourself. Matched against its exact, full path.
+#    you created yourself. Matched against its exact, full path;
+#    --allowlist-add appends a sha256: pin, and the finding returns if the
+#    file's content later changes.
 #
 # Examples:
 # zeitgeist-datahub               # desktop activity logging, ships in a non-PATH libdir

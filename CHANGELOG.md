@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Added: check [10] flags a `sudo`, `su`, `doas`, `pkexec` or `run0` in `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `~/.cargo/bin`, `~/go/bin` or `~/.bun/bin`, user-writable dirs that can shadow the system command (fake-sudo password grabber). Symlinks into `/usr` are skipped; allowlist an intended wrapper by its full path.
+- Added: check [10] flags a `sudo`, `su`, `doas`, `pkexec` or `run0` in `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `~/.cargo/bin`, `~/go/bin` or `~/.bun/bin`, user-writable dirs that can shadow the system command (fake-sudo password grabber). Symlinks into `/usr` are skipped; allowlist an intended wrapper by its full path (`--allowlist-add` pins its sha256; a changed file warns again).
 
 ## v0.1.39 (2026-10-16)
 

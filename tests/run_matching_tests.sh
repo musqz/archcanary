@@ -886,6 +886,71 @@ SVC
     fi
     rm -rf "$tmpdir7g"
 
+    # Sub-test M8: _shadow_pin only pins a user-owned regular file named like a
+    # privilege command in a user bin dir (root runs it via --allowlist-add).
+    local tmpdir7h pin_out
+    tmpdir7h=$(mktemp -d)
+    mkdir -p "$tmpdir7h/.local/bin" "$tmpdir7h/other"
+    printf '#!/bin/sh\n' > "$tmpdir7h/.local/bin/sudo"
+    printf '#!/bin/sh\n' > "$tmpdir7h/.local/bin/notsudo"
+    printf '#!/bin/sh\n' > "$tmpdir7h/other/sudo"
+    ln -s "$tmpdir7h/.local/bin/sudo" "$tmpdir7h/.local/bin/su"
+    pin_out=$(
+        eval "$(sed -n '/^_SHADOW_CMDS=/,/^_SHADOW_BIN_DIRS=/p;/^_shadow_pin()/,/^}/p' "$REPO_DIR/archcanary.sh")"
+        printf 'a=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/sudo")"
+        printf 'b=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/notsudo")"
+        printf 'c=%s\n' "$(_shadow_pin "$tmpdir7h/other/sudo")"
+        printf 'd=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/su")"
+        printf 'e=%s\n' "$(_shadow_pin "$tmpdir7h/.local/bin/../bin/sudo")"
+        printf 'f=%s\n' "$(_shadow_pin /usr/bin/su)"
+    )
+    local want_hash
+    want_hash=$(sha256sum "$tmpdir7h/.local/bin/sudo"); want_hash="sha256:${want_hash%% *}"
+    if [[ "$pin_out" == *"a=$want_hash"* && "$pin_out" == *$'\nb=\n'* && "$pin_out" == *$'\nc=\n'* \
+          && "$pin_out" == *$'\nd=\n'* && "$pin_out" == *$'\ne=\n'* && "$pin_out" == *$'\nf='* \
+          && "$pin_out" != *"f=sha256"* ]]; then
+        pass "_shadow_pin: pins only user-owned regular privilege-command files in user bin dirs"
+    else
+        fail "_shadow_pin guards wrong: $pin_out"
+    fi
+
+    # Sub-test M9: a pinned allowlist entry stays INFO while the file is
+    # unchanged, warns once it changes; a malformed pin is ignored (unpinned).
+    local allow_file7
+    allow_file7=$(mktemp)
+    printf '%s %s\n' "$tmpdir7h/.local/bin/sudo" "$want_hash" > "$allow_file7"
+    # only the pinned sudo may remain in the fixture home
+    rm -f "$tmpdir7h/.local/bin/su" "$tmpdir7h/.local/bin/notsudo" "$tmpdir7h/other/sudo"
+    chmod +x "$tmpdir7h/.local/bin/sudo"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7h" AUTOSTART_ALLOWLIST_FILE="$allow_file7" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: sudo in user bin dir allowlisted"* && "$out" != *"WARNING"* ]]; then
+        pass "check_autostart: pinned shadow sudo, unchanged → INFO only"
+    else
+        fail "check_autostart: unchanged pinned sudo, rc=$rc, out: $out"
+    fi
+    printf '#!/bin/sh\necho pwned\n' > "$tmpdir7h/.local/bin/sudo"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7h" AUTOSTART_ALLOWLIST_FILE="$allow_file7" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 2 && "$out" == *"changed since it was allowlisted"* ]]; then
+        pass "check_autostart: pinned shadow sudo, content changed → WARNING"
+    else
+        fail "check_autostart: changed pinned sudo should warn, rc=$rc, out: $out"
+    fi
+    printf '%s sha256:nothex\n' "$tmpdir7h/.local/bin/sudo" > "$allow_file7"
+    rc=0
+    out=$(AUTOSTART_HOME="$tmpdir7h" AUTOSTART_ALLOWLIST_FILE="$allow_file7" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"INFO: sudo in user bin dir allowlisted"* ]]; then
+        pass "check_autostart: malformed pin ignored → unpinned INFO"
+    else
+        fail "check_autostart: malformed pin, rc=$rc, out: $out"
+    fi
+    rm -rf "$tmpdir7h"
+    rm -f "$allow_file7"
+
     # Sub-test N: absolute .desktop Exec= path under $HOME/bin or
     # $HOME/.local/bin must NOT be flagged — regression guard for a real
     # false positive (Conky's LXQt-generated autostart entry pointing at a

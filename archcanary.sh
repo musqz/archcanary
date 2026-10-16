@@ -121,6 +121,32 @@ trap 'rm -f "${CLEANUP_FILES[@]}"; exit 1' INT TERM
 # privilege boundary. Env var overrides match the ones the scan-time parsing
 # below already uses, so both point at the same file.
 # ---------------------------------------------------------------------------
+# Privilege commands and user bin dirs (relative to $HOME) that check_autostart
+# scans for shadowing shims; _shadow_pin uses the same lists.
+_SHADOW_CMDS=(sudo su doas pkexec run0)
+_SHADOW_BIN_DIRS=(.local/bin bin .npm-global/bin .cargo/bin go/bin .bun/bin)
+
+# Prints "sha256:<hex>" for a user-owned regular file named like a privilege
+# command in one of _SHADOW_BIN_DIRS, else nothing. Root runs this via
+# --allowlist-add, so it is deliberately narrow: no "..", no symlinks, no
+# root-owned files (never hashes /usr/bin/sudo or anything else outside a home).
+_shadow_pin() {
+    local p="$1" b d c s h
+    [[ "$p" == /* && "$p" != *..* && -f "$p" && ! -L "$p" ]] || return 0
+    [[ "$(stat -c %u -- "$p" 2>/dev/null)" != 0 ]] || return 0
+    b="${p##*/}"; d="${p%/*}"
+    for c in "${_SHADOW_CMDS[@]}"; do
+        [[ "$b" == "$c" ]] || continue
+        for s in "${_SHADOW_BIN_DIRS[@]}"; do
+            [[ "$d" == */"$s" ]] || continue
+            h=$(sha256sum -- "$p" 2>/dev/null) || return 0
+            printf 'sha256:%s' "${h%% *}"
+            return 0
+        done
+    done
+    return 0
+}
+
 _allowlist_path() {
     case "$1" in
         dkms)      echo "${DKMS_ALLOWLIST_FILE:-/etc/archcanary/dkms_allowlist.conf}" ;;
@@ -189,8 +215,10 @@ _allowlist_cli() {
             echo "already allowlisted: $value"
             exit 0
         fi
-        printf '%s\n' "$value" >> "$path"
-        echo "added: $value"
+        local pin=""
+        [[ "$name" == autostart ]] && pin=$(_shadow_pin "$value")
+        printf '%s\n' "$value${pin:+ $pin}" >> "$path"
+        echo "added: $value${pin:+ ($pin)}"
         exit 0
     else
         if ! _allowlist_values "$path" | grep -qxF "$value"; then
@@ -1624,16 +1652,18 @@ unset _bpf_cfg _bl
 # AppImage/Flatpak export) and shouldn't trip the XDG autostart check.
 # Override the path with AUTOSTART_ALLOWLIST_FILE (used by the tests).
 AUTOSTART_ALLOWLIST="${AUTOSTART_ALLOWLIST:-}"
+declare -A AUTOSTART_PIN=()
 _auto_cfg="${AUTOSTART_ALLOWLIST_FILE:-/etc/archcanary/autostart_allowlist.conf}"
 if [[ -r "$_auto_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
     while IFS= read -r _al || [[ -n "$_al" ]]; do
         _al="${_al%%#*}"       # strip inline comments
-        read -r _al _ <<< "$_al"  # take first token only (ignores trailing descriptions)
+        read -r _al _pin _ <<< "$_al"  # first token is the entry; an optional second sha256:<hex> pins it
         [[ -z "$_al" ]] && continue
+        [[ "$_pin" =~ ^sha256:[0-9a-f]{64}$ ]] && AUTOSTART_PIN["$_al"]="${_pin#sha256:}"
         AUTOSTART_ALLOWLIST="${AUTOSTART_ALLOWLIST:+${AUTOSTART_ALLOWLIST}:}${_al}"
     done < "$_auto_cfg"
 fi
-unset _auto_cfg _al
+unset _auto_cfg _al _pin
 
 # Merge the package allowlist into PACKAGE_ALLOWLIST (colon-separated; the env
 # var, if set, takes precedence and is appended to). Same rationale as DKMS/
@@ -3910,14 +3940,14 @@ check_autostart() {
     # A sudo/su/doas/pkexec/run0 in a user bin dir can shadow the system one
     # (fake-sudo password grabber). A symlink to the same-named system
     # command (e.g. sudo -> /usr/bin/sudo-rs) is fine.
-    local _bd _bn _bp _bt _bseen=$'\n'
-    for _bd in "$home_dir/.local/bin" "$home_dir/bin" "$home_dir/.npm-global/bin" \
-               "$home_dir/.cargo/bin" "$home_dir/go/bin" "$home_dir/.bun/bin"; do
+    local _bd _bs _bn _bp _bt _bh _bseen=$'\n'
+    for _bs in "${_SHADOW_BIN_DIRS[@]}"; do
+        _bd="$home_dir/$_bs"
         # ~/bin is often a symlink to ~/.local/bin; scan each real dir once
         _bt=$(readlink -f -- "$_bd" 2>/dev/null) || _bt="$_bd"
         [[ "$_bseen" == *$'\n'"$_bt"$'\n'* ]] && continue
         _bseen+="$_bt"$'\n'
-        for _bn in sudo su doas pkexec run0; do
+        for _bn in "${_SHADOW_CMDS[@]}"; do
             _bp="$_bd/$_bn"
             [[ -f "$_bp" && -x "$_bp" ]] || continue
             if [[ -L "$_bp" ]]; then
@@ -3926,7 +3956,20 @@ check_autostart() {
                    ( "${_bt##*/}" == "$_bn" || "${_bt##*/}" == "$_bn"-* ) ]] && continue
             fi
             if _allowlist_contains "$_bp" _autostart_allow; then
-                echo "  INFO: $_bn in user bin dir allowlisted: $_bp"
+                _bh=""
+                if [[ -n "${AUTOSTART_PIN[$_bp]:-}" ]]; then
+                    _bh=$(sha256sum -- "$_bp" 2>/dev/null) || _bh=""
+                    _bh="${_bh%% *}"
+                fi
+                if [[ -n "${AUTOSTART_PIN[$_bp]:-}" && "$_bh" != "${AUTOSTART_PIN[$_bp]}" ]]; then
+                    echo "  WARNING: $_bp changed since it was allowlisted (sha256 differs from the pin)"
+                    echo "    If you didn't change it, remove it. If you did, allowlist it again:"
+                    echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-remove=autostart:$_bp"
+                    echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=autostart:$_bp"
+                    found=2
+                else
+                    echo "  INFO: $_bn in user bin dir allowlisted: $_bp"
+                fi
             else
                 echo "  WARNING: $_bp can shadow the system $_bn"
                 if [[ ! "$_bp" =~ ^[A-Za-z0-9/][A-Za-z0-9._@+/-]{0,127}$ ]]; then
