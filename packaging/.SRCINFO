@@ -11,6 +11,7 @@ pkgbase = archcanary
 	optdepends = libnotify: desktop alerts on infected scan result
 	optdepends = polkit: privileged remediation commands (allowlist edits, audit-rules/lynis-config writes)
 	optdepends = bpf: bpftool for eBPF rootkit detection
+	optdepends = audit: auditd records which AUR builds ran, appended to last-scan.log by the system scan service
 	optdepends = yay: AUR helper with Lua hook support
 	optdepends = paru: AUR helper with PreBuildCommand hook support
 	optdepends = bash-completion: tab-completion for archcanary/canary flags
