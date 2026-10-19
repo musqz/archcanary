@@ -305,7 +305,7 @@ does and how it's wired in:
 | [libnotify](https://gitlab.gnome.org/GNOME/libnotify) | Optional |
 | [polkit](https://gitlab.freedesktop.org/polkit/polkit) / pkexec | Optional (privileged remediation) + `--system` install |
 | [lynis](https://cisofy.com/lynis/) | Optional |
-| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional |
+| [audit](https://people.redhat.com/sgrubb/audit/) / auditd | Optional (the system scan service logs which AUR builds ran into `last-scan.log`; needs `sudo systemctl enable --now auditd`) |
 
 Started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check) — see [Attribution](#attribution) below.
 
