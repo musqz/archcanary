@@ -5141,7 +5141,7 @@ if [[ $EXIT_CODE -eq 2 ]] && ! $NO_NOTIFY; then
                     [[ "${_SUMMARY_CODES[$_i]}" -eq 2 ]] && _notify_title="archcanary: malicious package detected" ;;
             esac
         done
-        "${_notify_runner[@]}" notify-send -u critical -i dialog-warning \
+        "${_notify_runner[@]}" notify-send -u critical -i archcanary-critical \
             "$_notify_title" \
             "Indicators found. Open Archcanary to review."
         unset _notify_runner

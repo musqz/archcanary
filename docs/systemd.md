@@ -121,7 +121,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/archcanary/last-scan.log && notify-send -u critical -i dialog-warning "archcanary: malicious package detected" "Open Archcanary to review." || true'
+ExecStart=/bin/sh -c 'grep -q "RESULT: INFECTED" /var/lib/archcanary/last-scan.log && notify-send -u critical -i archcanary-critical "archcanary: malicious package detected" "Open Archcanary to review." || true'
 ```
 
 Enable and start:

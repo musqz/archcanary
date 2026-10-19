@@ -47,6 +47,12 @@ package() {
   install -Dm644 configs/archcanary.desktop \
     "$pkgdir/usr/share/applications/archcanary.desktop"
 
+  # Icons (app + notification variants)
+  install -dm755 "$pkgdir/usr/share/icons"
+  cp -r configs/icons/hicolor "$pkgdir/usr/share/icons/"
+  find "$pkgdir/usr/share/icons" -type d -exec chmod 755 {} +
+  find "$pkgdir/usr/share/icons" -type f -exec chmod 644 {} +
+
   # Man page
   install -Dm644 man/archcanary.1 "$pkgdir/usr/share/man/man1/archcanary.1"
 
