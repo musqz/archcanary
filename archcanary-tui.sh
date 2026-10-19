@@ -96,7 +96,7 @@ _status_glyph() {
 
 _header() {
     clear
-    printf '%s%s🐤 archcanary%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+    printf '%s%sarchcanary%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
     printf -- '----------------------------------------------\n'
 }
 

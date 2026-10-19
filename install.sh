@@ -68,6 +68,13 @@ _remove_desktop_entry() {
     fi
 }
 
+_remove_icons() {
+    local icon_dst="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+    find "$icon_dst" -name 'archcanary*.png' -o -name 'archcanary*.svg' 2>/dev/null | xargs -r rm -f || true
+    echo "  removed:   $icon_dst/*/apps/archcanary*"
+    command -v gtk-update-icon-cache &>/dev/null && gtk-update-icon-cache -q -t "$icon_dst" 2>/dev/null || true
+}
+
 # Determine install dir: prefer the XDG ~/.local/bin, fall back to ~/bin
 DEFAULT_BIN=""
 if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
@@ -127,6 +134,7 @@ if $UNINSTALL; then
     fi
 
     _remove_desktop_entry
+    _remove_icons
 
     if [[ -d "$CONFIG_DIR" ]]; then
         echo "  kept:    $CONFIG_DIR (user config — remove manually if desired)"
@@ -241,6 +249,14 @@ DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$DESKTOP_DIR"
 cp "$REPO_DIR/configs/archcanary.desktop" "$DESKTOP_DIR/archcanary.desktop"
 echo "  installed: $DESKTOP_DIR/archcanary.desktop"
+
+# Install icons (notification icons: archcanary, -warning, -critical)
+ICON_DST="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+(cd "$REPO_DIR/configs/icons/hicolor" && find . -type f) | while read -r f; do
+    install -Dm644 "$REPO_DIR/configs/icons/hicolor/$f" "$ICON_DST/$f"
+done
+command -v gtk-update-icon-cache &>/dev/null && gtk-update-icon-cache -q -t "$ICON_DST" 2>/dev/null || true
+echo "  installed: $ICON_DST/*/apps/archcanary*"
 
 # Seed config dir (only if files don't already exist)
 for f in package_list.txt malicious_npm_packages.txt; do
