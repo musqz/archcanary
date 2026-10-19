@@ -2,7 +2,7 @@
   <img src="configs/icons/hicolor/256x256/apps/archcanary.png" alt="archcanary logo" width="160">
 </p>
 
-# archcanary
+<h1 align="center">archcanary</h1>
 
 [![Release](https://img.shields.io/github/v/release/musqz/archcanary?sort=semver)](https://github.com/musqz/archcanary/releases)
 
