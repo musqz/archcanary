@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Changed: `archcanary-tui` sets the terminal window title to `archcanary` instead of leaving it at the shell name (`/bin/bash`).
+
 ## v0.1.40 (2026-10-19)
 
 - Added: orange `archcanary-warning` and red `archcanary-critical` icon variants beside the yellow `archcanary` icon, in `configs/icons/hicolor/` (SVG plus 16–512 px PNG, and `archcanary.ico`). `install.sh` and the package install them under the `hicolor` icon theme.
