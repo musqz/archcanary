@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added: orange `archcanary-warning` and red `archcanary-critical` icon variants beside the yellow `archcanary` icon, in `configs/icons/hicolor/` (SVG plus 16–512 px PNG, and `archcanary.ico`). `install.sh` and the package install them under the `hicolor` icon theme.
+- Changed: the exit-2 desktop alert (`archcanary.sh` and `archcanary-notify.service`) uses `archcanary-critical` instead of `dialog-warning`. The `.desktop` entry uses `Icon=archcanary` instead of `security-high`.
+- Changed: `archcanary-tui` header no longer prints the 🐤 emoji. The README shows the logo above the title.
 - Added: check [10] flags a `sudo`, `su`, `doas`, `pkexec` or `run0` in `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `~/.cargo/bin`, `~/go/bin` or `~/.bun/bin`, user-writable dirs that can shadow the system command (fake-sudo password grabber). Symlinks into `/usr` are skipped; allowlist an intended wrapper by its full path (`--allowlist-add` pins its sha256; a changed file warns again).
 
 ## v0.1.39 (2026-10-16)
