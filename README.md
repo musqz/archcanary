@@ -1,4 +1,4 @@
-<p align="center">
+<p align="left">
   <img src="configs/icons/ArchcanaryLogo.png" alt="archcanary logo" width="160">
 </p>
 
