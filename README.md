@@ -2,15 +2,15 @@
   <img src="configs/icons/ArchcanaryLogo.png" alt="archcanary logo" width="160">
 </p>
 
-[![Release](https://img.shields.io/github/v/release/musqz/archcanary?sort=semver)](https://github.com/musqz/archcanary/releases)
+[![Release](https://img.shields.io/gitea/v/release/linux-bird/archcanary-aur?gitea_url=https://codeberg.org&sort=semver)](https://codeberg.org/linux-bird/archcanary-aur/releases)
 [![AUR](https://img.shields.io/aur/version/archcanary)](https://aur.archlinux.org/packages/archcanary)
-[![License](https://img.shields.io/github/license/musqz/archcanary)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
 
 > Layered security scanner for Arch Linux — detects malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering, and more. Available via the AUR (`archcanary`) or from source.
 >
 > Developed on Mabox Linux (Arch-based, Openbox) and tested through months of real-world use by the EndeavourOS community — see the forum thread below. Also runs fine on Manjaro and other Arch derivatives.
 >
-> If you run into anything, please open an [issue](https://github.com/musqz/archcanary/issues) or start a [discussion](https://github.com/musqz/archcanary/discussions).
+> If you run into anything, please open an [issue](https://codeberg.org/linux-bird/archcanary-aur/issues).
 >
 > Follow active topic on [endeavouros forum](https://forum.endeavouros.com/t/archcanary-a-layered-security-scanner-for-arch-based-linux-beta-looking-for-testers/80837) about archcanary.
 
