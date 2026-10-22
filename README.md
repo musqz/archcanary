@@ -1,3 +1,6 @@
+> **Moved to Codeberg:** https://codeberg.org/linux-bird/archcanary-aur
+> This repo is archived. Open issues and PRs there. The AUR package `archcanary` is unchanged.
+
 <p align="left">
   <img src="configs/icons/ArchcanaryLogo.png" alt="archcanary logo" width="160">
 </p>
