@@ -21,6 +21,6 @@ pkgbase = archcanary
 	backup = etc/archcanary/autostart_allowlist.conf
 	backup = etc/archcanary/package_allowlist.conf
 	source = archcanary-0.1.41.tar.gz::https://codeberg.org/linux-bird/archcanary-aur/archive/v0.1.41.tar.gz
-	sha256sums = SKIP
+	sha256sums = 1a86eebe6ab32dd34bc9a18cfebf4a8eba13485c3438586a0ab6781c4053faf9
 
 pkgname = archcanary

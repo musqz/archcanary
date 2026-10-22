@@ -23,7 +23,7 @@ backup=('etc/archcanary/dkms_allowlist.conf'
         'etc/archcanary/package_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('1a86eebe6ab32dd34bc9a18cfebf4a8eba13485c3438586a0ab6781c4053faf9')
 
 package() {
   cd "$srcdir/archcanary-aur"
