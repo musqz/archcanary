@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## v0.1.41 (2026-10-22)
+
+- Changed: the project moved to `codeberg.org/linux-bird/archcanary-aur`. `--refresh` pulls the threat lists from Codeberg, and the package source, man page, polkit policy and issue links point there. Installs from 0.1.40 and older keep fetching lists from the old GitHub repo until updated.
 - Changed: the package lists `audit` as an optional dependency, and the README explains it feeds the `aur_build` event trail in `last-scan.log`.
 - Changed: `archcanary-tui` sets the terminal window title to `archcanary` instead of leaving it at the shell name (`/bin/bash`).
 
