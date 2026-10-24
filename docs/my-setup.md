@@ -9,7 +9,7 @@ Full overview of how this tool is deployed and how the pieces connect.
 
 | Component | Package / Source | Purpose |
 |-----------|-----------------|---------|
-| `archcanary` | [linux-bird/archcanary-aur](https://codeberg.org/linux-bird/archcanary-aur) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
+| `archcanary` | [musqz/archcanary](https://github.com/musqz/archcanary) (started from [lenucksi/aur-malware-check](https://github.com/lenucksi/aur-malware-check)) | Main scanner — known-bad packages, pacman logs, systemd persistence (incl. drop-ins + timers), eBPF rootkit, npm/bun/yarn/pnpm cache, PKGBUILD obfuscation (incl. base64/eval/printf/varsplit), loaded-eBPF enumeration (`bpftool`), `ld.so.preload` injection, XDG autostart + shell RC persistence, kernel module / DKMS audit. Prints a per-check summary table at the end of every scan. |
 | `yay` 13.0 `init.lua` | `~/.config/yay/init.lua` | yay 13.0 Lua hooks — an offline layer that runs on every build: upgrade-age warning (`UpgradeSelect`), malicious-pattern block (`AURPostDownload`), and AUR install logging (`PostInstall`) |
 | `polkit` / `pkexec` | official repos | Privilege escalation for root-only remediation commands (allowlist edits, audit-rules/lynis-config writes) via `lib/archcanary-root-helper` |
 | `libnotify` | official repos | Provides `notify-send` — the desktop notification on exit code 2 |
@@ -192,17 +192,17 @@ See [systemd.md](systemd.md) for the full service and timer contents.
 
 ```bash
 # 1. Clone the fork
-git clone https://codeberg.org/linux-bird/archcanary-aur.git ~/Codeberg/archcanary
+git clone https://github.com/musqz/archcanary.git ~/Github/archcanary
 
 # 2. Install dependencies (bpf provides bpftool for --check-bpftool)
 sudo pacman -S libnotify bpf polkit
 
 # 3. Run install script (installs to ~/.local/bin by default)
-bash ~/Codeberg/archcanary/install.sh
+bash ~/Github/archcanary/install.sh
 
 # Also install root helper + polkit policy (enables eBPF/kmod checks +
 # pkexec-based remediation commands)
-bash ~/Codeberg/archcanary/install.sh --system
+bash ~/Github/archcanary/install.sh --system
 
 # 4. Run a first scan with package list refresh
 archcanary --refresh --full

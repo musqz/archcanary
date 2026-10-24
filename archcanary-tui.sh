@@ -146,7 +146,7 @@ _about() {
     archcanary --version 2>/dev/null || echo "unknown"
     echo
     echo "Layered security scanner for Arch Linux."
-    echo "https://codeberg.org/linux-bird/archcanary-aur"
+    echo "https://github.com/musqz/archcanary"
     _pause
 }
 

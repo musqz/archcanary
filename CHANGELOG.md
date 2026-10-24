@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changed: the project is back on `github.com/musqz/archcanary`. `--refresh` pulls the threat lists from GitHub, and the package source, man page, polkit policy and issue links point there.
+
 ## v0.1.41 (2026-10-22)
 
 - Changed: the project moved to `codeberg.org/linux-bird/archcanary-aur`. `--refresh` pulls the threat lists from Codeberg, and the package source, man page, polkit policy and issue links point there. Installs from 0.1.40 and older keep fetching lists from the old GitHub repo until updated.

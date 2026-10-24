@@ -12,7 +12,7 @@ body:
 
         Before submitting, please check the package isn't already covered:
         `grep -rF 'package-name' lists/` in the repo, or just search
-        `lists/` on Codeberg.
+        `lists/` on GitHub.
 
   - type: input
     id: package-name
