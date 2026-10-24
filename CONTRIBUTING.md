@@ -13,7 +13,7 @@ to every archcanary user automatically on their next `--refresh`, annotated
 
 ### 1. Open an issue (no git knowledge needed)
 
-Use the [Report a package](https://github.com/musqz/archcanary/issues/new?template=report-package.yml)
+Use the [Report a package](https://codeberg.org/linux-bird/archcanary-aur/issues/new/choose)
 form. Fill in the package name and a link to whatever makes you believe
 it's malicious or suspicious. That's it — someone will verify it and add it
 to the list if it checks out.
@@ -60,8 +60,7 @@ complementary, not alternatives.
 ## Other contributions
 
 Bug reports, feature ideas, and code PRs are welcome too — open an
-[issue](https://github.com/musqz/archcanary/issues) or
-[discussion](https://github.com/musqz/archcanary/discussions) first for
+[issue](https://codeberg.org/linux-bird/archcanary-aur/issues) first for
 anything non-trivial, so we can agree on the approach before you put work
 into it.
 For code changes: run `bash tests/run_matching_tests.sh` before opening a

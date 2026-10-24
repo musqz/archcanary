@@ -5,7 +5,7 @@
 <policyconfig>
 
     <vendor>archcanary</vendor>
-    <vendor_url>https://github.com/musqz/archcanary</vendor_url>
+    <vendor_url>https://codeberg.org/linux-bird/archcanary-aur</vendor_url>
 
     <action id="org.archcanary.root-check">
         <description>Run a privileged AUR malware check</description>

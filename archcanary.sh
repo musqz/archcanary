@@ -60,11 +60,13 @@ START_DATE=${START_DATE:-}
 END_DATE=${END_DATE:-}
 # Pulls the live package list from the official Arch Linux HedgeDoc note.
 LIST_URL="https://md.archlinux.org/s/SxbqukK6IA/download"
-# Supplementary lists — pulled from the repo on --refresh.
-MALICIOUS_NPM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/malicious_npm_packages.txt"
-CHAOS_RAT_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/chaos_rat_packages.txt"
-RUSSIAN_SPAM_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/malicious_russian_spam_packages.txt"
-COMMUNITY_REPORTS_LIST_URL="https://raw.githubusercontent.com/musqz/archcanary/master/lists/community_reports.txt"
+# Project repo. Supplementary lists are pulled from its raw files on --refresh.
+ARCHCANARY_REPO_URL="https://codeberg.org/linux-bird/archcanary-aur"
+ARCHCANARY_RAW_URL="$ARCHCANARY_REPO_URL/raw/branch/master"
+MALICIOUS_NPM_LIST_URL="$ARCHCANARY_RAW_URL/lists/malicious_npm_packages.txt"
+CHAOS_RAT_LIST_URL="$ARCHCANARY_RAW_URL/lists/chaos_rat_packages.txt"
+RUSSIAN_SPAM_LIST_URL="$ARCHCANARY_RAW_URL/lists/malicious_russian_spam_packages.txt"
+COMMUNITY_REPORTS_LIST_URL="$ARCHCANARY_RAW_URL/lists/community_reports.txt"
 
 CHECK_SYSTEMD=false
 CHECK_EBPF=false
@@ -1068,8 +1070,8 @@ run_doctor() {
             _lua_fix="cp $luasrc $yay_init_lua"
             _lua_source_hint="$luasrc"
         else
-            _lua_fix="grab configs/yay-init.lua from https://github.com/musqz/archcanary, then cp it to $yay_init_lua"
-            _lua_source_hint="configs/yay-init.lua (https://github.com/musqz/archcanary)"
+            _lua_fix="grab configs/yay-init.lua from $ARCHCANARY_REPO_URL, then cp it to $yay_init_lua"
+            _lua_source_hint="configs/yay-init.lua ($ARCHCANARY_REPO_URL)"
         fi
         _opt_dep "lynis (system hardening auditor)" lynis lynis "post-install hardening audit"
         if [[ "$(_marker "$_ARCHCANARY_LUA_MARKER_CURRENT" "$yay_init_lua")" -eq 0 ]]; then
@@ -2624,7 +2626,7 @@ check_bpftool() {
                     echo "  Unknown loaders: $unknown_str"
                     echo "  Recognize this loader? Mark it known-good:"
                     echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=bpftool:<loader-basename>"
-                    echo "  If this looks like a false positive, report it at https://github.com/musqz/archcanary/issues"
+                    echo "  If this looks like a false positive, report it at $ARCHCANARY_REPO_URL/issues"
                     worst_ret=1
                 fi
             fi
@@ -3502,7 +3504,7 @@ check_pkgbuild_caches() {
         echo "  upstream? Your local cache was just stale — safe to delete and re-fetch."
         echo
         echo "  If this holds up, report it so others are protected too:"
-        echo "    archcanary: https://github.com/musqz/archcanary/issues/new?template=report-package.yml"
+        echo "    archcanary: $ARCHCANARY_REPO_URL/issues/new/choose"
         echo "    Arch AUR:   https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/"
     fi
     return $found_count
