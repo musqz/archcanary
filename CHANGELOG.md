@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added: `--search-packages` prints a link to the aur-audit service page when a package is flagged `[aur-audit: black]` or `[aur-audit: red]`.
 - Changed: the project is back on `github.com/musqz/archcanary`. `--refresh` pulls the threat lists from GitHub, and the package source, man page, polkit policy and issue links point there.
 
 ## v0.1.41 (2026-10-22)
