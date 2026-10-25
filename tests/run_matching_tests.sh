@@ -236,6 +236,35 @@ test_cli_flag() {
 # ---------------------------------------------------------------------------
 # Test 7: --malicious-npm-list CLI flag integration
 # ---------------------------------------------------------------------------
+test_search_packages_audit_link() {
+    local dir out
+    dir=$(mktemp -d)
+    echo "auditred" > "$dir/red.txt"
+    echo "plainlisted" > "$dir/list.txt"
+    local -a env_args=(
+        PACKAGE_LIST_FILE="$dir/list.txt"
+        AUR_AUDIT_BLACK_LIST="$SCRIPT_DIR/fake_package_lists/empty.txt"
+        AUR_AUDIT_RED_LIST="$dir/red.txt"
+    )
+    local -a flags=(
+        --chaos-rat-list="$SCRIPT_DIR/fake_package_lists/empty.txt"
+        --russian-spam-list="$SCRIPT_DIR/fake_package_lists/empty.txt"
+    )
+    out=$(env "${env_args[@]}" "$REPO_DIR/archcanary.sh" "${flags[@]}" --search-packages=auditred 2>&1 || true)
+    if [[ "$out" == *"[aur-audit: red]"* && "$out" == *"wtako.net/services/aur-audit"* ]]; then
+        pass "search_packages: aur-audit hit prints service link"
+    else
+        fail "search_packages: aur-audit hit should print service link, out: $out"
+    fi
+    out=$(env "${env_args[@]}" "$REPO_DIR/archcanary.sh" "${flags[@]}" --search-packages=plainlisted,nothere 2>&1 || true)
+    if [[ "$out" == *"FLAGGED: plainlisted"* && "$out" != *"wtako.net"* ]]; then
+        pass "search_packages: non-aur-audit hit prints no service link"
+    else
+        fail "search_packages: non-aur-audit hit should not print service link, out: $out"
+    fi
+    rm -rf "$dir"
+}
+
 test_npm_cli_flag() {
     local log_file
     log_file=$(mktemp)
@@ -4485,6 +4514,7 @@ test_cli_flag
 
 $VERBOSE && msg "--- Test 7: npm_cli_flag (--malicious-npm-list) ---"
 test_npm_cli_flag
+test_search_packages_audit_link
 
 $VERBOSE && msg "--- Test 8: actual_list_integrity ---"
 test_actual_list_integrity

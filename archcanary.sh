@@ -4713,7 +4713,7 @@ done
 # suggested removal command.
 # ---------------------------------------------------------------------------
 _search_packages_cli() {
-    local input="$1" pkg tag
+    local input="$1" pkg tag audit_hit=false
     local -a names=() hits=()
     local -A seen=()
     IFS=',' read -ra names <<< "$input"
@@ -4728,8 +4728,10 @@ _search_packages_cli() {
                 tag="CHAOS RAT campaign, 2025-07"
             elif [[ -v AUR_AUDIT_BLACK_LOOKUP["$pkg"] ]]; then
                 tag="aur-audit: black"
+                audit_hit=true
             elif [[ -v AUR_AUDIT_RED_LOOKUP["$pkg"] ]]; then
                 tag="aur-audit: red"
+                audit_hit=true
             elif [[ -v COMMUNITY_REPORTS_LOOKUP["$pkg"] ]]; then
                 tag="community report"
             else
@@ -4746,6 +4748,9 @@ _search_packages_cli() {
         echo
         echo "  Suggested removal (review before running):"
         printf '    sudo pacman -Rns -- %s\n' "${hits[*]}"
+        if $audit_hit; then
+            printf '\n  Check the aur-audit verdict: https://wtako.net/services/aur-audit\n'
+        fi
         return 2
     fi
     return 0
