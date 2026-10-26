@@ -232,7 +232,7 @@ _pick_editor() {
 }
 
 _edit_via_get_set() {
-    local title="$1" get_flag="$2" set_flag="$3" tmpfile="$TMP_DIR/edit.txt"
+    local get_flag="$1" set_flag="$2" tmpfile="$TMP_DIR/edit.txt"
     if ! archcanary "$get_flag" > "$tmpfile" 2>"$TMP_DIR/edit.err"; then
         cat "$TMP_DIR/edit.err"
         _pause
@@ -414,8 +414,8 @@ _config_menu() {
         local c
         read -rp "Choice: " c || exit 0
         case "$c" in
-            1) _edit_via_get_set "Audit rules" --audit-rules-get --audit-rules-set ;;
-            2) _edit_via_get_set "Lynis profile" --lynis-config-get --lynis-config-set ;;
+            1) _edit_via_get_set --audit-rules-get --audit-rules-set ;;
+            2) _edit_via_get_set --lynis-config-get --lynis-config-set ;;
             3) _extra_lists_menu ;;
             4) _run "List overlap check" false --check-list-overlap ;;
             0|"") return 0 ;;
