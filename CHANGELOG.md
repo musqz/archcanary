@@ -4,6 +4,8 @@
 
 - Added: `--search-packages` prints a link to the aur-audit service page when a package is flagged `[aur-audit: black]` or `[aur-audit: red]`.
 - Changed: the project is back on `github.com/musqz/archcanary`. `--refresh` pulls the threat lists from GitHub, and the package source, man page, polkit policy and issue links point there.
+- Removed: unused `configs/icons/archcanary.ico` — it was never installed by `install.sh` or the package, despite the v0.1.40 note claiming otherwise.
+- Fix: `archcanary-tui`'s config editor no longer takes an unused title argument.
 
 ## v0.1.41 (2026-10-22)
 
@@ -13,7 +15,7 @@
 
 ## v0.1.40 (2026-10-19)
 
-- Added: orange `archcanary-warning` and red `archcanary-critical` icon variants beside the yellow `archcanary` icon, in `configs/icons/hicolor/` (SVG plus 16–512 px PNG, and `archcanary.ico`). `install.sh` and the package install them under the `hicolor` icon theme.
+- Added: orange `archcanary-warning` and red `archcanary-critical` icon variants beside the yellow `archcanary` icon, in `configs/icons/hicolor/` (SVG plus 16–512 px PNG). `install.sh` and the package install them under the `hicolor` icon theme.
 - Changed: the exit-2 desktop alert (`archcanary.sh` and `archcanary-notify.service`) uses `archcanary-critical` instead of `dialog-warning`. The `.desktop` entry uses `Icon=archcanary` instead of `security-high`.
 - Changed: `archcanary-tui` header no longer prints the 🐤 emoji. The README shows the logo above the title.
 - Added: check [10] flags a `sudo`, `su`, `doas`, `pkexec` or `run0` in `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `~/.cargo/bin`, `~/go/bin` or `~/.bun/bin`, user-writable dirs that can shadow the system command (fake-sudo password grabber). Symlinks into `/usr` are skipped; allowlist an intended wrapper by its full path (`--allowlist-add` pins its sha256; a changed file warns again).
