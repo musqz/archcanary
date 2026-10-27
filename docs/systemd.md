@@ -63,6 +63,16 @@ After=network-online.target
 [Service]
 Type=oneshot
 StateDirectory=archcanary
+NoNewPrivileges=yes
+PrivateTmp=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectClock=yes
+Nice=10
+IOSchedulingClass=idle
 ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
 ```
 
@@ -180,6 +190,14 @@ Description=archcanary system scan (after pacman transaction)
 [Service]
 Type=oneshot
 StateDirectory=archcanary
+NoNewPrivileges=yes
+PrivateTmp=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectClock=yes
 ExecStart=/usr/lib/archcanary/archcanary.sh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
 ```
 
@@ -220,6 +238,16 @@ After=network-online.target
 [Service]
 Type=oneshot
 StateDirectory=archcanary
+NoNewPrivileges=yes
+PrivateTmp=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectClock=yes
+Nice=10
+IOSchedulingClass=idle
 ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --scan-all-homes --no-notify --log-file=/var/lib/archcanary/last-scan-all-homes.log
 ```
 
