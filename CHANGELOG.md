@@ -6,6 +6,8 @@
 - Changed: the project is back on `github.com/musqz/archcanary`. `--refresh` pulls the threat lists from GitHub, and the package source, man page, polkit policy and issue links point there.
 - Removed: unused `configs/icons/archcanary.ico` — it was never installed by `install.sh` or the package, despite the v0.1.40 note claiming otherwise.
 - Fix: `archcanary-tui`'s config editor no longer takes an unused title argument.
+- Changed: the three system scan services set `NoNewPrivileges`, `PrivateTmp`, `LockPersonality`, `RestrictSUIDSGID`, `RestrictRealtime`, `ProtectControlGroups`, `ProtectHostname` and `ProtectClock`. `systemd-analyze security archcanary.service` exposure drops from 9.6 to 8.2. `docs/systemd.md` has the same lines.
+- Changed: `archcanary.service` and `archcanary-scan-all-homes.service` run at `Nice=10` with idle I/O priority.
 
 ## v0.1.41 (2026-10-22)
 

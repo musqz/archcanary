@@ -6,6 +6,16 @@ After=network-online.target
 [Service]
 Type=oneshot
 StateDirectory=archcanary
+NoNewPrivileges=yes
+PrivateTmp=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectClock=yes
+Nice=10
+IOSchedulingClass=idle
 ExecStartPre=/bin/sh -c 'stat -c %%Y /var/lib/archcanary/last-scan.log > /var/lib/archcanary/.prev-epoch 2>/dev/null || echo 0 > /var/lib/archcanary/.prev-epoch'
 ExecStart=/usr/lib/archcanary/archcanary.sh --refresh --check-systemd --check-ebpf --check-bpftool --check-ldso --check-kmod --no-notify --log-file=/var/lib/archcanary/last-scan.log
 ExecStopPost=/bin/sh -c 'epoch=$(cat /var/lib/archcanary/.prev-epoch); [ "$epoch" -gt 0 ] && ausearch -k aur_build -ts $(date -d "@$epoch" +%%x) $(date -d "@$epoch" +"%%H:%%M:%%S") -i 2>/dev/null >> /var/lib/archcanary/last-scan.log || true'
