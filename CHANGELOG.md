@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.42 (2026-10-28)
+
 - Added: `--search-packages` prints a link to the aur-audit service page when a package is flagged `[aur-audit: black]` or `[aur-audit: red]`.
 - Changed: the project is back on `github.com/musqz/archcanary`. `--refresh` pulls the threat lists from GitHub, and the package source, man page, polkit policy and issue links point there.
 - Removed: unused `configs/icons/archcanary.ico` — it was never installed by `install.sh` or the package, despite the v0.1.40 note claiming otherwise.
