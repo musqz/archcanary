@@ -53,7 +53,7 @@ _archcanary() {
 
     local flags="
         --check-systemd --check-ebpf --check-npm-cache --check-bun-cache
-        --check-yarn-cache --check-pnpm-cache --check-pkgbuild --check-bpftool
+        --check-yarn-cache --check-pnpm-cache --check-pkgbuild --pkgbuild-for= --check-bpftool
         --check-ldso --check-autostart --check-kmod --check-lynis
         --check-pkginteg --check-list-overlap --scan-all-homes --scan-user= --search-packages= --full --refresh --no-aur-audit --verbose -v --debug
         --no-notify --no-summary --run-lynis --doctor --version -V --help -h

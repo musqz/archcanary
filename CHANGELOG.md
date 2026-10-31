@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added: `--pkgbuild-for=NAME[,NAME]` scans only the cached build dirs of the named packages. A name with no cached PKGBUILD is reported and exits 1.
 - Added: `--doctor` (user install section) warns when an aur-audit list is over 14 days old or has no `# fetched` header.
 - Fix: the yay hook (`(v18)`) warns once per run when an aur-audit list is over 14 days old. `--refresh` writes a `# fetched <epoch>` header; lists from before this change warn until the next `--refresh`. A deleted list stays silent (opt-out).
 

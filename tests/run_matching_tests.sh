@@ -1162,6 +1162,40 @@ DESK
 }
 
 # ---------------------------------------------------------------------------
+# --pkgbuild-for: name -> cached build dir
+# ---------------------------------------------------------------------------
+test_pkgbuild_for() {
+    local fixtures="$SCRIPT_DIR/fake_pkgbuilds"
+    local cache; cache="$(mktemp -d)"
+    mkdir -p "$cache/clone/base-x" "$cache/foo+bar"
+    printf "pkgname=('libx' 'libx-docs')\n" > "$cache/clone/base-x/PKGBUILD"
+    printf 'pkgname=foo+bar\n' > "$cache/foo+bar/PKGBUILD"
+    local base_args=(--no-notify --no-summary) out rc
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$fixtures" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=pkg-base64 2>&1) || rc=$?
+    [[ $rc -eq 2 ]] && pass "pkgbuild_for: flagged package scanned by name" || fail "pkgbuild_for: pkg-base64 rc=$rc"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$fixtures" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=pkg-clean 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"in 1 PKGBUILD"* ]] && pass "pkgbuild_for: only the named package is scanned" || fail "pkgbuild_for: pkg-clean rc=$rc"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=libx-docs,foo+bar 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"in 2 PKGBUILD"* ]] && pass "pkgbuild_for: split package and '+' name resolved" || fail "pkgbuild_for: split/plus rc=$rc out: $out"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=libx-doc 2>&1) || rc=$?
+    [[ $rc -eq 1 && "$out" == *"no cached PKGBUILD for: libx-doc"* ]] && pass "pkgbuild_for: unresolved name exits 1, no prefix match" || fail "pkgbuild_for: unresolved rc=$rc"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=libx,libx-docs 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"in 1 PKGBUILD"* ]] && pass "pkgbuild_for: two names in one build dir scanned once" || fail "pkgbuild_for: dedup rc=$rc out: $out"
+
+    local bad
+    for bad in 'a;b' ''; do
+        rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" "--pkgbuild-for=$bad" 2>&1) || rc=$?
+        [[ $rc -eq 1 && "$out" == *"needs comma-separated package names"* ]] && pass "pkgbuild_for: bad value '$bad' rejected with exit 1" || fail "pkgbuild_for: bad value '$bad' rc=$rc"
+    done
+    rm -rf "$cache"
+}
+
+# ---------------------------------------------------------------------------
 # Test 12: check_pkgbuild_caches hardened obfuscation patterns
 # ---------------------------------------------------------------------------
 test_pkgbuild_obfuscation() {
@@ -4530,6 +4564,7 @@ test_check_autostart
 
 $VERBOSE && msg "--- Test 12: pkgbuild_obfuscation ---"
 test_pkgbuild_obfuscation
+test_pkgbuild_for
 
 $VERBOSE && msg "--- Test 13: check_kmod ---"
 test_check_kmod
