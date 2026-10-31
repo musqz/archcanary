@@ -987,6 +987,22 @@ run_doctor() {
                 "sudo chown -R $real_user: \"$cfg_dir\"" \
                 "dir is owned by root — --refresh will fail"
         fi
+        # Same 14-day limit and "# fetched" header as configs/yay-init.lua's hook.
+        local _al _fetched _age
+        for _al in "${AUR_AUDIT_BLACK_LIST:-$cfg_dir/aur_audit_black.txt}" "${AUR_AUDIT_RED_LIST:-$cfg_dir/aur_audit_red.txt}"; do
+            [[ -f "$_al" ]] || continue
+            _fetched=$(head -n1 "$_al" | sed -n 's/^# fetched \([0-9][0-9]*\)$/\1/p')
+            if [[ -z $_fetched ]]; then
+                _warn "aur-audit list ($(basename "$_al"))" "archcanary --refresh" "no fetch timestamp — the yay hook treats it as stale"
+                continue
+            fi
+            _age=$(( ($(date +%s) - _fetched) / 86400 ))
+            if (( _age > 14 || _age < 0 )); then
+                _warn "aur-audit list ($(basename "$_al"))" "archcanary --refresh" "last fetched $_age days ago"
+            else
+                _ok "aur-audit list ($(basename "$_al"))" "last fetched $_age days ago"
+            fi
+        done
         # A stale user-level completion file silently shadows a correct
         # system-level one forever: bash's dynamic loader checks the user
         # completions dir first, so it wins even when it's the wrong one.
