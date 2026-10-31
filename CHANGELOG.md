@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changed: app and notification icons (`archcanary`, `-warning`, `-critical`) replaced with dirn's monochrome set (yet-another-monochrome-icon-set, GPL-3.0). The SVG's theme colour is fixed to the tier colour; PNGs 16–512 re-rendered.
+
 ## v0.1.43 (2026-10-31)
 
 - Added: opt-in pacman `PreTransaction` hook (`/usr/lib/archcanary/archcanary.hook` + `alpm-hook`). It scans the cached PKGBUILDs of the AUR packages pacman is about to install, as the invoking user, and only warns. Enable: `sudo install -Dm644 /usr/lib/archcanary/archcanary.hook /etc/pacman.d/hooks/archcanary.hook`. `--doctor` lists it.
