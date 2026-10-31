@@ -83,6 +83,11 @@ package() {
   install -Dm644 configs/yay-init.lua \
     "$pkgdir/usr/lib/archcanary/yay-init.lua"
 
+  # pacman PreTransaction hook — opt-in template + script, never placed in
+  # /usr/share/libalpm/hooks (copy to /etc/pacman.d/hooks yourself; see --doctor).
+  install -Dm755 lib/archcanary-alpm-hook "$pkgdir/usr/lib/archcanary/alpm-hook"
+  install -Dm644 configs/archcanary.hook  "$pkgdir/usr/lib/archcanary/archcanary.hook"
+
   # Polkit policy (authorises root-helper via pkexec)
   install -Dm644 configs/org.archcanary.policy \
     "$pkgdir/usr/share/polkit-1/actions/org.archcanary.policy"

@@ -322,6 +322,12 @@ not the aur-audit black/red lookup, so yay's integration is the more
 complete of the two. Other AUR helpers can still be scanned manually via
 `--check-pkgbuild`, just without an automatic pre-build hook.
 
+Other helpers (yay and paru users already get a pre-build scan, so they do not need this): an opt-in pacman `PreTransaction` hook scans the cached PKGBUILDs of the AUR packages about to be installed. It runs after `build()`, only warns, needs the system install, and finds your cache through `sudo` or `pkexec` (not `doas`/`su`):
+
+```bash
+sudo install -Dm644 /usr/lib/archcanary/archcanary.hook /etc/pacman.d/hooks/archcanary.hook
+```
+
 See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
 (at-a-glance table included).
 

@@ -62,6 +62,10 @@ install-components)
     # ~/.config/yay/init.lua automatically (per-user path, hooks are opt-in).
     install -m 644 "$REPO_DIR/configs/yay-init.lua" \
         "$SYSTEM_LIB/yay-init.lua"
+    # pacman PreTransaction hook — opt-in template + script (cp to
+    # /etc/pacman.d/hooks yourself, see --doctor).
+    install -m 755 "$REPO_DIR/lib/archcanary-alpm-hook" "$SYSTEM_LIB/alpm-hook"
+    install -m 644 "$REPO_DIR/configs/archcanary.hook" "$SYSTEM_LIB/archcanary.hook"
     # auditd rules template — fallback for --audit-rules-get when no rules are
     # actually seeded (auditd absent at install time). PKGBUILD also ships this
     # to the same path so both install routes satisfy archcanary.sh:350.
@@ -206,6 +210,7 @@ EOF
     echo "  installed: $SYSTEM_LIB/lynis-custom.prf (template for /etc/lynis/custom.prf)"
     echo "  installed: $SYSTEM_LIB/audit-rules.conf (template for --audit-rules-get)"
     echo "  installed: $SYSTEM_LIB/yay-init.lua (template — cp to ~/.config/yay/init.lua yourself to enable, see --doctor)"
+    echo "  installed: $SYSTEM_LIB/alpm-hook + archcanary.hook (pacman hook template — opt-in, see --doctor)"
     echo "  installed: $SYSTEM_LIB/{package_list,malicious_npm_packages,chaos_rat_packages,malicious_russian_spam_packages,community_reports}.txt"
     echo "  installed: /etc/archcanary/dkms_allowlist.conf (system-wide DKMS allowlist for the root scan)"
     echo "  installed: /etc/archcanary/systemd_allowlist.conf (system-wide systemd allowlist for the persistence check)"
@@ -288,6 +293,8 @@ uninstall-components)
 
     rm -rf /usr/lib/archcanary
     echo "  removed: /usr/lib/archcanary"
+    rm -f /etc/pacman.d/hooks/archcanary.hook
+    echo "  removed: /etc/pacman.d/hooks/archcanary.hook (if present)"
     echo "  kept:    /etc/archcanary (user config — remove manually if desired)"
     rm -f /usr/share/polkit-1/actions/org.archcanary.policy
     echo "  removed: /usr/share/polkit-1/actions/org.archcanary.policy"

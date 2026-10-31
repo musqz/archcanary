@@ -48,6 +48,7 @@ flowchart TD
 |-------|------|---------|:---------:|---------|
 | 1 · At install | yay `init.lua` hooks | Every `yay` install/upgrade | ✓ | Known campaign signatures, stale-rewrite upgrades, aur-audit black/red (offline + live feed) |
 | 1 · At install | paru `PreBuildCommand` hook | Every `paru` build | ✓ | Same obfuscation patterns as yay's hook (via `archcanary --check-pkgbuild`, scoped to that package) — no aur-audit lookup yet |
+| 1 · At install | pacman `PreTransaction` hook (opt-in) | Every pacman install/upgrade, any helper | opt-in | Same PKGBUILD patterns on the cached PKGBUILDs of the AUR packages being installed — fires after `build()`, warn-only |
 | 2 · After / always | `archcanary` | systemd timer (weekly + boot) + `.path` (after each pacman tx) | ✓ root | Known-bad packages, systemd/eBPF/npm persistence, rootkit traces |
 | 2 · After / always | `archcanary-user` | systemd `--user` timer (weekly + boot) | opt-in, per user | npm/bun/yarn/pnpm/pkgbuild caches, autostart — for whoever enables it |
 | 2 · After / always | `archcanary-scan-all-homes` | systemd timer, weekly | opt-in, off by default | Same as above, for every real local user — not just whoever opted in |

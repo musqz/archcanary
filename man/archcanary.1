@@ -378,6 +378,12 @@ Known-bad AUR package list (infostealer + eBPF rootkit campaign).
 .I ~/.config/archcanary/malicious_npm_packages.txt
 Malicious npm package name list.
 .TP
+.I /usr/lib/archcanary/archcanary.hook
+Opt-in pacman PreTransaction hook template. Copy it to
+.I /etc/pacman.d/hooks/
+to scan the cached PKGBUILDs of AUR packages about to be installed
+(warn-only, runs after build(); needs sudo or pkexec to find the user's cache).
+.TP
 .I /var/lib/archcanary/last-scan.log
 Last system scan result.
 .TP

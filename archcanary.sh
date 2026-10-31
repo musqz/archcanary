@@ -1132,6 +1132,14 @@ run_doctor() {
                 _opt "$_paru_label" "" "path: $paru_conf"
             fi
         fi
+        # Works with any helper, but fires after build() (PreTransaction), unlike the yay/paru hooks.
+        local _alpm_src="$repo_dir/configs/archcanary.hook"
+        [[ -f $_alpm_src ]] || _alpm_src="/usr/lib/archcanary/archcanary.hook"
+        local _alpm_present=1
+        [[ -e /etc/pacman.d/hooks/archcanary.hook || -e /usr/share/libalpm/hooks/archcanary.hook ]] && _alpm_present=0
+        _opt_item "pacman PreTransaction hook (warn-only, after build; for helpers other than yay/paru)" "$_alpm_present" \
+            "sudo install -Dm644 $_alpm_src /etc/pacman.d/hooks/archcanary.hook  # needs the system install (/usr/lib/archcanary/alpm-hook)" \
+            "path: /etc/pacman.d/hooks/archcanary.hook"
         printf '\n'
     fi
 
