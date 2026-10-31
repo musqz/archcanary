@@ -3,9 +3,12 @@
 </p>
 
 
-[![Release](https://img.shields.io/github/v/release/musqz/archcanary?sort=semver)](https://github.com/musqz/archcanary/releases)
-[![AUR](https://img.shields.io/aur/version/archcanary)](https://aur.archlinux.org/packages/archcanary)
-[![License](https://img.shields.io/github/license/musqz/archcanary)](LICENSE)
+<p align="center">
+    <a href="https://github.com/musqz/archcanary/releases"><img src="https://img.shields.io/github/v/release/musqz/archcanary?sort=semver" 
+  alt="Release"></a>
+    <a href="https://aur.archlinux.org/packages/archcanary"><img src="https://img.shields.io/aur/version/archcanary" alt="AUR"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/musqz/archcanary" alt="License"></a>
+  </p>
 
 
 > Layered security scanner for Arch Linux — detects malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering, and more. Available via the AUR (`archcanary`) or from source.
