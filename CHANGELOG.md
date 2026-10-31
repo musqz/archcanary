@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Changed: app and notification icons (`archcanary`, `-warning`, `-critical`) replaced with dirn's monochrome set (yet-another-monochrome-icon-set, GPL-3.0). The SVG's theme colour is fixed to the tier colour; PNGs 16–512 re-rendered.
+- Changed: app and notification icons (`archcanary`, `-warning`, `-critical`) replaced with dirn's monochrome set (yet-another-monochrome-icon-set, GPL-3.0). Tier colour is set on the path (launchers ignore the CSS `currentColor`) over a dark rounded background so the icons stay visible on light panels; PNGs 16–512 re-rendered.
 
 ## v0.1.43 (2026-10-31)
 
