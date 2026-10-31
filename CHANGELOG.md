@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix: the yay hook (`(v18)`) warns once per run when an aur-audit list is over 14 days old. `--refresh` writes a `# fetched <epoch>` header; lists from before this change warn until the next `--refresh`. A deleted list stays silent (opt-out).
+
 ## v0.1.42 (2026-10-28)
 
 - Added: `--search-packages` prints a link to the aur-audit service page when a package is flagged `[aur-audit: black]` or `[aur-audit: red]`.
