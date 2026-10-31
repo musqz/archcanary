@@ -8,7 +8,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v17).
+-- yay 13.0 Lua hooks for the AUR security stack (v18).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -616,6 +616,17 @@ local function _archcanary_load_pkg_set(path)
   return set
 end
 
+-- Epoch from the "# fetched <epoch>" header --refresh writes into each aur-audit
+-- list; nil when the file is missing or predates the header.
+local _archcanary_stale_warned = false
+local function _archcanary_list_fetched(path)
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local first = f:read("*l")
+  f:close()
+  return first and tonumber(first:match("^# fetched (%d+)"))
+end
+
 -- Same "pkgname value" companion-file shape as aur_audit_red_dates.txt and
 -- aur_audit_red_versions.txt -> name-to-value map. One loader for both, since
 -- the format is identical.
@@ -794,6 +805,25 @@ yay.create_autocmd("AURPostDownload", {
     local red          = _archcanary_load_pkg_set(dir .. "/aur_audit_red.txt")
     local red_versions = _archcanary_load_pkg_map(dir .. "/aur_audit_red_versions.txt")
     local red_dates    = _archcanary_load_pkg_map(dir .. "/aur_audit_red_dates.txt")
+
+    -- Warn-only, once per run, for lists that exist but are old or unstamped.
+    -- A missing file is the documented opt-out, so it stays silent.
+    if not _archcanary_stale_warned then
+      for _, name in ipairs({ "aur_audit_black.txt", "aur_audit_red.txt" }) do
+        local path = dir .. "/" .. name
+        local fh = io.open(path, "r")
+        if fh then
+          fh:close()
+          local fetched = _archcanary_list_fetched(path)
+          if not fetched or os.time() - fetched > 14 * 24 * 60 * 60 then
+            _archcanary_stale_warned = true
+            yay.log.warn(_archcanary_banner(pkg, "AUR-AUDIT LIST STALE")
+                         .. " — black/red lists are over 14 days old or unstamped; run: archcanary --refresh (or delete aur_audit_*.txt to opt out)")
+            break
+          end
+        end
+      end
+    end
 
     if black[pkg] then
       flagged = true

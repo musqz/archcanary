@@ -1056,7 +1056,7 @@ run_doctor() {
         # This check fails silently (reports a working hook as missing)
         # rather than erroring out.
         local _ARCHCANARY_LUA_MARKER_STABLE='yay 13.0 Lua hooks for the AUR security stack'
-        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v17)"
+        local _ARCHCANARY_LUA_MARKER_CURRENT="$_ARCHCANARY_LUA_MARKER_STABLE (v18)"
         local _lua_label="yay init.lua (archcanary hooks: upgrade-age warning, pattern block, aur-audit black/red check, install log)"
         # No local copy at all (neither a git clone nor an AUR/--system
         # install) — nothing safe to embed in a literal `cp` command.
@@ -1876,7 +1876,9 @@ load_packages() {
                 echo >&2 "WARNING: aur-audit $label fetch returned 0 entries — keeping existing."
                 return
             fi
-            printf '%s\n' "${all[@]}" | sort -u > "$dest"
+            # Fetch-time header for the yay hook's staleness warning; '#' lines are skipped by every reader.
+            { printf '# fetched %s\n' "$(date +%s)"; printf '%s\n' "${all[@]}" | sort -u; } > "$dest.tmp"
+            mv "$dest.tmp" "$dest"
             _chown_to_invoker "$dest"
             echo "Updated $dest ($(grep -c '^[^#[:space:]]' "$dest") entries)"
             if [[ ${#all_dates[@]} -gt 0 ]]; then
