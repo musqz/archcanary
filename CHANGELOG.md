@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Changed: app and notification icons (`archcanary`, `-warning`, `-critical`) replaced with dirn's monochrome set (yet-another-monochrome-icon-set, GPL-3.0). Tier colour is set on the path (launchers ignore the CSS `currentColor`) over a dark rounded background so the icons stay visible on light panels; PNGs 16–512 re-rendered.
+- Changed: app and notification icons replaced with dirn's monochrome set (GPL-3.0) on a dark rounded tile; tier colour set on the path because launchers ignore CSS `currentColor`.
 
 ## v0.1.43 (2026-10-31)
 
