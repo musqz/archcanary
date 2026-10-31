@@ -8,7 +8,7 @@
 -- `archcanary --doctor` prints the exact command for your install and flags
 -- an existing copy as outdated when the hooks below have moved on.
 --
--- yay 13.0 Lua hooks for the AUR security stack (v18).
+-- yay 13.0 Lua hooks for the AUR security stack (v19).
 -- An offline backstop that runs on every AUR install/upgrade: warns on
 -- recently-modified PKGBUILDs and blocks known malicious patterns before
 -- build. See docs/my-setup.md, "yay 13.0 integration".
@@ -624,7 +624,9 @@ local function _archcanary_list_fetched(path)
   if not f then return nil end
   local first = f:read("*l")
   f:close()
-  return first and tonumber(first:match("^# fetched (%d+)"))
+  -- gopher-lua: match() returns no value on a miss, and tonumber() errors on that.
+  local m = first and first:match("^# fetched (%d+)")
+  return m and tonumber(m)
 end
 
 -- Same "pkgname value" companion-file shape as aur_audit_red_dates.txt and

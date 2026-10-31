@@ -1238,6 +1238,16 @@ test_alpm_hook() {
     rm -rf "$b"
 }
 
+# yay hook runs under gopher-lua: match() returns no value on a miss, so
+# tonumber(x:match(...)) errors there. The system Lua used here can't catch it.
+test_yay_lua_tonumber_match() {
+    if grep -nE 'tonumber\([^)]*:match\(' "$REPO_DIR/configs/yay-init.lua" >/dev/null; then
+        fail "yay_lua: tonumber() wraps a :match() call (errors under gopher-lua)"
+    else
+        pass "yay_lua: no tonumber(x:match(...)) in the hook"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Test 12: check_pkgbuild_caches hardened obfuscation patterns
 # ---------------------------------------------------------------------------
@@ -4609,6 +4619,7 @@ $VERBOSE && msg "--- Test 12: pkgbuild_obfuscation ---"
 test_pkgbuild_obfuscation
 test_pkgbuild_for
 test_alpm_hook
+test_yay_lua_tonumber_match
 
 $VERBOSE && msg "--- Test 13: check_kmod ---"
 test_check_kmod
