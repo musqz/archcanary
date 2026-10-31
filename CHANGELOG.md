@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.43 (2026-10-31)
+
 - Added: opt-in pacman `PreTransaction` hook (`/usr/lib/archcanary/archcanary.hook` + `alpm-hook`). It scans the cached PKGBUILDs of the AUR packages pacman is about to install, as the invoking user, and only warns. Enable: `sudo install -Dm644 /usr/lib/archcanary/archcanary.hook /etc/pacman.d/hooks/archcanary.hook`. `--doctor` lists it.
 - Added: `--pkgbuild-for=NAME[,NAME]` scans only the cached build dirs of the named packages. A name with no cached PKGBUILD is reported and exits 1.
 - Added: `--doctor` (user install section) warns when an aur-audit list is over 14 days old or has no `# fetched` header.
