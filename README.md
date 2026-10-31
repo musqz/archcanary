@@ -8,7 +8,6 @@
 
 > Layered security scanner for Arch Linux — detects malicious AUR packages, systemd/eBPF persistence, npm/bun cache poisoning, kernel module tampering, and more. Available via the AUR (`archcanary`) or from source.
 >
-> Developed on Mabox Linux (Arch-based, Openbox) and tested through months of real-world use by the EndeavourOS community — see the forum thread below. Also runs fine on Manjaro and other Arch derivatives.
 >
 > If you run into anything, please open an [issue](https://github.com/musqz/archcanary/issues) or start a [discussion](https://github.com/musqz/archcanary/discussions).
 >
