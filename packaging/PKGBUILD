@@ -23,7 +23,7 @@ backup=('etc/archcanary/dkms_allowlist.conf'
         'etc/archcanary/package_allowlist.conf')
 install=archcanary.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('ca527cfc9682fcc33e2d3b954554cebbd5a8367dccb57fda793da5b0a8dad72a')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
