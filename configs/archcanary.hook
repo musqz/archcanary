@@ -1,0 +1,11 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = archcanary: scanning cached PKGBUILDs of AUR packages...
+When = PreTransaction
+Exec = /bin/sh -c '[ -x /usr/lib/archcanary/alpm-hook ] && exec /usr/lib/archcanary/alpm-hook || true'
+NeedsTargets

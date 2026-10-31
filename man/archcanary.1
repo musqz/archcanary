@@ -73,6 +73,19 @@ and
 .I pkg/
 build output).
 .TP
+.BI \-\-pkgbuild-for= NAME[,NAME]
+Like
+.BR \-\-check-pkgbuild ,
+but scan only the cached build directories of the named packages.
+A name matches a build directory's name or a single-line
+.B pkgname=
+entry.
+A name with no cached PKGBUILD is reported and the exit code is at least 1.
+With
+.B \-\-full
+it narrows the PKGBUILD scan too; it is ignored with
+.BR \-\-scan-all-homes .
+.TP
 .B \-\-check-bpftool
 Enumerate loaded eBPF programs, perf/kprobe attachments with owning PID
 and hooked function, and XDP/TC network attachments.
@@ -364,6 +377,12 @@ Known-bad AUR package list (infostealer + eBPF rootkit campaign).
 .TP
 .I ~/.config/archcanary/malicious_npm_packages.txt
 Malicious npm package name list.
+.TP
+.I /usr/lib/archcanary/archcanary.hook
+Opt-in pacman PreTransaction hook template. Copy it to
+.I /etc/pacman.d/hooks/
+to scan the cached PKGBUILDs of AUR packages about to be installed
+(warn-only, runs after build(); needs sudo or pkexec to find the user's cache).
 .TP
 .I /var/lib/archcanary/last-scan.log
 Last system scan result.

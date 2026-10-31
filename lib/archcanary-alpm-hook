@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# archcanary ALPM PreTransaction hook. Reads package names on stdin (NeedsTargets),
+# scans the cached PKGBUILDs of the AUR ones as the invoking user. Warn-only: always exits 0.
+set -uo pipefail
+
+mapfile -t targets
+[[ ${#targets[@]} -gt 0 ]] || exit 0
+
+user="${SUDO_USER:-}"
+if [[ -z "$user" && -n "${PKEXEC_UID:-}" ]]; then
+    user="$(getent passwd "$PKEXEC_UID" | cut -d: -f1)"
+fi
+[[ -n "$user" && "$user" != root ]] || exit 0
+home="$(getent passwd "$user" | cut -d: -f6)"
+[[ -d "$home" ]] || exit 0
+
+# Absolute paths only: pacman's PATH can include user-writable dirs.
+bin="${ARCHCANARY_BIN:-}"
+if [[ -z "$bin" ]]; then
+    for bin in /usr/local/bin/archcanary /usr/bin/archcanary; do [[ -x "$bin" ]] && break; done
+fi
+[[ -x "$bin" ]] || exit 0
+
+# No official-repo filter: a package with no cached AUR clone is simply not scanned,
+# and a filter on sync repos would skip AUR builds served from a local/custom repo.
+names=()
+for t in "${targets[@]}"; do
+    [[ "$t" =~ ^[A-Za-z0-9@._+-]+$ ]] && names+=("$t")
+done
+[[ ${#names[@]} -gt 0 ]] || exit 0
+list="$(IFS=,; echo "${names[*]}")"
+
+cache_dirs="${PKGBUILD_CACHE_DIRS:-$home/.cache/yay:$home/.cache/paru:$home/.cache/aurutils:$home/.cache/pikaur:$home/.cache/trizen}"
+errf="$(mktemp)"
+trap 'rm -f "$errf"' EXIT
+
+rc=0
+out="$(runuser -u "$user" -- env HOME="$home" PKGBUILD_CACHE_DIRS="$cache_dirs" \
+    "$bin" --pkgbuild-for="$list" --no-notify --no-summary 2>"$errf")" || rc=$?
+
+# rc 1 = a name had no cached PKGBUILD (locally built package): not worth a line per upgrade.
+if [[ $rc -eq 2 ]]; then
+    printf 'archcanary: SUSPICIOUS PKGBUILD in a package about to be installed\n'
+    # Each finding is a "  WARNING: ..." line plus the offending code line under it.
+    awk '/^  WARNING:/ {print; getline; print}' <<<"$out"
+    printf 'archcanary: review the cached PKGBUILD before trusting this package\n'
+elif [[ $rc -ne 0 && $rc -ne 1 ]] || grep -q 'unknown option' "$errf"; then
+    printf 'archcanary: PKGBUILD scan failed (exit %s), packages were not checked\n' "$rc"
+fi
+exit 0

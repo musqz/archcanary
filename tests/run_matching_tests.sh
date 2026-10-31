@@ -1162,6 +1162,83 @@ DESK
 }
 
 # ---------------------------------------------------------------------------
+# --pkgbuild-for: name -> cached build dir
+# ---------------------------------------------------------------------------
+test_pkgbuild_for() {
+    local fixtures="$SCRIPT_DIR/fake_pkgbuilds"
+    local cache; cache="$(mktemp -d)"
+    mkdir -p "$cache/clone/base-x" "$cache/foo+bar"
+    printf "pkgname=('libx' 'libx-docs')\n" > "$cache/clone/base-x/PKGBUILD"
+    printf 'pkgname=foo+bar\n' > "$cache/foo+bar/PKGBUILD"
+    local base_args=(--no-notify --no-summary) out rc
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$fixtures" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=pkg-base64 2>&1) || rc=$?
+    [[ $rc -eq 2 ]] && pass "pkgbuild_for: flagged package scanned by name" || fail "pkgbuild_for: pkg-base64 rc=$rc"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$fixtures" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=pkg-clean 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"in 1 PKGBUILD"* ]] && pass "pkgbuild_for: only the named package is scanned" || fail "pkgbuild_for: pkg-clean rc=$rc"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=libx-docs,foo+bar 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"in 2 PKGBUILD"* ]] && pass "pkgbuild_for: split package and '+' name resolved" || fail "pkgbuild_for: split/plus rc=$rc out: $out"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=libx-doc 2>&1) || rc=$?
+    [[ $rc -eq 1 && "$out" == *"no cached PKGBUILD for: libx-doc"* ]] && pass "pkgbuild_for: unresolved name exits 1, no prefix match" || fail "pkgbuild_for: unresolved rc=$rc"
+
+    rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" --pkgbuild-for=libx,libx-docs 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"in 1 PKGBUILD"* ]] && pass "pkgbuild_for: two names in one build dir scanned once" || fail "pkgbuild_for: dedup rc=$rc out: $out"
+
+    local bad
+    for bad in 'a;b' ''; do
+        rc=0; out=$(PKGBUILD_CACHE_DIRS="$cache" "$REPO_DIR/archcanary.sh" "${base_args[@]}" "--pkgbuild-for=$bad" 2>&1) || rc=$?
+        [[ $rc -eq 1 && "$out" == *"needs comma-separated package names"* ]] && pass "pkgbuild_for: bad value '$bad' rejected with exit 1" || fail "pkgbuild_for: bad value '$bad' rc=$rc"
+    done
+    rm -rf "$cache"
+}
+
+# ALPM hook: names on stdin -> scan of the AUR ones, warn-only
+# ---------------------------------------------------------------------------
+test_alpm_hook() {
+    local b out rc
+    b="$(mktemp -d)"
+    printf '#!/bin/sh\nshift 3\nexec "$@"\n' > "$b/runuser"
+    chmod +x "$b"/*
+    local hook="$REPO_DIR/lib/archcanary-alpm-hook"
+    _run_hook() {
+        printf '%s\n' "$@" | PATH="$b:$PATH" SUDO_USER="$(id -un)" ARCHCANARY_BIN="$REPO_DIR/archcanary.sh" \
+            PKGBUILD_CACHE_DIRS="$SCRIPT_DIR/fake_pkgbuilds" bash "$hook" 2>&1
+    }
+
+    rc=0; out=$(_run_hook pkg-base64) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"SUSPICIOUS PKGBUILD"* && "$out" == *"base64"* ]] \
+        && pass "alpm_hook: flagged AUR package warned, exit 0" || fail "alpm_hook: flagged rc=$rc out: $out"
+
+    rc=0; out=$(_run_hook pkg-clean) || rc=$?
+    [[ $rc -eq 0 && -z "$out" ]] && pass "alpm_hook: clean package is silent" || fail "alpm_hook: clean out: $out"
+
+    rc=0; out=$(_run_hook nope-pkg) || rc=$?
+    [[ $rc -eq 0 && -z "$out" ]] && pass "alpm_hook: package with no cached PKGBUILD is silent" || fail "alpm_hook: unresolved out: $out"
+
+    rc=0; out=$(printf 'pkg-clean\n' | PATH="$b:$PATH" SUDO_USER="$(id -un)" ARCHCANARY_BIN="$b/pacman-broken" \
+        PKGBUILD_CACHE_DIRS="$SCRIPT_DIR/fake_pkgbuilds" bash "$hook" 2>&1) || rc=$?
+    [[ $rc -eq 0 && -z "$out" ]] && pass "alpm_hook: missing scanner binary is skipped" || fail "alpm_hook: missing bin out: $out"
+
+    rc=0; out=$(printf 'pkg-base64\n' | PATH="$b:$PATH" env -u SUDO_USER -u PKEXEC_UID \
+        PKGBUILD_CACHE_DIRS="$SCRIPT_DIR/fake_pkgbuilds" bash "$hook" 2>&1) || rc=$?
+    [[ $rc -eq 0 && -z "$out" ]] && pass "alpm_hook: no invoking user -> skipped silently" || fail "alpm_hook: no-user out: $out"
+    printf '#!/bin/sh\nexit 3\n' > "$b/broken-scanner"; chmod +x "$b/broken-scanner"
+    rc=0; out=$(printf 'pkg-clean\n' | PATH="$b:$PATH" SUDO_USER="$(id -un)" ARCHCANARY_BIN="$b/broken-scanner" bash "$hook" 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"scan failed (exit 3)"* ]] && pass "alpm_hook: scanner failure is reported, exit 0" || fail "alpm_hook: scan-failed out: $out"
+
+    printf '#!/bin/sh\necho "Error: unknown option: $1" >&2\nexit 1\n' > "$b/old-scanner"; chmod +x "$b/old-scanner"
+    rc=0; out=$(printf 'pkg-clean\n' | PATH="$b:$PATH" SUDO_USER="$(id -un)" ARCHCANARY_BIN="$b/old-scanner" bash "$hook" 2>&1) || rc=$?
+    [[ $rc -eq 0 && "$out" == *"scan failed"* ]] && pass "alpm_hook: scanner without --pkgbuild-for is reported" || fail "alpm_hook: old-scanner out: $out"
+
+    rc=0; out=$(_run_hook 'bad;name') || rc=$?
+    [[ $rc -eq 0 && -z "$out" ]] && pass "alpm_hook: invalid target name ignored" || fail "alpm_hook: bad-name out: $out"
+    rm -rf "$b"
+}
+
+# ---------------------------------------------------------------------------
 # Test 12: check_pkgbuild_caches hardened obfuscation patterns
 # ---------------------------------------------------------------------------
 test_pkgbuild_obfuscation() {
@@ -4530,6 +4607,8 @@ test_check_autostart
 
 $VERBOSE && msg "--- Test 12: pkgbuild_obfuscation ---"
 test_pkgbuild_obfuscation
+test_pkgbuild_for
+test_alpm_hook
 
 $VERBOSE && msg "--- Test 13: check_kmod ---"
 test_check_kmod

@@ -73,6 +73,7 @@ CHECK_BUN_CACHE=false
 CHECK_YARN_CACHE=false
 CHECK_PNPM_CACHE=false
 CHECK_PKGBUILD=false
+PKGBUILD_FOR=""
 CHECK_BPFTOOL=false
 CHECK_LDSO=false
 CHECK_AUTOSTART=false
@@ -453,6 +454,12 @@ for arg in "$@"; do
         --check-yarn-cache) CHECK_YARN_CACHE=true ;;
         --check-pnpm-cache) CHECK_PNPM_CACHE=true ;;
         --check-pkgbuild)   CHECK_PKGBUILD=true ;;
+        --pkgbuild-for=*)
+            CHECK_PKGBUILD=true; PKGBUILD_FOR="${arg#*=}"
+            if [[ ! "$PKGBUILD_FOR" =~ ^[A-Za-z0-9@._+-]+(,[A-Za-z0-9@._+-]+)*$ ]]; then
+                echo "Error: --pkgbuild-for needs comma-separated package names (got '$PKGBUILD_FOR')" >&2
+                exit 1
+            fi ;;
         --check-bpftool)    CHECK_BPFTOOL=true ;;
         --check-ldso)       CHECK_LDSO=true ;;
         --check-autostart)  CHECK_AUTOSTART=true ;;
@@ -511,6 +518,7 @@ for arg in "$@"; do
             echo "  --check-yarn-cache Check yarn cache (v1 + Berry, incl. fnm per-version globals)"
             echo "  --check-pnpm-cache Check pnpm store/cache (global installs + metadata + dlx)"
             echo "  --check-pkgbuild   Scan AUR helper caches for obfuscated malicious commands in PKGBUILD/install files"
+            echo "  --pkgbuild-for=NAME[,NAME]  Like --check-pkgbuild, limited to the cached build dirs of these packages (also narrows --full)"
             echo "  --check-bpftool    Enumerate loaded eBPF programs/links/perf-hooks/net-attachments (needs root)"
             echo "  --check-ldso       Check /etc/ld.so.preload for shared library injection"
             echo "  --check-autostart  Scan XDG autostart entries, shell RCs and user bin dirs for low-privilege persistence"
@@ -648,6 +656,7 @@ _warn_scan_homes_flag_interactions() {
     if [[ ${#dup[@]} -gt 0 ]]; then
         printf 'NOTE: %s add nothing extra here -- those checks are already covered per scanned user.\n' "${dup[*]}" >&2
     fi
+    [[ -n "$PKGBUILD_FOR" ]] && printf 'NOTE: --pkgbuild-for is ignored here -- every scanned user'"'"'s caches are scanned in full.\n' >&2
 
     [[ -n "$PACKAGE_LIST_FILE_OPT" ]]  && overrides+=("--package-list=")
     [[ -n "$MALICIOUS_NPM_LIST_OPT" ]] && overrides+=("--malicious-npm-list=")
@@ -1123,6 +1132,14 @@ run_doctor() {
                 _opt "$_paru_label" "" "path: $paru_conf"
             fi
         fi
+        # Works with any helper, but fires after build() (PreTransaction), unlike the yay/paru hooks.
+        local _alpm_src="$repo_dir/configs/archcanary.hook"
+        [[ -f $_alpm_src ]] || _alpm_src="/usr/lib/archcanary/archcanary.hook"
+        local _alpm_present=1
+        [[ -e /etc/pacman.d/hooks/archcanary.hook || -e /usr/share/libalpm/hooks/archcanary.hook ]] && _alpm_present=0
+        _opt_item "pacman PreTransaction hook (warn-only, after build; for helpers other than yay/paru)" "$_alpm_present" \
+            "sudo install -Dm644 $_alpm_src /etc/pacman.d/hooks/archcanary.hook  # needs the system install (/usr/lib/archcanary/alpm-hook)" \
+            "path: /etc/pacman.d/hooks/archcanary.hook"
         printf '\n'
     fi
 
@@ -2994,10 +3011,48 @@ _pkgbuild_unicode_spoof() {
 # Strips single and double quotes from each line before matching, catching
 # obfuscation like 'b''u''n' 'a'"d""d" 'j''s'"-""d""i""g""e""s""t"
 # ---------------------------------------------------------------------------
+# --pkgbuild-for=NAME[,NAME]: narrows cache_dirs (caller's local) to the cached
+# build dir of each name. Matches the dir name (pkgbase) first, then a
+# single-line pkgname= (split packages); a multi-line pkgname=( array is not seen.
+# src/ and pkg/ trees (upstream sources a build unpacked) are not candidates.
+_resolve_pkgbuild_dirs() {
+    local -a names missing=() pbs=()
+    local -A seen=() by_name=()
+    local n d pb dir tok hit
+    IFS=, read -ra names <<< "$PKGBUILD_FOR"
+    for d in "${cache_dirs[@]}"; do
+        [[ -d "$d" ]] || continue
+        while IFS= read -r pb; do pbs+=("$pb"); done < <(
+            find "$d" -maxdepth 3 \( -name src -o -name pkg \) -prune -o -name PKGBUILD -type f -print 2>/dev/null)
+    done
+    # name -> newline-separated build dirs, one grep pass per PKGBUILD
+    for pb in "${pbs[@]}"; do
+        dir="${pb%/*}"
+        by_name["${dir##*/}"]+="$dir"$'\n'
+        while IFS= read -r tok; do
+            [[ -n "$tok" ]] && by_name["$tok"]+="$dir"$'\n'
+        done < <(grep -E '^[[:space:]]*pkgname=' "$pb" 2>/dev/null | sed 's/#.*//; s/^[^=]*=//' | tr -c 'A-Za-z0-9@._+\n-' '\n')
+    done
+    for n in "${names[@]}"; do
+        hit=false
+        while IFS= read -r dir; do
+            [[ -n "$dir" ]] && { seen["$dir"]=1; hit=true; }
+        done <<< "${by_name[$n]:-}"
+        $hit || missing+=("$n")
+    done
+    [[ ${#missing[@]} -gt 0 ]] && echo "  WARNING: no cached PKGBUILD for: ${missing[*]}" >&2
+    cache_dirs=("${!seen[@]}")
+    [[ ${#missing[@]} -eq 0 ]]
+}
+
 check_pkgbuild_caches() {
     # PKGBUILD_CACHE_DIRS overrides the default AUR helper cache locations (colon-separated)
     local cache_dirs_default="$HOME/.cache/yay:$HOME/.cache/paru:$HOME/.cache/aurutils:$HOME/.cache/pikaur:$HOME/.cache/trizen"
     IFS=: read -ra cache_dirs <<< "${PKGBUILD_CACHE_DIRS:-$cache_dirs_default}"
+    local _unresolved=0
+    if [[ -n "$PKGBUILD_FOR" ]]; then
+        _resolve_pkgbuild_dirs || _unresolved=1
+    fi
 
     # Date window (--start-date/--end-date, see check_current/check_logs):
     # applied via each cached PKGBUILD/.install's mtime, roughly when the
@@ -3509,9 +3564,17 @@ check_pkgbuild_caches() {
     )
 
     if [[ $scanned -eq 0 ]]; then
-        echo "  Skipped: no AUR helper cache directories found."
+        if [[ $_unresolved -ne 0 ]]; then
+            echo "  Skipped: none of the named packages has a cached PKGBUILD."
+        else
+            echo "  Skipped: no AUR helper cache directories found."
+        fi
     elif [[ $found_count -eq 0 ]]; then
-        echo "  Clean: no malicious commands found in $scanned PKGBUILD/install file(s)."
+        if [[ $_unresolved -ne 0 ]]; then
+            echo "  No malicious commands found in $scanned PKGBUILD/install file(s), but some named packages were not scanned."
+        else
+            echo "  Clean: no malicious commands found in $scanned PKGBUILD/install file(s)."
+        fi
     else
         echo
         echo "  Before rebuilding: diff what's flagged above against a fresh clone of"
@@ -3523,6 +3586,8 @@ check_pkgbuild_caches() {
         echo "    archcanary: https://github.com/musqz/archcanary/issues/new?template=report-package.yml"
         echo "    Arch AUR:   https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/"
     fi
+    # A name with no cached PKGBUILD was never scanned: not clean.
+    [[ $_unresolved -ne 0 && $found_count -eq 0 ]] && found_count=1
     return $found_count
 }
 

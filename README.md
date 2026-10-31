@@ -151,6 +151,7 @@ run everything at once with `--full`.
 | `--check-yarn-cache` | yarn cache scan | No |
 | `--check-pnpm-cache` | pnpm cache + fnm per-version Node installs | No |
 | `--check-pkgbuild` | AUR helper cache — obfuscation patterns (base64, eval, var-split, printf hex, ANSI-C hex/octal, rev/tr pipe-to-shell), Tor/onion fetches, downloads into system paths, `sudo`/`doas`/`pkexec` from a PKGBUILD or `.install`, patch sources on a mutable merge-request/pull-request URL, a look-alike (Cyrillic/Greek/Armenian/fullwidth) or hidden (zero-width, bidi) character in the host of a `url=`/`source=` URL, and undocumented ELF binaries actually committed to a package's own AUR git tree (not just downloaded by makepkg — a -bin package's own source binary sitting in the build dir is not flagged) | No |
+| `--pkgbuild-for=NAME[,NAME]` | `--check-pkgbuild` limited to the cached build dirs of these packages; a name with no cached PKGBUILD is reported and exits 1 | No |
 | `--check-bpftool` | Enumerate loaded eBPF programs (stealth types), perf/kprobe attachments with owning PID and hooked function, XDP/TC network attachments | Yes |
 | `--check-ldso` | `/etc/ld.so.preload` injection + recent `/etc/ld.so.conf.d/` changes | No |
 | `--check-autostart` | `~/.config/autostart`, user systemd services, shell RC download-and-exec patterns, `sudo`/`su`/`doas`/`pkexec`/`run0` in `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `~/.cargo/bin`, `~/go/bin` or `~/.bun/bin`; an allowlisted one is pinned by sha256 and re-flagged if it changes | No |
@@ -320,6 +321,12 @@ it has no post-review hook point) and only runs the PKGBUILD pattern check,
 not the aur-audit black/red lookup, so yay's integration is the more
 complete of the two. Other AUR helpers can still be scanned manually via
 `--check-pkgbuild`, just without an automatic pre-build hook.
+
+Other helpers (yay and paru users already get a pre-build scan, so they do not need this): an opt-in pacman `PreTransaction` hook scans the cached PKGBUILDs of the AUR packages about to be installed. It runs after `build()`, only warns, needs the system install, and finds your cache through `sudo` or `pkexec` (not `doas`/`su`):
+
+```bash
+sudo install -Dm644 /usr/lib/archcanary/archcanary.hook /etc/pacman.d/hooks/archcanary.hook
+```
 
 See [docs/overview.md](docs/overview.md) for the full lifecycle diagram
 (at-a-glance table included).
