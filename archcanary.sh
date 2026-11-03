@@ -1663,7 +1663,7 @@ unset _svc_cfg _sl
 # var, if set, takes precedence and is appended to). Same rationale as DKMS/
 # systemd above — for eBPF loader binaries that are legitimately not
 # pacman-owned (e.g. a self-built or manually-installed security/monitoring
-# tool that loads LSM hooks) and shouldn't trip the bpftool loader check.
+# tool that loads LSM hooks or kprobes) and shouldn't trip the bpftool checks.
 # Override the path with BPFTOOL_ALLOWLIST_FILE (used by the tests).
 BPFTOOL_ALLOWLIST="${BPFTOOL_ALLOWLIST:-}"
 _bpf_cfg="${BPFTOOL_ALLOWLIST_FILE:-/etc/archcanary/bpftool_allowlist.conf}"
@@ -2545,7 +2545,8 @@ check_ebpf() {
 # perf show — lists every kprobe/kretprobe/tracepoint/uprobe with the owning
 #   PID and the exact kernel function being hooked. Flags hooks on functions
 #   rootkits use to hide files (getdents64), processes (kill), and network
-#   connections (tcp_v4_connect, inet_csk_accept).
+#   connections (tcp_v4_connect, inet_csk_accept). Hooks held by an allowlisted
+#   loader (bpftool allowlist) are reported as INFO.
 #
 # net show — lists XDP, TC, TCX, and netfilter programs attached to network
 #   interfaces. A rootkit can use XDP/TC to silently drop or intercept packets
@@ -2556,7 +2557,7 @@ check_bpftool() {
     local bpftool_cmd="${BPFTOOL_CMD:-bpftool}"
     # BPFTOOL_ALLOWLIST: colon-separated list of loader binary basenames that
     # are known-good but not pacman-owned (a self-built or manually-installed
-    # security/monitoring tool that legitimately loads LSM eBPF hooks).
+    # security/monitoring tool that legitimately loads eBPF hooks).
     # Example: BPFTOOL_ALLOWLIST=falco:my-lsm-tool
     local -a _bpf_allow
     IFS=: read -ra _bpf_allow <<< "${BPFTOOL_ALLOWLIST:-}"
@@ -2681,11 +2682,29 @@ check_bpftool() {
         local suspicious_perf
         suspicious_perf=$(grep -iE '\b(getdents|sys_kill|__x64_sys_kill|tcp_v4_connect|inet_csk_accept|security_inode_getattr|security_file_open)\b' \
                           <<<"$perf_out" || true)
-        if [[ -n "$suspicious_perf" ]]; then
+        # Drop hooks whose owning pid resolves to an allowlisted loader basename.
+        # Allowlist only: pacman ownership is not enough for these functions.
+        local perf_flagged="" perf_allowed="" pline ppid pexe
+        while IFS= read -r pline; do
+            [[ -z "$pline" ]] && continue
+            ppid=$(grep -oP '\bpid \K[0-9]+' <<<"$pline" | head -n1 || true)
+            if [[ -n "$ppid" ]] && pexe=$(readlink -f "/proc/$ppid/exe" 2>/dev/null) \
+               && pexe="${pexe% (deleted)}" \
+               && _allowlist_contains "$(basename "$pexe")" _bpf_allow; then
+                perf_allowed+="${perf_allowed:+$'\n'}$pline"
+            else
+                perf_flagged+="${perf_flagged:+$'\n'}$pline"
+            fi
+        done <<<"$suspicious_perf"
+        if [[ -n "$perf_flagged" ]]; then
             echo "  WARNING: kprobes on rootkit-associated functions (file-hide/process-hide/network):"
-            echo "$suspicious_perf" | sed 's/^/    /'
+            echo "$perf_flagged" | sed 's/^/    /'
             echo "  Confirm: sudo bpftool perf show"
+            echo "  Recognize the loader? Mark it known-good:"
+            echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=bpftool:<loader-basename>"
             worst_ret=1
+        elif [[ -n "$perf_allowed" ]]; then
+            echo "  INFO: hooks on rootkit-associated functions, all held by allowlisted loaders."
         else
             echo "  No hooks on rootkit-associated functions."
         fi

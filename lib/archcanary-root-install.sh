@@ -136,12 +136,12 @@ EOF
     # allowlists above (mode 644, never clobber an existing /etc copy).
     if [[ ! -f /etc/archcanary/bpftool_allowlist.conf ]]; then
         tee /etc/archcanary/bpftool_allowlist.conf >/dev/null << 'EOF'
-# eBPF loader binaries to skip during the bpftool LSM-loader check
+# eBPF loader binaries to skip during the bpftool loader and kprobe checks
 # (--check-bpftool), system-wide allowlist. One binary basename per line.
 # Everything after # is a comment.
 # Add loaders that are known-good but not pacman-owned (a self-built or
-# manually-installed security/monitoring tool that legitimately loads LSM
-# eBPF hooks) — matched against the basename of /proc/<pid>/exe.
+# manually-installed security/monitoring tool that legitimately loads eBPF
+# hooks, e.g. opensnitchd) — matched against the basename of /proc/<pid>/exe.
 #
 # Example:
 # falco  # runtime security monitoring, installed from upstream binary release

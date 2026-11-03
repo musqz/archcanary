@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix: `--check-bpftool` skips kprobe hits held by a loader in the bpftool allowlist (OpenSnitch's eBPF monitor warned on every scan).
 - Changed: app and notification icons replaced with dirn's monochrome set (GPL-3.0) on a dark rounded tile; tier colour set on the path because launchers ignore CSS `currentColor`.
 
 ## v0.1.43 (2026-10-31)

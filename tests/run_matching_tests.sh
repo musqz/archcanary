@@ -2242,6 +2242,34 @@ SCRIPT
         fail "check_bpftool: unknown tracepoint loader → expected WARNING+exit1, got rc=$rc, out: $out"
     fi
 
+    # Sub-test F: kprobe on a rootkit-associated function (perf show) — the
+    # OpenSnitch case. Unknown holder warns; allowlisted holder → INFO, exit 0.
+    local fake_bpftool_perf
+    fake_bpftool_perf=$(mktemp)
+    cat > "$fake_bpftool_perf" <<SCRIPT
+#!/bin/sh
+if [ "\$1" = "perf" ]; then
+  echo "pid $loader_pid  fd 18: prog_id 2155  kprobe  func tcp_v4_connect  offset 0"
+fi
+SCRIPT
+    chmod +x "$fake_bpftool_perf"
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool_perf" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 1 && "$out" == *"WARNING: kprobes on rootkit-associated"* ]]; then
+        pass "check_bpftool: unknown kprobe holder on tcp_v4_connect → WARNING (exit 1)"
+    else
+        fail "check_bpftool: unknown kprobe holder → expected WARNING+exit1, got rc=$rc, out: $out"
+    fi
+    rc=0
+    out=$(BPFTOOL_CMD="$fake_bpftool_perf" BPFTOOL_ALLOWLIST_FILE="$allow_file" \
+        "$REPO_DIR/archcanary.sh" "${base_args[@]}" 2>&1) || rc=$?
+    if [[ $rc -eq 0 && "$out" == *"all held by allowlisted loaders"* && "$out" != *"WARNING"* ]]; then
+        pass "check_bpftool: allowlisted kprobe holder → INFO only, exit 0"
+    else
+        fail "check_bpftool: allowlisted kprobe holder → expected INFO+exit0, got rc=$rc, out: $out"
+    fi
+
     # Sub-test E: a tracepoint prog held by BOTH a pacman-owned and an unknown
     # process → WARNING, but the "Unknown loaders" line lists only the unresolved
     # one (regression guard: a resolved pacman-owned loader must not be labelled
