@@ -3540,6 +3540,40 @@ FAKE
     fi
 }
 
+test_package_allowlist_pin() {
+    local d out h
+    d=$(mktemp -d)
+    mkdir -p "$d/bin" "$d/db/pinpkg-1.0-1"
+    printf 'pinpkg\n' > "$d/list.txt"
+    printf 'mtree-v1' > "$d/db/pinpkg-1.0-1/mtree"
+    h=$(sha256sum "$d/db/pinpkg-1.0-1/mtree"); h="${h%% *}"
+    printf 'pinpkg sha256:%s 2026-11-04\n' "$h" > "$d/allow.conf"
+    cat > "$d/bin/pacman" << 'FAKE'
+#!/bin/sh
+case "$*" in
+ "-Qmq"*|"-Qq"*) echo pinpkg;;
+ "-Q -- pinpkg") echo "pinpkg 1.0-1";;
+ "-Qi -- pinpkg") echo "Install Date    : Mon 10 Aug 2026 10:00:00 AM CEST";;
+esac
+FAKE
+    chmod +x "$d/bin/pacman"
+    local run='PATH="$d/bin:$PATH" PACKAGE_LIST_FILE="$d/list.txt" PACKAGE_ALLOWLIST_FILE="$d/allow.conf" PACMAN_LOCAL_DB="$d/db" timeout 60 "$REPO_DIR/archcanary.sh" 2>&1 | sed -n "/--- \[1\]/,/--- \[2\]/p"'
+    out=$(eval "$run") || true
+    if [[ "$out" == *"allowlisted (verified clean): pinpkg"* && "$out" != *"changed since"* ]]; then
+        pass "package pin: unchanged package stays allowlisted"
+    else
+        fail "package pin: unchanged package not allowlisted, out: $out"
+    fi
+    printf 'tampered' > "$d/db/pinpkg-1.0-1/mtree"
+    out=$(eval "$run") || true
+    if [[ "$out" == *"2026-11-04, package changed since"* && "$out" == *"allowlist-add=package:pinpkg"* ]]; then
+        pass "package pin: changed package re-flagged with re-pin hint"
+    else
+        fail "package pin: changed package not flagged, out: $out"
+    fi
+    rm -rf "$d"
+}
+
 test_scan_user_cli_flags() {
     local out rc=0
 
@@ -4817,6 +4851,9 @@ test_resolve_scan_user_opts
 
 $VERBOSE && msg "--- check_current install-date cutoff ---"
 test_check_current_install_date_cutoff
+
+$VERBOSE && msg "--- package allowlist pin ---"
+test_package_allowlist_pin
 
 $VERBOSE && msg "--- Test 34: --scan-user CLI flags (root guard, doctor, mutual exclusion) ---"
 test_scan_user_cli_flags

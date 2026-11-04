@@ -185,7 +185,7 @@ run everything at once with `--full`.
 | `--doctor` | Health check: binary deps, systemd units, install paths | — |
 | `--doctor=SECTION[,...]` | Check only the named section(s) with extra detail (`platform`, `deps`, `user`, `system`, `systemd`, `external`; tool names like `paru`/`bpftool` also map to a section) | — |
 | `--allowlist-list=NAME` | List entries in an allowlist and exit (`NAME`: `dkms`, `systemd`, `bpftool`, `autostart`, `package`) | No |
-| `--allowlist-add=NAME:VALUE` | Add `VALUE` to an allowlist and exit | Yes |
+| `--allowlist-add=NAME:VALUE` | Add `VALUE` to an allowlist and exit; an installed `package` is pinned and re-flagged by check [1] if it changes | Yes |
 | `--allowlist-remove=NAME:VALUE` | Remove `VALUE` from an allowlist and exit | Yes |
 | `--extra-lists-list` | List `~/.config/archcanary/extra_lists.conf` entries and exit | No |
 | `--extra-lists-add=VALUE` | Add a path/URL to `extra_lists.conf` and exit | No |

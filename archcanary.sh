@@ -148,6 +148,20 @@ _shadow_pin() {
     return 0
 }
 
+# Prints the sha256 of an installed package's pacman-db mtree (root-owned,
+# written at install time), else nothing. Used to pin a package allowlist
+# entry; PACMAN_LOCAL_DB overrides the db path for tests and is ignored as root.
+_pkg_fingerprint() {
+    local n="$1" v f h db=/var/lib/pacman/local
+    [[ $EUID -eq 0 ]] || db="${PACMAN_LOCAL_DB:-$db}"
+    v=$(LC_ALL=C pacman -Q -- "$n" 2>/dev/null) || return 0
+    v="${v#* }"
+    f="$db/$n-$v/mtree"
+    [[ -f "$f" ]] || return 0
+    h=$(sha256sum -- "$f" 2>/dev/null) || return 0
+    printf '%s' "${h%% *}"
+}
+
 _allowlist_path() {
     case "$1" in
         dkms)      echo "${DKMS_ALLOWLIST_FILE:-/etc/archcanary/dkms_allowlist.conf}" ;;
@@ -170,6 +184,25 @@ _allowlist_values() {
         n = split(line, tok, /[ \t]+/)
         for (i = 1; i <= n; i++) { if (tok[i] != "") { print tok[i]; break } }
     }' "$1"
+}
+
+# Removes every line of allowlist file $1 whose first token is $2.
+_allowlist_drop() {
+    local path="$1" value="$2" tmp
+    tmp="$(mktemp "${path}.XXXXXX")"
+    CLEANUP_FILES+=("$tmp")
+    awk -v val="$value" '{
+        line = $0
+        stripped = line
+        sub(/#.*/, "", stripped)
+        n = split(stripped, tok, /[ \t]+/)
+        first = ""
+        for (i = 1; i <= n; i++) { if (tok[i] != "") { first = tok[i]; break } }
+        if (first == val) next
+        print line
+    }' "$path" > "$tmp"
+    mv "$tmp" "$path"
+    chmod 644 "$path"
 }
 
 _allowlist_cli() {
@@ -212,35 +245,32 @@ _allowlist_cli() {
         exit 1
     fi
     if [[ "$action" == add ]]; then
-        if _allowlist_values "$path" | grep -qxF "$value"; then
-            echo "already allowlisted: $value"
-            exit 0
-        fi
-        local pin=""
+        local pin="" fp=""
         [[ "$name" == autostart ]] && pin=$(_shadow_pin "$value")
+        if [[ "$name" == package ]]; then
+            fp=$(_pkg_fingerprint "$value")
+            [[ -z "$fp" ]] || pin="sha256:$fp $(date +%F)"
+        fi
+        if _allowlist_values "$path" | grep -qxF "$value"; then
+            # Adding an installed package again re-pins it to the current build.
+            if [[ -z "$fp" ]]; then
+                echo "already allowlisted: $value"
+                exit 0
+            fi
+            _allowlist_drop "$path" "$value"
+        fi
         printf '%s\n' "$value${pin:+ $pin}" >> "$path"
         echo "added: $value${pin:+ ($pin)}"
+        if [[ "$name" == package && -z "$fp" ]]; then
+            echo "note: $value is not installed (no mtree), so the entry is name-only (no pin)"
+        fi
         exit 0
     else
         if ! _allowlist_values "$path" | grep -qxF "$value"; then
             echo "not found: $value" >&2
             exit 1
         fi
-        local tmp
-        tmp="$(mktemp "${path}.XXXXXX")"
-        CLEANUP_FILES+=("$tmp")
-        awk -v val="$value" '{
-            line = $0
-            stripped = line
-            sub(/#.*/, "", stripped)
-            n = split(stripped, tok, /[ \t]+/)
-            first = ""
-            for (i = 1; i <= n; i++) { if (tok[i] != "") { first = tok[i]; break } }
-            if (first == val) next
-            print line
-        }' "$path" > "$tmp"
-        mv "$tmp" "$path"
-        chmod 644 "$path"
+        _allowlist_drop "$path" "$value"
         echo "removed: $value"
         exit 0
     fi
@@ -565,7 +595,7 @@ for arg in "$@"; do
             echo "                            --doctor=user,system   --doctor user system   --doctor=deps"
             echo "  --allowlist-list=NAME             List entries in an allowlist and exit"
             echo "                                     NAME: dkms, systemd, bpftool, autostart, package"
-            echo "  --allowlist-add=NAME:VALUE        Add VALUE to an allowlist and exit (needs root)"
+            echo "  --allowlist-add=NAME:VALUE        Add VALUE to an allowlist and exit (needs root; an installed package is pinned)"
             echo "  --allowlist-remove=NAME:VALUE     Remove VALUE from an allowlist and exit (needs root)"
             echo "  --extra-lists-list                List ~/.config/archcanary/extra_lists.conf entries and exit"
             echo "  --extra-lists-add=VALUE           Add a path/URL to extra_lists.conf and exit"
@@ -1708,16 +1738,21 @@ unset _auto_cfg _al _pin
 # are untouched, so --search-packages still reports true list membership.
 # Override the path with PACKAGE_ALLOWLIST_FILE (used by the tests).
 PACKAGE_ALLOWLIST="${PACKAGE_ALLOWLIST:-}"
+declare -A PACKAGE_PIN=() PACKAGE_PIN_DATE=()
 _pkg_cfg="${PACKAGE_ALLOWLIST_FILE:-/etc/archcanary/package_allowlist.conf}"
 if [[ -r "$_pkg_cfg" ]]; then    # skip if missing/unreadable (don't abort under set -e)
     while IFS= read -r _pl || [[ -n "$_pl" ]]; do
         _pl="${_pl%%#*}"       # strip inline comments
-        read -r _pl _ <<< "$_pl"  # take first token only (ignores trailing descriptions)
+        read -r _pl _pin _pdate _ <<< "$_pl"  # entry, then an optional sha256:<hex> pin and its date
         [[ -z "$_pl" ]] && continue
+        if [[ "$_pin" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            PACKAGE_PIN["$_pl"]="${_pin#sha256:}"
+            PACKAGE_PIN_DATE["$_pl"]="$_pdate"
+        fi
         PACKAGE_ALLOWLIST="${PACKAGE_ALLOWLIST:+${PACKAGE_ALLOWLIST}:}${_pl}"
     done < "$_pkg_cfg"
 fi
-unset _pkg_cfg _pl
+unset _pkg_cfg _pl _pin _pdate
 
 # Resolves a bundled data file. Checks two locations relative to the running
 # script first (flat layout — $0 is /usr/lib/archcanary/archcanary.sh, the
@@ -2117,14 +2152,14 @@ campaign_cutoff="2026-06-09"  # earliest documented malicious commit
 chaos_cutoff="2025-07-22"     # CHAOS RAT campaign discovery date
 
 check_current() {
-    local found=() found_pkgs=() older=()
+    local found=() found_pkgs=() older=() changed_pkgs=()
     # PACKAGE_ALLOWLIST: colon-separated list of package names that match an
     # official list by name only but were manually verified clean (see
     # check_logs for the same allowlist applied to pacman.log history).
     # Example: PACKAGE_ALLOWLIST=chipmunk
     local -a _pkg_allow
     IFS=: read -ra _pkg_allow <<< "${PACKAGE_ALLOWLIST:-}"
-    declare -gA CURRENTLY_INSTALLED_MAP=()
+    declare -gA CURRENTLY_INSTALLED_MAP=() PIN_CHANGED_MAP=()
     while IFS= read -r pkg; do
         CURRENTLY_INSTALLED_MAP[$pkg]=1
         [[ -v INFECTED_LOOKUP["$pkg"] ]] || continue
@@ -2137,9 +2172,18 @@ check_current() {
             [[ -z "$START_DATE" || ! "$install_date_iso" < "$START_DATE" ]] || continue
             [[ -z "$END_DATE"   || ! "$install_date_iso" > "$END_DATE"   ]] || continue
         fi
+        local _changed=""
         if _allowlist_contains "$pkg" _pkg_allow; then
-            echo "  INFO: package allowlisted (verified clean): $pkg"
-            continue
+            local _fp=""
+            [[ -v PACKAGE_PIN["$pkg"] ]] && _fp=$(_pkg_fingerprint "$pkg")
+            # An unreadable fingerprint is not evidence of change: stay allowlisted.
+            if [[ -n "$_fp" && "$_fp" != "${PACKAGE_PIN[$pkg]}" ]]; then
+                _changed=" [allowlisted ${PACKAGE_PIN_DATE[$pkg]:-earlier}, package changed since]"
+                PIN_CHANGED_MAP[$pkg]=1
+            else
+                echo "  INFO: package allowlisted (verified clean): $pkg"
+                continue
+            fi
         fi
         local _cutoff=""
         if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then _cutoff="$chaos_cutoff"
@@ -2147,7 +2191,7 @@ check_current() {
         elif [[ -v AUR_AUDIT_RED_LOOKUP["$pkg"] ]]; then _cutoff="${AUR_AUDIT_RED_DATE[$pkg]:-}"
         elif [[ ! -v COMMUNITY_REPORTS_LOOKUP["$pkg"] && ! -v EXTRA_LOOKUP["$pkg"] ]]; then _cutoff="$campaign_cutoff"
         fi
-        if [[ -n "$_cutoff" && -n "$install_date_iso" && "$install_date_iso" < "$_cutoff" ]]; then
+        if [[ -z "$_changed" && -n "$_cutoff" && -n "$install_date_iso" && "$install_date_iso" < "$_cutoff" ]]; then
             older+=("$pkg (installed: $install_date, before $_cutoff)")
             continue
         fi
@@ -2161,6 +2205,10 @@ check_current() {
             found+=("$pkg (installed: $install_date) [community report]")
         else
             found+=("$pkg (installed: $install_date)")
+        fi
+        if [[ -n "$_changed" ]]; then
+            found[-1]+="$_changed"
+            changed_pkgs+=("$pkg")
         fi
         found_pkgs+=("$pkg")
     done < <(pacman -Qmq "${INFECTED_PKGS[@]}" 2>/dev/null)
@@ -2199,6 +2247,9 @@ check_current() {
         echo "  actual malicious package)? Mark it known-good instead of removing it:"
         local _fp
         for _fp in "${found_pkgs[@]}"; do
+            if _allowlist_contains "$_fp" changed_pkgs; then
+                echo "    (allowlisted, but changed since -- re-verify, then re-pin:)"
+            fi
             echo "    pkexec /usr/lib/archcanary/root-helper --allowlist-add=package:$_fp"
         done
         return 2
@@ -2286,7 +2337,7 @@ check_logs() {
             [[ -v pkg_map[$pkg] ]] || continue
             [[ "$action" == "installed" || "$action" == "upgraded" || "$action" == "reinstalled" ]] || continue
 
-            if _allowlist_contains "$pkg" _pkg_allow; then
+            if _allowlist_contains "$pkg" _pkg_allow && [[ ! -v PIN_CHANGED_MAP[$pkg] ]]; then
                 echo "LOG_ALLOWLISTED: $pkg ($action on $datetime_str)"
                 continue
             fi
