@@ -402,7 +402,10 @@ System-wide DKMS module allowlist for
 .TP
 .I /etc/archcanary/package_allowlist.conf
 System-wide package name allowlist for checks [1]/[2] (currently-installed
-foreign packages and pacman.log history).
+foreign packages and pacman.log history). An installed package is pinned by
+the sha256 of its pacman db mtree and the date it was allowlisted. Check [1]
+flags it again if the package changes; re-pin by running
+\fB\-\-allowlist\-add\fR again.
 .TP
 .I /var/log/lynis-report.dat
 Lynis report file read by
