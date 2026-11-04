@@ -2111,8 +2111,13 @@ print_list() {
 # Check 1: Currently installed foreign packages
 # (Efficiency from commonsourcecs: pacman -Qmq in batch)
 # ---------------------------------------------------------------------------
+# Campaign cutoffs shared by check_current and check_logs: an install dated
+# before one cannot have pulled that campaign's compromised version.
+campaign_cutoff="2026-06-09"  # earliest documented malicious commit
+chaos_cutoff="2025-07-22"     # CHAOS RAT campaign discovery date
+
 check_current() {
-    local found=() found_pkgs=()
+    local found=() found_pkgs=() older=()
     # PACKAGE_ALLOWLIST: colon-separated list of package names that match an
     # official list by name only but were manually verified clean (see
     # check_logs for the same allowlist applied to pacman.log history).
@@ -2126,14 +2131,24 @@ check_current() {
         local install_date install_date_iso
         install_date=$(LC_ALL=C pacman -Qi -- "$pkg" 2>/dev/null | awk -F': ' '/^Install Date/ { print $2; exit }')
         [[ -n "$install_date" ]] || continue
+        install_date_iso=$(date -d "$install_date" +%F 2>/dev/null) || install_date_iso=""
         if [[ -n "$START_DATE" || -n "$END_DATE" ]]; then
-            install_date_iso=$(date -d "$install_date" +%F 2>/dev/null) || true
             [[ -n "$install_date_iso" ]] || continue
             [[ -z "$START_DATE" || ! "$install_date_iso" < "$START_DATE" ]] || continue
             [[ -z "$END_DATE"   || ! "$install_date_iso" > "$END_DATE"   ]] || continue
         fi
         if _allowlist_contains "$pkg" _pkg_allow; then
             echo "  INFO: package allowlisted (verified clean): $pkg"
+            continue
+        fi
+        local _cutoff=""
+        if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then _cutoff="$chaos_cutoff"
+        elif [[ -v AUR_AUDIT_BLACK_LOOKUP["$pkg"] ]]; then _cutoff="${AUR_AUDIT_BLACK_DATE[$pkg]:-}"
+        elif [[ -v AUR_AUDIT_RED_LOOKUP["$pkg"] ]]; then _cutoff="${AUR_AUDIT_RED_DATE[$pkg]:-}"
+        elif [[ ! -v COMMUNITY_REPORTS_LOOKUP["$pkg"] && ! -v EXTRA_LOOKUP["$pkg"] ]]; then _cutoff="$campaign_cutoff"
+        fi
+        if [[ -n "$_cutoff" && -n "$install_date_iso" && "$install_date_iso" < "$_cutoff" ]]; then
+            older+=("$pkg (installed: $install_date, before $_cutoff)")
             continue
         fi
         if [[ -v CHAOS_LOOKUP["$pkg"] ]]; then
@@ -2162,8 +2177,18 @@ check_current() {
         CURRENTLY_INSTALLED_ANY_MAP[$pkg]=1
     done < <(pacman -Qq "${INFECTED_PKGS[@]}" 2>/dev/null)
 
+    if [[ ${#older[@]} -gt 0 ]]; then
+        echo "  NOTE: name match, but installed before the campaign's cutoff -- almost"
+        echo "  certainly unrelated:"
+        print_list older
+    fi
+
     if [[ ${#found[@]} -eq 0 ]]; then
-        echo "  Clean: no infected packages currently installed."
+        if [[ ${#older[@]} -gt 0 ]]; then
+            echo "  No other infected packages currently installed."
+        else
+            echo "  Clean: no infected packages currently installed."
+        fi
         return 0
     else
         echo "  WARNING: ${#found[@]} possibly infected package(s):"
@@ -2186,8 +2211,9 @@ check_current() {
 # ---------------------------------------------------------------------------
 check_logs() {
     local log_files=()
-    # Per-source cutoff dates (YYYY-MM-DD) below which a name match predates
-    # any known compromise for that list — see the tag-selection logic
+    # Per-source cutoff dates (YYYY-MM-DD, campaign_cutoff/chaos_cutoff above
+    # check_current) below which a name match predates any known compromise
+    # for that list — see the tag-selection logic
     # further down for how these are used. Only set where SOURCES.md
     # documents an actual campaign start date, or (aur-audit black/red) a
     # per-package cutoff is available from AUR_AUDIT_{BLACK,RED}_DATE
@@ -2195,9 +2221,6 @@ check_logs() {
     # on --refresh — see _refresh_aur_audit). Community Reports has no fixed
     # scope/end date and no per-entry date data at all, so it intentionally
     # has no cutoff.
-    local campaign_cutoff="2026-06-09"  # earliest documented malicious commit
-    local chaos_cutoff="2025-07-22"     # CHAOS RAT campaign discovery date
-
     local seen_file="${XDG_CACHE_HOME:-$HOME/.cache}/archcanary/log_hist_seen.txt"
     declare -A seen_map
     if [[ -r "$seen_file" ]]; then
@@ -2288,7 +2311,7 @@ check_logs() {
                 annotation=" [aur-audit: red]"
             elif [[ -v COMMUNITY_REPORTS_LOOKUP[$pkg] ]]; then
                 annotation=" [community report]"
-            else
+            elif [[ ! -v EXTRA_LOOKUP[$pkg] ]]; then
                 cutoff="$campaign_cutoff"
             fi
 
@@ -4796,8 +4819,10 @@ for p in "${AUR_AUDIT_RED_DATE_LINES[@]}"; do
 done
 
 # Extra lists — merged last so they appear in INFECTED_LOOKUP
+declare -A EXTRA_LOOKUP
 for p in "${EXTRA_PKGS[@]}"; do
     INFECTED_PKGS+=("$p")
+    EXTRA_LOOKUP["$p"]=1
 done
 
 # Build exact-match lookup table from INFECTED_PKGS

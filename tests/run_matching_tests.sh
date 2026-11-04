@@ -3516,6 +3516,30 @@ test_scan_all_homes_flag_wiring() {
     fi
 }
 
+test_check_current_install_date_cutoff() {
+    local d out
+    d=$(mktemp -d)
+    mkdir -p "$d/bin"
+    printf 'oldpkg\nnewpkg\n' > "$d/list.txt"
+    cat > "$d/bin/pacman" << 'FAKE'
+#!/bin/sh
+case "$*" in
+ "-Qmq"*|"-Qq"*) printf 'oldpkg\nnewpkg\n';;
+ "-Qi -- oldpkg") echo "Install Date    : Sun 01 Feb 2026 10:00:00 AM CET";;
+ "-Qi -- newpkg") echo "Install Date    : Mon 10 Aug 2026 10:00:00 AM CEST";;
+esac
+FAKE
+    chmod +x "$d/bin/pacman"
+    out=$(PATH="$d/bin:$PATH" PACKAGE_LIST_FILE="$d/list.txt" timeout 60 "$REPO_DIR/archcanary.sh" 2>&1 | sed -n '/--- \[1\]/,/--- \[2\]/p') || true
+    rm -rf "$d"
+    if [[ "$out" == *"- oldpkg"*"before 2026-06-09"* && "$out" == *"1 possibly infected"* \
+          && "$out" == *"- newpkg (installed"* && "$out" != *"allowlist-add=package:oldpkg"* ]]; then
+        pass "check_current: install before campaign cutoff -> note; after -> still warned"
+    else
+        fail "check_current: install-date cutoff wrong, out: $out"
+    fi
+}
+
 test_scan_user_cli_flags() {
     local out rc=0
 
@@ -4790,6 +4814,9 @@ test_root_install_bundled_lists_world_readable
 
 $VERBOSE && msg "--- Test 33: resolve_scan_user_opts (--scan-user resolution) ---"
 test_resolve_scan_user_opts
+
+$VERBOSE && msg "--- check_current install-date cutoff ---"
+test_check_current_install_date_cutoff
 
 $VERBOSE && msg "--- Test 34: --scan-user CLI flags (root guard, doctor, mutual exclusion) ---"
 test_scan_user_cli_flags
