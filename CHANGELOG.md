@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix: PKGBUILD heredoc comment no longer contains the word `kprobe`; traur 0.6.2 `P-EBPF-ROOTKIT` matched it and scored the AUR package SKETCHY (56/100).
+
 ## v0.1.44 (2026-11-04)
 
 - Changed: `--allowlist-add=package:NAME` pins an installed package by the sha256 of its pacman db `mtree` plus the date. Check [1] flags an allowlisted package again when that hash changes. `--allowlist-add=package:NAME` on an existing entry re-pins it. Entries without a pin stay name-only.
