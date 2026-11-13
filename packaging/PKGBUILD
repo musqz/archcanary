@@ -140,7 +140,7 @@ EOF
 EOF
 
   cat > "$pkgdir/etc/archcanary/bpftool_allowlist.conf" << 'EOF'
-# eBPF loader binaries to skip during the bpftool loader and kprobe checks
+# eBPF loader binaries to skip during the bpftool loader checks
 # (--check-bpftool), system-wide allowlist. One binary basename per line.
 # Everything after # is a comment.
 # Add loaders that are known-good but not pacman-owned (a self-built or
