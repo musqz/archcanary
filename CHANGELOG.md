@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.45 (2026-11-13)
+
 - Fix: PKGBUILD heredoc comment no longer contains the word `kprobe`; traur 0.6.2 `P-EBPF-ROOTKIT` matched it and scored the AUR package SKETCHY (56/100).
 
 ## v0.1.44 (2026-11-04)
